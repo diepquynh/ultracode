@@ -1,8 +1,12 @@
 # Skill Archetypes
 
-The initializer's **generate** mode fills one of these three templates per skill. They mirror the three
+The initializer's **generate** mode fills one of these four templates per skill. They mirror the four
 skill shapes that work well in practice: a **creation** skill (how to build a recurring component), a
-**convention** skill (rules applied to all edits), and a **module-hub** skill (routing tables + references).
+**convention** skill (rules applied to all edits), a **module-hub** skill (routing tables + references), and
+a **test** skill (how to write a test for a recurring component type).
+
+Creation and test skills are proposed from the stack reference's two catalogs — the **Component catalog**
+(source components) and the **Test component catalog** (test types) — one skill per type that recurs.
 
 Every generated skill must also satisfy the meta-author standards in
 `${CLAUDE_PLUGIN_ROOT}/skills/meta-author/SKILL.md` (15 Laws, Chain-of-Thought, self-review).
@@ -133,3 +137,71 @@ Integration points: {events published/consumed, queues, external services}.
 
 **Rules:** every routing-table entry points at a real path; every reference file is grounded in actual
 source (never generated from memory).
+
+---
+
+## Archetype D — Test skill
+
+Use for a recurring **test** type: a unit test for a service, repository, controller/route handler, or UI
+component, or an integration/slice test. Proposed from the stack reference's **Test component catalog** — one
+skill per test type that recurs. Ground every section in a captured **test** exemplar (a real
+`*Test`/`*_test`/`*.spec` file). When the repo has **no tests yet**, ground in the stack reference's test
+convention and mark the skill `convention-seeded` — it establishes the pattern that fills the T1 gap ("new
+public function without a test"), not an existing convention to mirror.
+
+```markdown
+---
+name: unit-test-{component-type}
+description: Write a {framework} test for a {component type} in {this repo}. Covers {test doubles, fixture/slice setup, one-path-per-test, assertion + interaction verification}. Apply the shared test-convention skill first.
+---
+
+# {Component Type} Test
+
+Location: `{observed test-file convention}` — e.g. co-located `foo_test.go`, mirrored `tests/<domain>/test_<module>.py`, `src/test/java/.../{X}Test.java`, or co-located `*.spec.ts`.
+Framework: `{runner + assertion lib + test-double lib, from the stack reference}`.
+Fixture / base: `{observed base test class, fixture, or slice annotation, or "none"}`.
+
+## Steps
+
+### 1. Set up the system under test with its collaborators doubled
+
+{Grounded instruction: construct the SUT and replace each collaborator with the stack's test double —
+Mockito `@Mock`/`@InjectMocks`, `unittest.mock.AsyncMock`, a hand-written Go fake struct, a Jasmine spy.
+Name the fixture/slice annotation or app-under-test wiring if one is required (`@DataJpaTest`,
+`@SpringBootTest`+`MockMvc`, `TestClient`, `TestBed`).}
+
+```{lang}
+{distilled setup template from the exemplar, with {placeholders}}
+```
+
+### 2. Write one test per execution path
+
+One test function per path through the unit: the happy path, each branch, each early return, each
+error/exception path, and empty/null/boundary inputs (this is what review rule T8 checks). Name each test
+for the behavior it pins (`should{Behavior}` / `test_should_{behavior}` / `Should {behavior}`), one behavior
+per test.
+
+```{lang}
+{distilled single-test template from the exemplar}
+```
+
+### 3. Assert the result AND verify interactions
+
+Assert the return value / response body / rendered state, then verify collaborators were (or were NOT)
+called as expected (`verify(...)`/`verifyNoInteractions`, `assert_awaited_once`/`assert_not_awaited`, spy
+`toHaveBeenCalledWith`). Do not assert framework-guaranteed behavior (inherited CRUD, the framework's own
+request validation) — test the unit's own logic.
+
+## Checklist
+
+- [ ] Test file in the observed location, named per convention.
+- [ ] Every collaborator replaced with the stack's test double; no real network/DB/queue in a unit test.
+- [ ] One test per execution path (happy, branches, errors, boundaries) — covers T8.
+- [ ] Each test asserts results and verifies interactions.
+- [ ] No test of framework-guaranteed behavior.
+- [ ] Applies the shared test-convention skill.
+```
+
+**Rules:** ground every template line in a real test exemplar; when the repo has no tests, ground in the
+stack reference's test convention and mark the skill `convention-seeded`. One execution path per test. Never
+assert framework internals.

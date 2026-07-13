@@ -25,8 +25,61 @@ which component types recur, how to find them, and which invariants to capture p
 Detect the wrapper actually present (`mvnw` vs `gradlew`) and whether `spotless` is configured before writing commands.
 
 ## Test framework
-JUnit 5 + Mockito. Common patterns: `@ExtendWith(MockitoExtension.class)` + `@Mock`/`@InjectMocks` for services;
-`@SpringBootTest` + `MockMvc` for controllers; `@DataJpaTest` (or a full-context boot test) for repositories.
+JUnit 5 + Mockito. Location: mirror the SUT package under `{module}/src/test/java/**`, class named `{Sut}Test`.
+Test doubles: `@Mock`/`@InjectMocks` + `ArgumentCaptor` (pure unit); `@MockitoBean` (the Spring Boot 3.4+/4
+replacement for `@MockBean`) in context tests. Slice/context per test type: `@ExtendWith(MockitoExtension.class)`
+(service unit), `@DataJpaTest` (repository), `@SpringBootTest(webEnvironment = MOCK)` + `MockMvc` (controller),
+`@SpringBootTest(webEnvironment = NONE)` (integration `contextLoads`). Commands: `./mvnw test`; one test
+`./mvnw test -pl {MODULE} -am -Dtest={TEST} -Dsurefire.failIfNoSpecifiedTests=false`.
+
+**Capture import packages from the real test, do not assume.** A Spring Boot 4 / modularized codebase uses
+`org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest` and
+`org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase` (not the Boot 3
+`org.springframework.boot.test.autoconfigure.*` paths). If a module has no `*Test.java`, treat T1 ("new public
+method without a unit test") as a gap to fill from this convention, not an existing pattern to mirror.
+
+## Test component catalog
+
+For each test type: **find** (grep, `--include='*.java'`), **capture** invariants from ONE real exemplar,
+generate the named **skill** (Archetype D). Propose ONE shared convention skill `unit-test-common` (JUnit 5 +
+`@DisplayName` behavior naming, one behavior per `@Test`, static imports, Arrange-Act-Assert / Given-When-Then,
+mock collaborators — no Spring context in a unit test); every test skill below applies it first.
+
+### service unit test → skill `unit-test-services`
+- find: `*ServiceTest.java` annotated `@ExtendWith(MockitoExtension.class)` (the test for a `Default*Service`).
+- capture: collaborators as `@Mock`, SUT as `@InjectMocks`; `@BeforeEach` stubs shared mocks; fixed time via a
+  `private static final ZonedDateTime` constant; one `@Test @DisplayName("Should …")` per path (null arg, empty
+  arg, no-op branch, happy path); `when(...).thenReturn(...)` stubs; `verify(..., times/never)`,
+  `verifyNoInteractions`, `verifyNoMoreInteractions`; `ArgumentCaptor` + `argThat(...)` for complex-argument
+  assertions; assert return value and captured event/args.
+- exemplar: `order-rest/src/test/java/com/example/backend/order/service/impl/DefaultOrderServiceTest.java`.
+
+### repository test → skill `unit-test-repository`
+- find: `*RepositoryTest.java` that `extends BaseRepositoryTest`.
+- capture: per-module abstract `BaseRepositoryTest` carrying `@DataJpaTest` + `@AutoConfigureTestDatabase(replace = NONE)`
+  + `@ActiveProfiles("test")` + `@Import(TestDatasourceConfig.class)` — the `replace = NONE` keeps the real
+  datasource (this suite runs on real PostgreSQL, not an embedded DB; confirm from the module's
+  `application-test.yaml`). Concrete test `@Autowired`s the repository + FK-parent repositories +
+  `@PersistenceContext EntityManager`; seeds via entity builders setting EVERY `NOT NULL` column (check the
+  Flyway migration under `src/main/resources/db/migration`); `entityManager.flush()` then `clear()` before the
+  query under test; tests only `@Query`/derived/paginated methods (never inherited CRUD); `@AfterEach` deletes
+  in reverse FK order.
+- exemplar: `order-rest/src/test/java/com/example/backend/order/repository/OrderRepositoryTest.java` + sibling `BaseRepositoryTest.java`.
+
+### controller test → skill `unit-test-rest-controller`
+- find: `*ControllerTest.java` importing `org.springframework.test.web.servlet.MockMvc`.
+- capture: `@ActiveProfiles("test")` + `@SpringBootTest(classes = {Module}Application.class, webEnvironment = MOCK)`;
+  every service dependency `@MockitoBean`; `MockMvc` built in `@BeforeEach` via `MockMvcBuilders.webAppContextSetup(webApplicationContext)`;
+  auth wired manually (`SecurityContextHolder` + `UsernamePasswordAuthenticationToken`, mocked `TokenService`/`AuthUserService`,
+  an `AppUserDetails` principal, and an `AUTHORIZATION` header constant); requests via `mockMvc.perform(get/put(path).header(...).contentType(MediaType.APPLICATION_JSON).content(json))`,
+  assertions via `.andExpect(status()...)` + `jsonPath(...)`; stub services with `when(...).thenReturn(...)`; `@AfterEach` resets mocks.
+- exemplar: `order-rest/src/test/java/com/example/backend/order/controller/OrderControllerTest.java`.
+
+### integration boot test → reference only (fold into `unit-test-common`, not a separate skill)
+- find: `*IntegrationSpringBootTest.java`.
+- capture: one per module; a single `contextLoads()` `@Test`; `@SpringBootTest(classes = {Module}Application.class, webEnvironment = NONE)`.
+  Use it in `unit-test-common` to draw the unit/integration boundary (unit tests mock collaborators; this boots the whole context).
+- exemplar: `order-rest/src/test/java/com/example/backend/OrderIntegrationSpringBootTest.java`.
 
 ## Component catalog
 

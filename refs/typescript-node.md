@@ -41,6 +41,37 @@ Jest and/or Vitest — a monorepo may use both (e.g. Jest for the app, Vitest fo
   `Test.createTestingModule` for wiring; `supertest` for HTTP; Testing Library (`@testing-library/react[-native]`) for UI.
 Confirm which framework each workspace actually uses before writing a test command — do not assume one globally.
 
+**Angular workspaces use a different stack:** Jasmine + Karma via the Angular CLI, not Jest/Vitest. Signals:
+`@types/jasmine` + `karma*` devDeps, `"test": "ng test"`, Karma config inlined in `angular.json` (builder
+`@angular/build:karma`), co-located `*.component.spec.ts`. Specs use `TestBed` from `@angular/core/testing`;
+single-run in CI is `ng test --watch=false --browsers=ChromeHeadless`. Never mix Jest/Vitest APIs (`vi.fn()`,
+`jest.mock`) into an Angular spec.
+
+## Test component catalog
+
+For each test type: **find** (grep), **capture** invariants from ONE real exemplar, generate the named
+**skill** (Archetype D). Propose ONE shared convention skill `unit-test-common` per workspace, matched to the
+runner that workspace actually uses (Jest, Vitest, or Jasmine/Karma).
+
+### Angular component spec → skill `unit-test-component`  (Jasmine + Karma + TestBed)
+- find: `*.component.spec.ts` importing `TestBed` from `@angular/core/testing`.
+- capture: `describe('{Component}', () => { let component; let fixture: ComponentFixture<{Component}>; … })`;
+  `beforeEach(async () => { await TestBed.configureTestingModule({ imports: [{StandaloneComponent}] }).compileComponents(); … })`;
+  then `fixture = TestBed.createComponent(...)`, `component = fixture.componentInstance`, `fixture.detectChanges()`;
+  standalone components go in `imports` (never `declarations`). CONVENTION-SEEDED beyond the baseline: a repo
+  whose specs are all CLI-generated smoke tests (`expect(component).toBeTruthy()`) has no committed patterns for
+  mocking injected services (`providers: [{ provide: X, useValue: jasmine.createSpyObj(...) }]`,
+  `provideHttpClientTesting()` + `HttpTestingController`) or DOM assertions (`fixture.nativeElement.querySelector`);
+  ground those from Angular convention and mark them not-yet-used. Note the `NullInjectorError` trap: a component
+  injecting `MatDialogRef`/`MAT_DIALOG_DATA` needs matching `providers` or `detectChanges()` throws.
+- exemplar: `src/app/<feature>/<feature>.component.spec.ts` (smoke baseline); the root `app.component.spec.ts` often carries the one DOM assertion.
+
+### Jest/Vitest unit test (provider / service / route) → skill `unit-test-{type}`
+- find: `*.test.ts` / `*.spec.ts` matched by the workspace's `testRegex`.
+- capture: `mock<T>()`/`DeepMockProxy` (`jest-mock-extended`) or `Test.createTestingModule` (`@nestjs/testing`)
+  for interfaces; `supertest` for HTTP; Testing Library for UI. One test per execution path; assert result and
+  verify mock calls. Only propose this when the workspace has committed Jest/Vitest tests to ground it.
+
 ## Component catalog (find → capture invariants)
 
 For each type: **find** (grep, `--include='*.ts'` / `'*.tsx'`) then **capture** the listed invariants. Verify a pattern

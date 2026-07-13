@@ -31,9 +31,36 @@ how to find them, and which invariants to capture per type. Modeled on a common 
 When there is no `Makefile`, commands are raw `go`/`goose`. A `goose.sh` wrapper usually exports `GOOSE_*` env and needs the `goose` binary on PATH.
 
 ## Test framework
-Standard `testing` package (`func TestXxx(t *testing.T)`), table-driven tests; `testify` if present.
-If a repo has no `*_test.go` files and only an indirect `testify` dependency, treat "new exported function
-without a test" (T1) as a real gap to fill, not an existing convention to mirror.
+Standard library `testing` (`func TestXxx(t *testing.T)`), table-driven with subtests via `t.Run`. Location:
+co-located `{source}_test.go` in the SAME package (white-box) or `{pkg}_test` (black-box). Doubles: no mock
+library by default — hand-write a fake struct implementing the collaborator INTERFACE (a func-field per method).
+Assertions: stdlib `if got != want { t.Errorf(...) }` / `t.Fatalf` — use `testify` only if it is a DIRECT
+dependency in `go.mod` (check the `require` block, not just `go.sum`, before importing `assert`/`require`).
+Commands: `go test ./...`; one `go test ./internal/{pkg} -run {Test}`; coverage `go test -cover ./...`.
+
+If a repo has no `*_test.go` files (common here) and only an indirect `testify` dependency, treat "new exported
+function without a test" (T1) as a real gap to fill from the convention below, not an existing pattern to
+mirror — the convention-seeded case (Archetype D).
+
+## Test component catalog
+
+**find** existing tests first (`grep -rl 'func Test' --include='*_test.go'`); zero hits → CONVENTION-SEEDED:
+generate the named **skill** (Archetype D) from the convention below, grounded in real source signatures so
+examples compile. Propose ONE `unit-test-common` skill (it is both the convention and the how-to — Go has one
+test idiom).
+
+### table-driven unit test → skill `unit-test-common`
+- capture (or, when seeded, establish): `func Test{Unit}(t *testing.T)` with a
+  `tests := []struct{ name string; …; want …; wantErr … }{}` table iterated by
+  `for _, tt := range tests { t.Run(tt.name, func(t *testing.T){ … }) }`; a hand-written fake per interface
+  collaborator declared in the `_test.go` file (func-field per method; a `nil` field panics on an unexpected
+  call, surfacing it); `errors.As`/`errors.Is` against the repo's real error structs (`internal/common/error`,
+  e.g. a domain `NotFoundError`) or `gorm.ErrRecordNotFound`, never a string match; `t.Helper()`
+  in helpers; `t.Fatalf` when a failed check makes the rest of the case meaningless, else `t.Errorf`.
+- fake targets (so seeded examples use real signatures): read the collaborator interfaces in the repo under
+  test — e.g. a storage interface (`UploadFile`/`GetFileUrl`/…) under `internal/common/storage/`, or a
+  `*Repository` interface — and the service under test in `internal/<domain>/service/impl/`.
+- exemplar: none committed (repo has zero tests); the generated skill carries `references/table-driven-tests.md` + `references/mocking-interfaces.md`.
 
 ## Component catalog (find → capture invariants)
 

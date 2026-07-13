@@ -51,6 +51,24 @@ Test doubles come from stdlib `unittest.mock` (`AsyncMock` for async collaborato
 third-party lib. HTTP tests: FastAPI/Starlette `TestClient` or `httpx` `ASGITransport`. Tests mirror the
 package tree (`tests/<domain>/test_<module>.py`), often import module-private helpers (`_extract_*`, `_parse_*`)
 directly to cover branch-heavy parsing, and may carry a docstring enumerating covered execution paths.
+Commands: `uv run pytest -q`; one test `uv run pytest {PATH}::{TEST}`.
+
+## Test component catalog
+
+For each test type: **find** (grep, `--include='test_*.py'`), **capture** invariants from ONE real exemplar,
+generate the named **skill** (Archetype D). Propose ONE shared convention skill `unit-test-common` (pytest +
+`asyncio_mode="auto"`, `unittest.mock` doubles, Arrange-Act-Assert, the tree-mirroring layout, and the
+"log-and-return-None on failure" contract scraper services follow); every test skill applies it first.
+
+### service / pure-function test → skill `unit-test-services`
+- find: `test_*.py` importing `from unittest.mock import AsyncMock` (usually alongside the `Default*` class and its module-private helpers).
+- capture: construct the `Default*` service directly with mocked collaborators (`AsyncMock` for async deps, `MagicMock(spec=RealType)` for typed doubles, `patch(...)` for module-level functions); small `_make_*` factory helpers build the SUT and canned responses; import and test module-private helpers (`_build_*`, `_extract_*`) directly; assert the return value AND the "returns `None` / logs on failure" contract; assert exception mapping with `pytest.raises(DomainException)`; `async def test_*` needs no marker under `asyncio_mode="auto"`.
+- exemplar: `tests/<domain>/test_<service>.py`.
+
+### FastAPI router test → skill `unit-test-fastapi-router`
+- find: `test_*.py` importing `from fastapi.testclient import TestClient`.
+- capture: a `@pytest.fixture` builds the app with service mocks and yields `(TestClient, *mocks)`. If the app wires dependencies through a `python-injector` container, a test `Module` subclass binds `AsyncMock`s via `binder.bind(Protocol, to=InstanceProvider(mock), scope=singleton)`, composed with the real app module and passed to the app factory; a plain FastAPI app instead uses `app.dependency_overrides[dep] = lambda: mock`. One test per documented execution path (the module docstring often enumerates them, e.g. `P1..P15`); call `client.post(path, json=/data=/files=)`; assert `response.status_code`, `response.json()` body + domain error `code`, and mock `assert_awaited_once()`/`assert_not_awaited()`; for a branch unreachable through HTTP (e.g. a `None` content-type), `await` the path-operation function directly with hand-built `AsyncMock` inputs.
+- exemplar: `tests/<domain>/test_router.py`.
 
 ## Component catalog (find → capture invariants)
 
