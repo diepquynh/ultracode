@@ -211,7 +211,8 @@ Step D2). The `_generic.md` fallback handles unknown stacks by discovering compo
 - **Seeded from real setups.** The pipeline agents, `orchestrate`, `meta-author`, and the stack references
   were generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
 - **Model tiers.** Scouting and most pipeline stages run on Sonnet; authoring stages
-  (`prompt-generation`, `module-documentation`) run on Opus. Override per your needs.
+  (`prompt-generation`, `module-documentation`, and init-kit skill generation) run on Opus.
+  Override per your needs.
 
 ## Publish
 

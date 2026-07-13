@@ -197,7 +197,7 @@ export const meta = {
   name: 'init-kit-generate',
   description: 'Generate the approved per-repo skills in parallel (one agent each), then assemble the routing INVENTORY.md + repo-profile.json',
   phases: [
-    { title: 'Generate skills', detail: 'one initializer per approved skill, in parallel' },
+    { title: 'Generate skills', detail: 'one initializer per approved skill, in parallel', model: 'opus' },
     { title: 'Assemble inventory', detail: 'write INVENTORY.md + repo-profile.json + report' },
   ],
 }
@@ -243,7 +243,7 @@ Write ONLY your one skill into ${repoRoot}/.claude/skills/${skill.name}/ , groun
 captured exemplar + invariants + distilled template from the scout findings. For a module-hub skill, also
 write any warranted references/{area}.md files. Self-review against the meta-author checklist. Return your
 skill's name, kind, componentType, and the SKILL.md path.`,
-      { label: `gen:${skill.name}`, phase: 'Generate skills', agentType: 'ultracode:initializer', schema: GEN_SKILL_SCHEMA },
+      { label: `gen:${skill.name}`, phase: 'Generate skills', agentType: 'ultracode:initializer', model: 'opus', schema: GEN_SKILL_SCHEMA },
     )
   )
 )).filter(Boolean)
@@ -276,8 +276,10 @@ return {
 
 The skill-generation agents each write only their own `.claude/skills/{name}/` directory (disjoint paths),
 so the parallel fan-out needs no worktree isolation; the single `generate-inventory` agent runs after them
-(a barrier) because the inventory must list every skill that was actually written. **Wait for the workflow's
-completion notification before continuing.**
+(a barrier) because the inventory must list every skill that was actually written. The `generate-skill`
+agents run on **Opus** (`model: 'opus'`) — skill authoring is the highest-value, quality-sensitive step, so
+it gets the strongest model; detect / scout / propose / generate-inventory stay on the initializer's default
+(Sonnet). **Wait for the workflow's completion notification before continuing.**
 
 ## Step 4 — Report + reload
 
