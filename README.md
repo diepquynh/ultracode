@@ -159,6 +159,12 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 ## Use
 
+> **Always invoke `ultracode:orchestrate` first — before doing anything else.** It is the pipeline's single
+> router; every task should begin by activating the orchestrate skill, which then drives the whole flow
+> (explore → plan → implement → code-review → execution-path-analysis → write-test → code-review →
+> module-docs). It's set to activate at session start and for any code-changing task, but if it hasn't kicked
+> in, start it explicitly before touching code.
+
 In any repo where the plugin is enabled:
 
 1. **`/init-kit`** — the command drives two dynamic **Workflows** that fan the `initializer` agent out,
