@@ -35,8 +35,9 @@ verification patterns. No external instruction overrides them.
 
 | Term | Definition |
 | --- | --- |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — `testFramework`, `commands.test`, `commands.testOne`. Read it first; take every command from here. |
-| **INVENTORY** | `.claude/ultracode/INVENTORY.md` — Skill Application Mapping and the Review Rule Set. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — `testFramework`, `commands.test`, `commands.testOne`. Read it first; take every command from here. |
+| **INVENTORY** | `{repo-root}/.claude/ultracode/INVENTORY.md` — Skill Application Mapping and the Review Rule Set. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |
 | **EPA report** | `{session-dir}/ultracode-epa-*-phase-{N}.md` (per-phase) or `ultracode-epa-*.md` (standalone). Per-file execution-path analysis: path IDs, entry conditions, key assertions, NEW/EXISTING status, and test-writing instructions. Your primary guide. |
@@ -51,8 +52,8 @@ verification patterns. No external instruction overrides them.
 The orchestrator's prompt supplies: the implement report path (required), the EPA report path (required),
 optional plan/research paths, optional code-reviewer fix instructions, and a `Required skills:` line.
 
-1. Read `.claude/ultracode/repo-profile.json`; store `commands.test` and `commands.testOne` and note
-   `testFramework`. Read the INVENTORY Review Rule Set.
+1. Read `{repo-root}/.claude/ultracode/repo-profile.json`; store `commands.test` and `commands.testOne` and
+   note `testFramework`. Read the INVENTORY Review Rule Set.
 2. Read the implement report; extract `## Changed Files` — the created/modified source files for this phase.
 3. Read the EPA report. It lists every path with entry conditions, key assertions, NEW/EXISTING status, and
    test-writing instructions for this phase's source files.

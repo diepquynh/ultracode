@@ -7,10 +7,12 @@ description: >
   (architectural changes, schema/data migrations, cross-module changes) and needs risk assessment,
   (4) success criteria, verification commands, and acceptance conditions must be defined before coding,
   (5) the user asks to plan/design/outline/break down/strategize an approach, (6) a complex change needs
-  user approval on the approach before the implement agent begins. It reads research findings and the repo
-  inventory/profile, designs a step-by-step plan with exact file paths, prose actions, required skills, and
-  verification commands, and writes a master plan file plus one self-contained file per phase into the
-  session directory. The implement agent receives one phase file at a time. It does NOT modify project source.
+  user approval on the approach before the implement agent begins. It reads research findings and each
+  in-scope repo's inventory/profile, designs a step-by-step plan with exact file paths, prose actions, required
+  skills, and verification commands, and writes a master plan file plus one self-contained file per phase into
+  the session directory. A plan may span multiple repos: each phase is tagged with its repo and its cross-repo
+  dependencies so the orchestrator can run independent phases in parallel and queue blocked ones. The implement
+  agent receives one phase file at a time. It does NOT modify project source.
 model: sonnet
 effort: high
 tools: Read, Bash, Grep, Glob
@@ -42,9 +44,13 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it; run all build and git commands with it as the working directory. |
+| **repos in scope** | The one or more repos this plan targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo plan — a `Repos in scope:` list of `{repo key} → {absolute root}`. Read each repo's profile and inventory. |
+| **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt. Tag every phase with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. All output goes here. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), module map. Read for exact command strings. |
-| **inventory** | `.claude/ultracode/INVENTORY.md` — routing source of truth: Skill Application Mapping, Module/Area Map, Review Rule Set. Route by its tables, by name. |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` (one per repo in scope) — stack, `commands` (build/test/testOne/format/lint), module map. Read for exact command strings. |
+| **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` (one per repo in scope) — routing source of truth: Skill Application Mapping, Module/Area Map, Review Rule Set. Route by its tables, by name. |
+| **cross-repo dependency** | A phase in one repo that cannot build until a phase in another repo is done — e.g. a frontend phase that consumes a backend DTO or endpoint depends on the backend phase that creates it. Record it in the consuming phase's `Depends on`. |
 | **master plan file** | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}.md` — summary, success criteria, clarifying questions, risks, verification, and the Phase Index. No step detail. |
 | **phase file** | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}-{phase-slug}.md` — all steps for one phase, self-contained. |
 | **research document** | A `{session-dir}/ultracode-research-*.md` from the Explore agent, path given in the prompt. |
@@ -56,13 +62,16 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 
 ## Step 1 — Read inputs
 
-The orchestrator's prompt contains: the user request; optionally a `{session-dir}/ultracode-research-*.md` path;
-optionally user answers to prior questions; optionally extra context (paths, constraints, preferences).
+The orchestrator's prompt contains: the user request; the repos in scope (a single `Repo root:` or a
+`Repos in scope:` list); optionally one or more `{session-dir}/ultracode-research-*.md` paths; optionally user
+answers to prior questions; optionally extra context (paths, constraints, preferences).
 
-- Read `.claude/ultracode/repo-profile.json` and `.claude/ultracode/INVENTORY.md`. Store the exact
-  command strings (build/test/testOne/format/lint) — you will use `build` for step and phase verification.
-- If a research file path is given, read it and extract: Problem Statement, Requirements, Findings (files,
-  patterns, data flow), Approaches, Recommendation.
+- **For each repo in scope**, read `{repo-root}/.claude/ultracode/repo-profile.json` and
+  `{repo-root}/.claude/ultracode/INVENTORY.md`. Store the exact command strings (build/test/testOne/format/lint)
+  **per repo key** — you will use each repo's `build` for its steps' and phases' verification. When only one
+  repo is in scope, this is a single profile and inventory, exactly as before.
+- If research file paths are given, read each and extract: Problem Statement, Requirements, Findings (files,
+  patterns, data flow), Approaches, Recommendation. A cross-repo request may have one research doc per repo.
 - If user answers are given, integrate them.
 
 **Pass:** you understand the request, have read any research, and know the scope.
@@ -78,8 +87,8 @@ assessing blast radius; otherwise use Grep/Glob/Read. Then, regardless of tool:
 - Read the target files to be modified to understand their current structure.
 - Read an existing sibling of each artifact type you will create (a peer in the same area) to learn the exact
   local pattern to follow.
-- Use the inventory Module/Area Map to find affected areas; read any area reference under
-  `.claude/skills/module-hub/references/` for those areas.
+- For each in-scope repo, use **that repo's** inventory Module/Area Map to find affected areas; read any area
+  reference under that repo's `.claude/skills/module-hub/references/` for those areas.
 
 For refactors/renames: enumerate every affected location and capture the impact/blast radius, then fold it
 into the Risk Assessment so the implement agent knows the reach.
@@ -147,6 +156,11 @@ signatures in the step. Rules:
   schema/data migration → data model / entities → data access → transfer objects / DTOs → service contracts
   → service implementations → controller/handler methods → message consumers / event handlers → schedulers →
   configuration/registration → area-reference documentation. Adapt the layers to the repo's actual stack.
+  **Across repos:** apply the same principle at the phase level — a phase that produces a contract (an API
+  endpoint, DTO, schema, or client-facing type) is ordered before any phase in another repo that consumes it,
+  and the consuming phase records the producing phase in its `Depends on` (rule P8). The orchestrator uses that
+  edge to keep the consumer queued until the producer is built and reviewed, so never assume a cross-repo
+  artifact exists before its producing phase.
 - **P2 — One step = one file.** Never combine two file operations in one step.
 - **P3 — Exact paths.** Every step names the exact path relative to repo root. For a new file, derive the
   path from the area's existing package/folder structure; do not guess.
@@ -160,17 +174,22 @@ signatures in the step. Rules:
     throw invalid-state otherwise; (4) set status CANCELLED and persist; (5) publish a cancelled event with
     `orderId`. Follow the skills listed for this step." — it names the method, lists params/return, numbers
     success and failure branches, and defers exception names / annotations / bodies to the skills.
-- **P5 — Verification = the profile's build command.** Each step and each phase verifies with the repo
-  profile's `build` command (from `.claude/ultracode/repo-profile.json`, substituting any module
-  placeholder). Never hardcode a build tool. Verification is compile/build only — testing is a separate
-  pipeline (execution-path-analyzer + write-test), not part of the plan.
-- **P6 — Per-step skills.** For each code step, name the skill(s) to load, derived from the INVENTORY **Skill
-  Application Mapping** (file type → skills). Use exact skill names from that table; do not invent names or
-  route by skill descriptions. The always-on convention skill is auto-loaded — do not list it.
+- **P5 — Verification = the phase's repo's build command.** Each step and each phase verifies with the `build`
+  command from **that phase's repo's** `{repo-root}/.claude/ultracode/repo-profile.json` (substituting any
+  module placeholder). Never hardcode a build tool, never use another repo's command. Verification is
+  compile/build only — testing is a separate pipeline (execution-path-analyzer + write-test), not part of the plan.
+- **P6 — Per-step skills.** For each code step, name the skill(s) to load, derived from **that phase's repo's**
+  INVENTORY **Skill Application Mapping** (file type → skills). Use exact skill names from that table; do not
+  invent names or route by skill descriptions. The always-on convention skill is auto-loaded — do not list it.
 - **P7 — Phase-level Required Skills.** After designing a phase's steps, collect the deduplicated union of
   their per-step skills (excluding the auto-loaded convention skill) into the phase file's `## Required
-  Skills` section, also derived from the INVENTORY mapping. The implement agent loads these once at phase
-  start, not per step.
+  Skills` section, also derived from that repo's INVENTORY mapping. The implement agent loads these once at
+  phase start, not per step.
+- **P8 — Tag repo and dependencies.** Every phase records its **Repo** (the repo key of the repo it changes)
+  and its **Depends on** set (the phase IDs it needs completed first, in any repo). A phase with no
+  prerequisites has `Depends on: none`. A single-repo plan sets Repo to the one repo for every phase, and each
+  phase's Depends on is simply the prior phase (the existing implicit order made explicit). A cross-repo plan
+  uses Depends on to encode every producer→consumer edge from P1.
 
 Step template:
 
@@ -180,8 +199,8 @@ Step template:
 - **File**: `{exact/path}` (Create | Modify)
 - **Read first**: `{exact/path}`, `{Interface}`, `{Related}`
 - **Action**: {precise prose — names, types, rules, logic, side effects. No code.}
-- **Skills**: `{skill-1}`, `{skill-2}` (from INVENTORY Skill Application Mapping)
-- **Verify**: {repo profile `build` command}
+- **Skills**: `{skill-1}`, `{skill-2}` (from the phase's repo's INVENTORY Skill Application Mapping)
+- **Verify**: {the phase's repo's `build` command}
 - **Complexity**: Small | Medium | Large
 ```
 
@@ -208,7 +227,8 @@ dir:`). Substitute real values everywhere braces appear.
 # Plan: {Topic Title}
 
 **Date:** {YYYY-MM-DD}
-**Research:** {research doc path, or "None"}
+**Research:** {research doc path(s), or "None"}
+**Repos in scope:** {`{repo key} → {absolute root}` for each repo; for a single-repo plan, the one repo}
 **Stakes:** {Low | Medium | High}
 **Stakes Rationale:** {one sentence}
 **Status:** Pending Approval
@@ -225,10 +245,14 @@ dir:`). Substitute real values everywhere braces appear.
 "(Recommended)". "None — all requirements are clear." if none.}
 
 ## Phase Index
-| Phase | Name | File Path | Steps | Description |
-| --- | --- | --- | --- | --- |
-| 1 | {Name} | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-1-{slug}.md` | {N} | {one sentence} |
-| 2 | {Name} | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-2-{slug}.md` | {N} | {one sentence} |
+The **Repo** and **Depends on** columns are the orchestrator's scheduling graph: phases in different repos with
+no dependency between them may run in parallel; a phase waits until every phase in its Depends-on set has
+completed and passed review. Use phase numbers as IDs; `none` means no prerequisite.
+
+| Phase | Name | Repo | Depends on | File Path | Steps | Description |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | {Name} | {repo key} | none | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-1-{slug}.md` | {N} | {one sentence} |
+| 2 | {Name} | {repo key} | 1 | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-2-{slug}.md` | {N} | {one sentence} |
 
 ## Risks and Mitigations
 | Risk | Impact | Likelihood | Mitigation |
@@ -236,8 +260,8 @@ dir:`). Substitute real values everywhere braces appear.
 | {Risk} | {Impact} | {Likelihood} | {Mitigation} |
 
 ## Verification Strategy
-- **Per-step / per-phase:** the repo profile's `build` command after each step and each phase.
-- **Final:** the `build` command after all phases.
+- **Per-step / per-phase:** the phase's repo's `build` command after each step and each phase.
+- **Final:** each repo's `build` command after all of that repo's phases.
 - **Testing:** handled separately by the execution-path-analyzer + write-test pipeline. No test steps here.
 
 ## Step Count Summary
@@ -258,25 +282,30 @@ For each phase, `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-p
 
 **Plan:** {Topic Title}
 **Date:** {YYYY-MM-DD}
-**Area(s):** {areas/modules this phase touches, from the Module/Area Map}
+**Repo:** {repo key}
+**Repo root:** {absolute root of this phase's repo}
+**Depends on:** {phase IDs that must complete first, in any repo, or "none"}
+**Area(s):** {areas/modules this phase touches, from this repo's Module/Area Map}
 
 ## Required Skills
-Load these via the Skill tool before starting (derived from the INVENTORY Skill Application Mapping; the
-always-on convention skill is auto-loaded and is not listed):
+Load these via the Skill tool before starting (derived from this repo's INVENTORY Skill Application Mapping;
+the always-on convention skill is auto-loaded and is not listed):
 
 - `{skill-1}`
 - `{skill-2}`
 
 ## Context
 {2–4 sentences: what this phase accomplishes. Phase 1: "This is the first phase. No prior phases." Phase 2+:
-list the exact artifacts (class/file names with full paths) from prior phases that this phase depends on.}
+list the exact artifacts (class/file names with full paths) from prior phases that this phase depends on. If a
+prerequisite artifact lives in another repo, name that repo key and give the artifact's exact contract (path,
+type/endpoint name, and fields/signature) so this phase is self-contained.}
 
 ## Steps
 {Step template from Step 5, one block per step.}
 
 ## Phase Verification
 ```bash
-{repo profile build command}
+{this repo's build command}
 ```
 ````
 
@@ -286,16 +315,19 @@ created in Phase 1" alone.
 
 **Single-phase plans:** still write both a master plan file and one phase file.
 
-**Documentation phase:** the final phase of every plan updates the area reference documentation, same phase
-format. Its step: File `.claude/skills/module-hub/references/{area}.md` (Modify), Action "document the new
-feature/change", Skills none, Verify "file exists and is readable", Complexity Small.
+**Documentation phase:** the final phase touching each repo updates that repo's area reference documentation,
+same phase format, tagged with that repo's key. Its step: File `.claude/skills/module-hub/references/{area}.md`
+(Modify, resolved against that repo's root), Action "document the new feature/change", Skills none, Verify
+"file exists and is readable", Complexity Small. In a cross-repo plan, each repo gets its own documentation
+phase, each depending on that repo's last code phase.
 
 **Pass:** master plan file and all phase files written to the session directory.
 
 ## Step 8 — Return
 
-Return plain text to the orchestrator: master file path; each phase file path in order; a 2–3 sentence plan
-summary; the stakes level; phase count; total step count; clarifying-question count (0 if none).
+Return plain text to the orchestrator: master file path; each phase file path in order, and for each phase its
+**repo key** and **Depends on** set (so the orchestrator can schedule the graph); the repos in scope; a 2–3
+sentence plan summary; the stakes level; phase count; total step count; clarifying-question count (0 if none).
 
 ## Constraints
 
@@ -309,5 +341,7 @@ summary; the stakes level; phase count; total step count; clarifying-question co
 7. Minimum 3 clarifying questions for non-trivial Medium/High tasks; each AskUserQuestion-ready with 2-4
    options and one recommended option.
 8. Complete plans only: success criteria, steps with verification, risks (Medium/High), and a documentation step.
-9. Skill references (from the INVENTORY mapping) on every code step; verification via the profile's `build`
-   command only — never a hardcoded build tool, never a test command.
+9. Skill references (from the phase's repo's INVENTORY mapping) on every code step; verification via that
+   repo's `build` command only — never a hardcoded build tool, never a test command, never another repo's command.
+10. Every phase carries a Repo and a Depends on; cross-repo consumers depend on their producer phase (P1, P8).
+    A single-repo plan tags all phases with the one repo and chains Depends on to the prior phase.

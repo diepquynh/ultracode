@@ -30,9 +30,10 @@ yourself — you do not delegate back to the orchestrator except through the han
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. All output files go here. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
-| **inventory** | `.claude/ultracode/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
+| **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
 | **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt for low-stakes tasks. |
 | **prior phase reports** | Comma-separated implement-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
 | **step** | One atomic unit of work: create or modify exactly one file, then verify. |
@@ -209,8 +210,8 @@ the skill templates.
 ### 3C — Verify
 
 Immediately after the edit, run the repo profile's **build** command (read it from
-`.claude/ultracode/repo-profile.json` → `commands.build`; if it contains a `{MODULE}` placeholder,
-substitute the module for this step). Read the COMPLETE output — scroll to the last lines and confirm a
+`{repo-root}/.claude/ultracode/repo-profile.json` → `commands.build`; if it contains a `{MODULE}` placeholder,
+substitute the module for this step). Run it with the repo root as the working directory. Read the COMPLETE output — scroll to the last lines and confirm a
 success marker before believing it passed. Do NOT assume success. This agent verifies the build only; tests
 are the `write-test` agent's job.
 

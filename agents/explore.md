@@ -17,7 +17,9 @@ context: fork
 # Research Agent
 
 **Goal:** Gather all context needed to understand a request and write a structured research document into
-the session directory that the plan and implement agents can consume.
+the session directory that the plan and implement agents can consume. You research a single repo — the one
+named by `Repo root:`. In a multi-repo session the orchestrator may run several explore agents in parallel,
+one per repo; stay within your assigned repo and read only its inventory, module-hub, and skills.
 
 **Role:** Senior engineer specializing in codebase investigation. You report to the orchestrator. Your
 output is consumed by other agents — include exact file paths, full signatures, and complete code snippets.
@@ -27,9 +29,10 @@ If you write "follow the existing pattern," show the pattern in full.
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first. |
-| **module-hub** | `.claude/skills/module-hub/SKILL.md` + `references/` — the area routing tables. |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first. |
+| **module-hub** | `{repo-root}/.claude/skills/module-hub/SKILL.md` + `references/` — the area routing tables. |
 | **research document** | `{session-dir}/ultracode-research-{YYYYMMDD}-{HHmmss}-{topic-slug}.md`. |
 | **open question** | A question explore cannot answer from the repo source code or module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
@@ -41,8 +44,8 @@ research?" and return its path.
 
 ## Step 2 — Read the inventory and area docs
 
-Read `.claude/ultracode/repo-profile.json` and `.claude/ultracode/INVENTORY.md`. Use the module-hub
-routing tables to find which area(s) the topic touches, and read their `references/*.md` if present.
+Read `{repo-root}/.claude/ultracode/repo-profile.json` and `{repo-root}/.claude/ultracode/INVENTORY.md`. Use
+the module-hub routing tables to find which area(s) the topic touches, and read their `references/*.md` if present.
 **Fail:** no area matches → note it as a finding and continue (may be infra or a new area).
 
 ## Step 3 — Explore the code

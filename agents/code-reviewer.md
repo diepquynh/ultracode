@@ -29,9 +29,10 @@ number, explicit action. Never write "fix accordingly" or "update as needed" —
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all git/build commands with it as the working directory (e.g. `git -C {repo-root} status`) so change detection targets the right repo. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — stack, commands, module map, review rules. Read it first. |
-| **inventory** | `.claude/ultracode/INVENTORY.md`. Its **Review Rule Set** table is the source of truth for rule IDs, severity, and which rules are auto-fixable. Its **Skill Application Mapping** says which conventions apply to a file type. |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map, review rules. Read it first. |
+| **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md`. Its **Review Rule Set** table is the source of truth for rule IDs, severity, and which rules are auto-fixable. Its **Skill Application Mapping** says which conventions apply to a file type. |
 | **review ledger** | `{session-dir}/ultracode-review-ledger.md` — prior findings and fix rationale across passes. |
 | **changed file** | A source file appearing in the Step 1 detection output, after context filtering. |
 | **diff** | `git diff` output for a tracked file; for untracked files, the full file content is the diff. |
@@ -42,7 +43,7 @@ number, explicit action. Never write "fix accordingly" or "update as needed" —
 
 ## Step 0 — Load the inventory and profile
 
-Read `.claude/ultracode/repo-profile.json` and `.claude/ultracode/INVENTORY.md` now.
+Read `{repo-root}/.claude/ultracode/repo-profile.json` and `{repo-root}/.claude/ultracode/INVENTORY.md` now.
 
 - From the inventory's **Review Rule Set**, load every rule: its **ID**, **rule text**, **severity**, and
   **auto-fixable** flag. This is your rule catalog — apply these IDs and severities, not any hardcoded list.
@@ -58,22 +59,23 @@ set" JSON in Step 5 with `systemMessage: "Code review: no inventory rule set fou
 Determine the **review scope** from the prompt. If it contains `Review scope: unstaged`, use the
 unstaged-only commands (staged files from prior phases stay invisible). Otherwise review all changes.
 
-Run the profile's `run`/detection is not needed — use git directly. Match the source extensions the repo
-uses (from the profile stack); the examples below use a generic glob, narrow it to the repo's extensions.
+Use git directly. Run every git command against the **repo root** with `git -C {repo-root} …` so detection
+targets the repo under review, not the current working directory. Match the source extensions the repo uses
+(from the profile stack); the examples below use a generic glob, narrow it to the repo's extensions.
 
 **All changes** (default):
 
 ```bash
-git diff --name-only
-git diff --cached --name-only
-git ls-files --others --exclude-standard
+git -C {repo-root} diff --name-only
+git -C {repo-root} diff --cached --name-only
+git -C {repo-root} ls-files --others --exclude-standard
 ```
 
 **Unstaged-only** (`Review scope: unstaged`) — omit the `--cached` line:
 
 ```bash
-git diff --name-only
-git ls-files --others --exclude-standard
+git -C {repo-root} diff --name-only
+git -C {repo-root} ls-files --others --exclude-standard
 ```
 
 Deduplicate all output into one list. Drop files whose extension is not a source type for this repo.
@@ -121,7 +123,7 @@ use Grep/Glob/Read directly.
 For EACH changed file:
 
 1. **Read the full file** for complete context (structure, imports, fields, functions).
-2. **Read the diff:** `git diff -- "<path>"` for tracked files; for untracked files the full content is the diff.
+2. **Read the diff:** `git -C {repo-root} diff -- "<path>"` for tracked files; for untracked files the full content is the diff.
 
 Classify each file as implementation or test (per Definitions). Continue to Step 3.
 

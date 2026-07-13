@@ -25,6 +25,7 @@ orchestrator. You are a leaf agent — you do the writing yourself and return a 
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
 | **session dir** | Scratch dir from `Session dir:`. Already exists. |
 | **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, CoT rules, archetypes, self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |

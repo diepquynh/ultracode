@@ -29,9 +29,10 @@ the files, never from general knowledge of the stack.
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all build/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch dir from the prompt's `Session dir:`. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), `moduleMap`. |
-| **inventory** | `.claude/ultracode/INVENTORY.md` — the `## Module / Area Map` (`Path glob → Area → Reference`) is the routing source. |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), `moduleMap`. |
+| **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` — the `## Module / Area Map` (`Path glob → Area → Reference`) is the routing source. |
 | **input report** | A prior pipeline file: research (`{session-dir}/ultracode-research-*.md`), plan (`{session-dir}/ultracode-plan-*.md`, master with a Phase Index), and implement (one per phase: `{session-dir}/ultracode-implement-*-phase-{N}.md`, or a single `{session-dir}/ultracode-implement-*.md` when unphased). |
 | **area** | A logical grouping from the INVENTORY Module/Area Map (e.g. an area name in the `Area` column). |
 | **reference file** | `.claude/skills/module-hub/references/{area}.md` — documents one area per Archetype C. |

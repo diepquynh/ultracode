@@ -32,9 +32,10 @@ coverage. Never write "obvious path" or "standard checks"; there is no such thin
 
 | Term | Definition |
 | --- | --- |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
-| **repo profile** | `.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first for `commands.*` and `moduleMap`. |
-| **inventory** | `.claude/ultracode/INVENTORY.md` — the Skill Application Mapping (file type → test skills) and Module/Area map. |
+| **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first for `commands.*` and `moduleMap`. |
+| **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` — the Skill Application Mapping (file type → test skills) and Module/Area map. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `{session-dir}/ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |
 | **plan document** | `{session-dir}/ultracode-plan-*.md` — optional task context. |
 | **research document** | `{session-dir}/ultracode-research-*.md` — optional background. |
@@ -43,8 +44,8 @@ coverage. Never write "obvious path" or "standard checks"; there is no such thin
 
 ## Step 0 — Read the profile
 
-Read `.claude/ultracode/repo-profile.json` for `commands` and `moduleMap`, and `.claude/ultracode/INVENTORY.md`
-for the Skill Application Mapping and Module/Area map. Use the profile's command strings verbatim wherever a
+Read `{repo-root}/.claude/ultracode/repo-profile.json` for `commands` and `moduleMap`, and
+`{repo-root}/.claude/ultracode/INVENTORY.md` for the Skill Application Mapping and Module/Area map. Use the profile's command strings verbatim wherever a
 build/test command is needed — never hardcode a build tool. If a code-graph MCP is available (flows / callers /
 callees / tests-for), prefer it for structural context; otherwise trace with Grep/Glob/Read.
 **Fail:** profile missing → note it and proceed using Grep/Glob/Read; do not invent commands.
