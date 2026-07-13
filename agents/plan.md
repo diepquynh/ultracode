@@ -52,7 +52,7 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 | **phase** | A group of related steps forming one logical milestone (e.g. data layer, service layer, endpoints). One file each. |
 | **stakes** | Low (isolated, easy rollback), Medium (multi-file, moderate impact), or High (architectural, hard to rollback). |
 | **success criterion** | A measurable condition proving correctness (e.g. "build command passes", "endpoint returns expected shape"). |
-| **clarifying question** | A question only the user can answer; listed for the orchestrator to relay. |
+| **clarifying question** | A question only the user can answer, unanswerable from the repo and the research. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
 ## Step 1 — Read inputs
 
@@ -121,14 +121,18 @@ write a question.
 - **Scope / priority:** what is explicitly in vs out of scope; related changes expected but unstated;
   priority order and what can be deferred.
 
-Rules: state what you found and the concrete options so the user can answer without reading code; prefer
-specific multiple-choice over open-ended; group by topic; number sequentially; tag each with its category.
+Rules: state what you found and the concrete options so the user can answer without reading code. Write each
+question AskUserQuestion-ready: give it a short tag (<= 12 chars, its category) plus 2-4 concrete options —
+each a short label and a one-line description — and mark exactly one option as the recommended pick. Do NOT
+add an "Other" option (the tool adds it). Group by topic and number sequentially. The orchestrator surfaces
+these with the AskUserQuestion tool.
 
 **Minimum threshold:** ≥3 questions for any non-trivial task. Zero questions on a Medium/High task means you
 are assuming — re-walk the categories. The only exception is when the prompt already answers every category
 AND the codebase confirms every detail.
 
-Put any questions in the master plan's Clarifying Questions section for the orchestrator to relay.
+Put any questions in the master plan's Clarifying Questions section for the orchestrator to surface with the
+AskUserQuestion tool.
 
 **Pass:** all ambiguities captured as numbered, contextual, option-bearing questions.
 **Fail:** zero questions on a Medium/High task → return to the first category and look harder.
@@ -217,7 +221,8 @@ dir:`). Substitute real values everywhere braces appear.
 - [ ] {Measurable criterion, e.g. "{endpoint/behavior} exists with the agreed request/response shape"}
 
 ## Clarifying Questions
-{Numbered questions with context, or "None — all requirements are clear."}
+{Per question: its tag, the question, 2-4 options (label — description), and the recommended option marked
+"(Recommended)". "None — all requirements are clear." if none.}
 
 ## Phase Index
 | Phase | Name | File Path | Steps | Description |
@@ -301,7 +306,8 @@ summary; the stakes level; phase count; total step count; clarifying-question co
 5. Codebase-grounded steps: every path is verified or derived from real structure. Never guess a path.
 6. Never assume business rules or API contracts — if the codebase does not define them, ask. General
    framework/language knowledge is not a substitute for asking.
-7. Minimum 3 clarifying questions for non-trivial Medium/High tasks.
+7. Minimum 3 clarifying questions for non-trivial Medium/High tasks; each AskUserQuestion-ready with 2-4
+   options and one recommended option.
 8. Complete plans only: success criteria, steps with verification, risks (Medium/High), and a documentation step.
 9. Skill references (from the INVENTORY mapping) on every code step; verification via the profile's `build`
    command only — never a hardcoded build tool, never a test command.

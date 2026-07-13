@@ -31,7 +31,7 @@ If you write "follow the existing pattern," show the pattern in full.
 | **repo profile** | `.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first. |
 | **module-hub** | `.claude/skills/module-hub/SKILL.md` + `references/` — the area routing tables. |
 | **research document** | `{session-dir}/ultracode-research-{YYYYMMDD}-{HHmmss}-{topic-slug}.md`. |
-| **open question** | Something answerable only by the user; listed for the orchestrator to relay. |
+| **open question** | A question explore cannot answer from the repo source code or module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
 ## Step 1 — Understand the request
 
@@ -65,8 +65,28 @@ grounded in existing patterns. If purely investigative, write "N/A — investiga
 
 ## Step 5 — Open questions
 
-List every ambiguity that needs a user decision. Each question carries enough context to answer without the
-code. Do not assume answers.
+Your only trusted sources are the repo source code and the module-hub references
+(`.claude/skills/module-hub/`). For every ambiguity, first try to resolve it from those two sources. Do NOT
+answer from general framework, language, or API knowledge, and do NOT assume an answer.
+
+- If the source code or module-hub references answer it: treat it as resolved and record the answer in
+  Findings, not as a question.
+- If neither answers it: it is an open question you MUST surface. Never drop it and never assume an answer.
+
+Write every open question AskUserQuestion-ready so the orchestrator can pass it straight to the
+AskUserQuestion tool:
+
+- **question**: the full question, answerable without reading the code.
+- **tag**: a short label, 12 characters or fewer (e.g. `Scope`, `Data model`, `API`).
+- **options**: 2-4 concrete choices; each is a short label plus a one-line description of its trade-off or
+  codebase precedent. Do NOT add an "Other" choice — the tool adds it.
+- **recommended option**: mark exactly one option as recommended for faster resolving, grounded in a real
+  file or pattern (cite it).
+
+**Pass:** every ambiguity is either resolved from source/module-hub or surfaced as an AskUserQuestion-ready
+block with 2-4 options and one grounded recommended option.
+**Fail:** you answered an ambiguity from general knowledge, dropped one, or wrote a question with no options →
+re-walk this step.
 
 ## Step 6 — Write the research document
 
@@ -88,7 +108,8 @@ Write to `{session-dir}/ultracode-research-{YYYYMMDD}-{HHmmss}-{topic-slug}.md`:
 {per-approach blocks, or "N/A — investigative only"}
 ### Recommendation
 ## Open Questions
-{numbered, or "None"}
+{Per question: the question, its tag, 2-4 options (label — description), and the recommended option marked
+"(Recommended)". "None" if every ambiguity was resolved from source/module-hub.}
 ## Next Steps
 ```
 
@@ -103,4 +124,5 @@ Return plain text: the document path, a 3–5 sentence findings summary, and the
 3. No implementation — gather and document only.
 4. No delegation, no subprocesses. Do your own work; return the path.
 5. Every finding references a real file/symbol. Document what THIS codebase does, not general knowledge.
-6. Open questions are mandatory when intent or scope is ambiguous.
+6. Surface EVERY question unanswerable from the repo source code and module-hub references; each carries 2-4
+   options and one recommended option. Never answer from general knowledge or assumption.

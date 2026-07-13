@@ -105,11 +105,24 @@ command strings from repo-profile, and (for implement/write-test) the `Required 
 
 ## Step 3 — Relay and decide
 
-After each agent returns: read its output file; relay any open/clarifying questions to the user and wait;
+After each agent returns: read its output file; surface any open/clarifying questions to the user with the **AskUserQuestion** tool and wait for the answers;
 present plans for approval before implementing; investigate reported verification failures; then spawn the
 next agent. Handle `HANDOFF:` returns by spawning the requested specialist (e.g. `prompt-generation`) and
 re-spawning implement to continue; handle `STUCK:` returns by diagnosing (search the codebase for a working
 example, clarify the step) and re-spawning with exact rescue context, or ask the user if you cannot resolve it.
+
+### Asking the user with AskUserQuestion
+
+Subagent reports carry open/clarifying questions as AskUserQuestion-ready blocks — each with a question, a
+short tag, 2-4 options (label + one-line description), and one recommended option. To ask them:
+
+1. Call the **AskUserQuestion** tool with up to 4 questions per call; if a report has more than 4, make
+   additional calls.
+2. For each question: set `question` to the question text; set `header` to its tag (<= 12 chars); set
+   `options` to its 2-4 options (label + description). Place the recommended option first and append
+   " (Recommended)" to its label. Do NOT add an "Other" option — the tool adds it.
+3. Set `multiSelect: true` only when the question explicitly permits multiple picks; otherwise omit it.
+4. Integrate the user's answers and pass them into the next subagent's self-contained prompt.
 
 ## Step 4 — Code-review loop
 
@@ -134,7 +147,7 @@ the user and ask how to proceed. Do not auto-run a 4th.
    tables, by name — never by skill descriptions.
 3. **Self-contained prompts.** Subagents cannot see this conversation; include every needed path and fact.
 4. **Read every report** before deciding the next step.
-5. **Relay open questions** to the user; never answer on their behalf.
+5. **Ask open questions** with the AskUserQuestion tool; never answer on their behalf.
 6. **Plans need approval** before implement runs.
 7. **No deferring review findings.** Run the loop inline; fix all HIGH/MEDIUM before reporting done.
 8. **Use the profile's commands** (build/test/format) verbatim — never hardcode a build tool.
