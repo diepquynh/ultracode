@@ -61,6 +61,65 @@ Harnesses don't reliably route off skill front-matter `description` fields. So t
 skill, path-glob → area, and the build/test/format commands. Skill auto-discovery is a convenience on top;
 the inventory works the moment it's written because it's just a file.
 
+## How the agents communicate
+
+Every subagent runs in a **forked context** — it can't see the main conversation, can't see another agent's
+window, and can't spawn agents of its own. They are **leaf agents**: each does one job and returns a file
+path. All coordination runs through a single hub (the orchestrator) and a single shared medium (the session
+directory), so every stage gets a clean context focused on one task — and every handoff between stages is an
+artifact you can open and read.
+
+```
+ ORCHESTRATOR — the only router: mints the session dir, hands each agent a
+ self-contained prompt, reads the report it returns, decides the next step.
+   │
+   │  no agent calls another; every hop is a report file in the SESSION DIR
+   │  (/tmp/ultracode-session-XXXX) — written by one agent, read by the next
+   ▼
+   explore                 ─▶ research doc
+   plan                    ─▶ master plan + one self-contained file per phase
+   ── per phase (two independent review loops, one per fix agent) ──
+   implement               ─▶ change report    (its Changed Files list = what to trace & cover)
+   code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
+   execution-path-analyzer ─▶ EPA report       (one path per test: P1, P2 … NEW/EXISTING)
+   write-test              ─▶ test report
+   code-reviewer (tests)   ⇄  write-test       (⇄ review ledger, loops until clean)
+   ── after all phases ──
+   module-documentation    ─▶ area references  (reads every prior report)
+```
+
+**The orchestrator is the only router.** Because leaf agents can't see the conversation, each spawn prompt is
+**self-contained** — it carries the session dir, the exact prior-report paths, the resolved build/test
+commands, and a `Required skills:` line derived from the inventory. An agent works, writes its report, and
+returns the path; the orchestrator reads that report and decides what runs next. Reports are written for the
+next agent to consume — exact paths, full signatures, patterns shown in full rather than referenced — and
+each stage's report is the contract for the one after it (a plan's per-phase files feed `implement` one phase
+at a time; an EPA report's enumerated paths become `write-test`'s coverage contract).
+
+**Some channels are structured, not prose:**
+
+- **Review ledger.** Each phase runs *two* independent review loops — one on the implementation, one on the
+  tests — and each is a back-and-forth held through one file. The `code-reviewer` logs findings (`F1`, `F2`
+  …); the matching fix agent (`implement` for the implementation loop, `write-test` for the test loop) writes
+  back `FIXED`/`WONTFIX` **with a rationale**; the reviewer reads that rationale on the next pass to decide
+  whether to re-raise. Each loop repeats until its change is clean, capped so it can't spin forever.
+- **JSON findings.** The `code-reviewer` returns one machine-parseable JSON object — not prose — so the
+  orchestrator can split findings by severity and rule ID. Findings the inventory marks **auto-fixable** carry
+  an exact, backtick-delimited replacement, so the orchestrator applies the edit itself and skips a fix-agent
+  round-trip.
+- **Progress log.** The `implement` agent checkpoints after every step, so a re-spawn resumes where the last
+  run stopped instead of redoing completed work.
+- **`HANDOFF:` / `STUCK:` escalation.** A leaf agent can't spawn help, so it escalates *upward* by prefixing
+  its return text. `HANDOFF:` tells the orchestrator to spawn a specialist (e.g. `prompt-generation` for a
+  `SKILL.md` or prompt file) and then resume the original agent; `STUCK:` asks for rescue context or a user
+  decision after repeated failures.
+
+**Initialization talks over a different channel.** `/init-kit` fans the `initializer` out with the
+**Workflow** tool, and workflow scripts have no filesystem access — so data between fan-out stages moves as
+**typed JSON return values** (one schema per stage), while the bulky content lands in the session dir as files
+the JSON points to. Scouting and generation are two separate workflow runs with a **user-approval gate**
+between them, because a headless workflow can't stop to ask.
+
 ## Install
 
 **From a published marketplace.** Push this repo to any git host, then:
