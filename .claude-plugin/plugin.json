@@ -1,0 +1,20 @@
+{
+  "name": "ultracode",
+  "displayName": "Ultracode",
+  "version": "0.1.0",
+  "description": "A repo-agnostic agentic engineering pipeline plus a codebase-scouting initializer that generates per-repo skills and a routing inventory for any language or framework.",
+  "author": {
+    "name": "Diep Quynh",
+    "email": "remilia.1505@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "orchestrator",
+    "subagents",
+    "skills",
+    "scaffolding",
+    "codegen",
+    "polyglot"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

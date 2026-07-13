@@ -1,0 +1,9 @@
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local experiments — never ship generated per-repo output with the plugin
+/sandbox/
+/tmp/
