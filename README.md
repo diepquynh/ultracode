@@ -22,8 +22,8 @@ other way on purpose. It spends tokens where they buy quality:
   enumerates the branches first, then `write-test` covers one path per test.
 - **Grounded, not generic.** The initializer scouts your codebase and writes per-repo skills, so generated code
   follows *your* patterns instead of a framework's defaults.
-- **Parallel where it pays.** Scouting fans out across the repo in parallel slices, so more tokens don't
-  linearly become more wall-clock time.
+- **Parallel where it pays.** A dynamic workflow fans scouting out across the repo in parallel slices — and
+  skill generation out to one agent per skill — so more tokens don't linearly become more wall-clock time.
 
 The payoff: you spend more tokens than a quick prompt would, and you get an end-to-end change — explored,
 planned, implemented, reviewed, tested, and documented — that you'd otherwise stitch together by hand across a
@@ -102,13 +102,14 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 In any repo where the plugin is enabled:
 
-1. **`/init-kit`** — the initializer runs in four modes, orchestrated by the command:
+1. **`/init-kit`** — the command drives two dynamic **Workflows** that fan the `initializer` agent out,
+   with your approval gate between them:
    - **detect** (1 agent) — identify the stack, pick `refs/<stack>.md`, plan the parallel slices.
    - **scout** (N agents, in parallel, read-only) — each owns one slice, finds every recurring component
      type, ranks by ubiquity across modules, captures one real exemplar + its invariants.
    - **propose** (1 agent) — merges findings and presents a ranked skill list **for your approval**.
-   - **generate** (1 agent, after you approve) — writes the skills + `INVENTORY.md` + `repo-profile.json`
-     into `.claude/`.
+   - **generate** (N agents in parallel, one per approved skill — then 1 to assemble the inventory) — writes
+     the skills + `INVENTORY.md` + `repo-profile.json` into `.claude/`.
 2. **Reload** so the new project skills register: `/reload-plugins` or restart the session. (Routing via
    `INVENTORY.md` works immediately regardless; only the Skill-tool registration needs a reload.)
 3. **Work normally.** The `ultracode:orchestrate` skill drives the pipeline
@@ -121,7 +122,7 @@ Commit the generated `.claude/ultracode/` and `.claude/skills/` so your team sha
 
 | Agent | Role |
 | --- | --- |
-| `initializer` | Detect stack → scout patterns (parallel) → propose → generate skills + inventory. |
+| `initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
 | `explore` | Research a topic; write a grounded research document. |
 | `plan` | Design a phased, verifiable implementation plan. |
 | `implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
