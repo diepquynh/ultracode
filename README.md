@@ -1,8 +1,33 @@
 # Ultracode
 
-A portable Claude Code plugin: a **repo-agnostic agentic engineering pipeline** plus a **codebase-scouting
-initializer** that generates per-repo skills and a routing inventory for whatever language and framework a repo
-uses. Install it once; run `/init-kit` in any repo to bootstrap it.
+**Burn more tokens — on purpose, for better software.** Ultracode turns a one-shot coding request into a full
+end-to-end engineering pipeline: a fleet of specialist subagents that explore, plan, implement, review, trace
+execution paths, test, review again, and document — every stage grounded in your repo's own conventions. One
+cheap prompt becomes many deliberate ones, and you trade tokens for correctness, coverage, and code that matches
+how your team already writes.
+
+Concretely, it's a portable Claude Code plugin: a **repo-agnostic agentic engineering pipeline** plus a
+**codebase-scouting initializer** that generates per-repo skills and a routing inventory for whatever language
+and framework a repo uses. Install it once; run `/init-kit` in any repo to bootstrap it.
+
+## Why burn more tokens?
+
+Cheap, single-shot answers are cheap for a reason: one model, one pass, no verification. Ultracode goes the
+other way on purpose. It spends tokens where they buy quality:
+
+- **Fan-out over one-shot.** Research, planning, implementation, and testing are separate subagents, each with a
+  clean context window focused on one job — not one overloaded prompt juggling all of them.
+- **Verify, don't trust.** Every code change passes through a `code-reviewer` gate against your repo's own
+  review rules, and the loop repeats until it clears. Tests aren't guessed — an `execution-path-analyzer`
+  enumerates the branches first, then `write-test` covers one path per test.
+- **Grounded, not generic.** The initializer scouts your codebase and writes per-repo skills, so generated code
+  follows *your* patterns instead of a framework's defaults.
+- **Parallel where it pays.** Scouting fans out across the repo in parallel slices, so more tokens don't
+  linearly become more wall-clock time.
+
+The payoff: you spend more tokens than a quick prompt would, and you get an end-to-end change — explored,
+planned, implemented, reviewed, tested, and documented — that you'd otherwise stitch together by hand across a
+dozen turns.
 
 ## The idea: engine + seed (plugin) → crop (per repo)
 
