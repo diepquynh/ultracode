@@ -30,7 +30,10 @@ The Workflow scripts have no filesystem access, so create the scratch dir here a
 argument (every initializer agent writes its files there):
 
 ```bash
-ULTRACODE_SESSION="/tmp/ultracode-$(openssl rand -hex 4)"
+SESSION_ROOT="$PWD/.claude/ultracode/session"                                # repo-local scratch (was /tmp)
+mkdir -p "$SESSION_ROOT"
+[ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
+ULTRACODE_SESSION="$SESSION_ROOT/ultracode-$(openssl rand -hex 4)"
 mkdir -p "$ULTRACODE_SESSION"
 echo "session=$ULTRACODE_SESSION"
 echo "repo=$PWD"

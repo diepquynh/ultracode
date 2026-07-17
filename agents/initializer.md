@@ -33,7 +33,7 @@ context: fork
 
 | Term | Definition |
 | --- | --- |
-| **session dir** | A scratch directory (e.g. `/tmp/ultracode-a3f7/`) provided in the prompt as `Session dir:`. It already exists — do NOT `mkdir` it. `detect`, `scout`, and `propose` write their outputs here; the `generate-skill` / `generate-inventory` modes write skills + inventory under `.claude/` (their generation report still lands here). |
+| **session dir** | A scratch directory (e.g. `.claude/ultracode/session/ultracode-a3f7/`) provided in the prompt as `Session dir:`. It already exists — do NOT `mkdir` it. `detect`, `scout`, and `propose` write their outputs here; the `generate-skill` / `generate-inventory` modes write skills + inventory under `.claude/` (their generation report still lands here). |
 | **target repo** | The current project being initialized. Its root is provided as `Repo root:` in detect mode, or is the current working directory. |
 | **stack** | The primary language + build tool + framework of the target repo (e.g. `java-spring`, `typescript-node`, `python-django`, `go`). |
 | **stack reference** | A file at `${CLAUDE_PLUGIN_ROOT}/refs/<stack>.md` describing that stack's detection signals, component catalog (with grep/glob patterns and invariants), conventional commands, and test framework. Falls back to `${CLAUDE_PLUGIN_ROOT}/refs/_generic.md`. |

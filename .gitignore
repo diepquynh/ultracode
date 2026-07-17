@@ -7,3 +7,6 @@
 # Local experiments — never ship generated per-repo output with the plugin
 /sandbox/
 /tmp/
+
+# Orchestrator / init-kit working session scratch (per-run subdirs)
+/.claude/ultracode/session/

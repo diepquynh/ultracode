@@ -48,12 +48,17 @@ skills, or rules to another repo's files.
 
 ## Session isolation
 
-At session start, create one scratch directory:
+At session start, create one scratch directory under the primary repo root (`$PWD`):
 
 ```bash
-SESSION_DIR=/tmp/ultracode-session-$(openssl rand -hex 4)
+SESSION_ROOT="$PWD/.claude/ultracode/session"                                # repo-local scratch (was /tmp)
+mkdir -p "$SESSION_ROOT"
+[ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
+SESSION_DIR="$SESSION_ROOT/ultracode-session-$(openssl rand -hex 4)"
 mkdir -p "$SESSION_DIR"; echo "$SESSION_DIR"
 ```
+
+`$PWD` is the primary repo's root, so `$SESSION_DIR` is absolute — subagents resolve it directly.
 
 Give **each repo its own subdirectory** so parallel repos never collide on report filenames:
 

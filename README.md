@@ -74,7 +74,7 @@ artifact you can open and read.
  self-contained prompt, reads the report it returns, decides the next step.
    │
    │  no agent calls another; every hop is a report file in the SESSION DIR
-   │  (/tmp/ultracode-session-XXXX) — written by one agent, read by the next
+   │  (.claude/ultracode/session/ultracode-session-XXXX) — written by one agent, read by the next
    ▼
    explore                 ─▶ research doc
    plan                    ─▶ master plan + one self-contained file per phase
