@@ -246,3 +246,14 @@ Step D2). The `_generic.md` fallback handles unknown stacks by discovering compo
 Set an explicit `version` in `.claude-plugin/plugin.json` and bump it on every release (pushing commits alone
 does not trigger updates for version-pinned installs). Validate before distributing:
 `claude plugin validate .` (or `/plugin validate .` inside Claude Code).
+
+## How much does it actually cost in a real-world task?
+
+Well.... :")
+
+![Session cost breakdown](assets/cost.png)
+
+This is a single session on a multi-repo task, with Opus 4.8 as the orchestrator model. The task working repos are a multi-module Java
+backend, a FastAPI backend and React Native mobile app. The session involves 3 iterations of plan reviews and re-explore. The rest of
+the implementation? I let it run and go to sleep, then wake up the following day to review the codes, manual regression test and plan for
+the migration :")
