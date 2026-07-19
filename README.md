@@ -271,3 +271,5 @@ This is a single session on a multi-repo task, with Opus 4.8 as the orchestrator
 backend, a FastAPI backend and React Native mobile app. The session involves 3 iterations of plan reviews and re-explore. The rest of
 the implementation? I let it run and go to sleep, then wake up the following day to review the codes, manual regression test and plan for
 the migration :")
+
+By the time I wrote this README file and created this kit, I was using the Claude Max 5x plan.
