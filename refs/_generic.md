@@ -2,7 +2,8 @@
 
 Used when no specific stack reference matches. Instead of a fixed component catalog, the scout infers
 component types **empirically** from the repo's own regularities. Author a proper `refs/<stack>.md` later
-and re-run `/init-kit` for higher-quality skills.
+and re-run `/init-kit` for higher-quality skills — at the approval gate, choose **regenerate** for the
+existing generic-derived skills so they are rebuilt from the new reference (a plain re-run reuses them as-is).
 
 ## Detection signals
 - None matched cleanly. Record the dominant extension(s) and any manifest/build files found so a real

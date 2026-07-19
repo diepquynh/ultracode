@@ -196,12 +196,15 @@ In any repo where the plugin is enabled:
 
 1. **`/init-kit`** — the command drives two dynamic **Workflows** that fan the `initializer` agent out,
    with your approval gate between them:
-   - **detect** (1 agent) — identify the stack, pick `refs/<stack>.md`, plan the parallel slices.
+   - **detect** (1 agent) — identify the stack, pick `refs/<stack>.md`, plan the parallel slices, and
+     discover any skills already under `.claude/skills/`.
    - **scout** (N agents, in parallel, read-only) — each owns one slice, finds every recurring component
      type, ranks by ubiquity across modules, captures one real exemplar + its invariants.
-   - **propose** (1 agent) — merges findings and presents a ranked skill list **for your approval**.
-   - **generate** (N agents in parallel, one per approved skill — then 1 to assemble the inventory) — writes
-     the skills + `INVENTORY.md` + `repo-profile.json` into `.claude/`.
+   - **propose** (1 agent) — merges findings and presents a ranked skill list **for your approval**, marking
+     any already-present skill for reuse.
+   - **generate** (N agents in parallel, one per skill you chose to (re)generate — then 1 to assemble the
+     inventory) — writes the skills + `INVENTORY.md` + `repo-profile.json` into `.claude/`; reused skills are
+     registered without being rewritten.
 2. **Reload** so the new project skills register: `/reload-plugins` or restart the session. (Routing via
    `INVENTORY.md` works immediately regardless; only the Skill-tool registration needs a reload.)
 3. **Work normally.** The `ultracode:orchestrate` skill drives the pipeline
@@ -209,6 +212,17 @@ In any repo where the plugin is enabled:
    module-docs), routing every decision through the generated inventory.
 
 Commit the generated `.claude/ultracode/` and `.claude/skills/` so your team shares them.
+
+### Re-using existing skills
+
+Re-running `/init-kit` — or running it the first time in a repo that already ships hand-authored skills — does
+**not** clobber what's there. During **detect** the initializer discovers every skill already under
+`.claude/skills/`. In **propose** each is marked `status: existing` and, by default, **re-used as-is**: kept
+on disk and registered in `INVENTORY.md`, never regenerated. At the approval gate you can override per skill
+and force a **regenerate** to refresh a stale one from the current code. Bespoke skills the team wrote — ones
+that map to no scouted component type (say a `deploy` or `db-migration` skill) — are folded into the routing
+inventory too, so the pipeline can load them. The upshot: re-scans are idempotent — your manual edits to a
+skill survive, and only the skills you explicitly ask to (re)generate are rewritten.
 
 ## Agents
 

@@ -64,7 +64,7 @@ Seeded from the stack reference. IDs are stable; the code-reviewer and orchestra
 ```
 
 **Rules:**
-- Every generated skill appears in **Skills Inventory** AND in at least one **Skill Application Mapping** row.
+- Every skill in the repo's skill set — generated this run OR reused from a prior run / hand-authored — appears in **Skills Inventory**. A creation or test skill also appears in at least one **Skill Application Mapping** row; a bespoke reused skill with no file-type trigger appears in Skills Inventory only, with its trigger in the `Load when` column.
 - `test-one` uses explicit placeholders so the orchestrator can substitute a module and test name.
 - The Review Rule Set is copied from the stack reference's rule seeds; keep IDs stable so downstream prompts can reference them.
 
@@ -97,8 +97,9 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
     { "glob": "src/**", "area": "app", "reference": null }
   ],
   "skills": [
-    { "name": "convention", "kind": "convention", "path": ".claude/skills/convention/SKILL.md", "componentType": null },
-    { "name": "entity", "kind": "creation", "path": ".claude/skills/entity/SKILL.md", "componentType": "entity" }
+    { "name": "convention", "kind": "convention", "path": ".claude/skills/convention/SKILL.md", "componentType": null, "source": "generated" },
+    { "name": "entity", "kind": "creation", "path": ".claude/skills/entity/SKILL.md", "componentType": "entity", "source": "generated" },
+    { "name": "deploy", "kind": "other", "path": ".claude/skills/deploy/SKILL.md", "componentType": null, "source": "reused" }
   ],
   "conventions": {
     "immutabilityKeyword": "final",
@@ -114,5 +115,6 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
 **Rules:**
 - `commands` values are exact shell strings or `null`. Use the SAME placeholder names (`{MODULE}`, `{TEST}`) as in INVENTORY.
 - `skills[]` mirrors the INVENTORY Skills Inventory table 1:1.
+- Each `skills[]` entry carries `source`: `"generated"` (written this run) or `"reused"` (an existing skill kept as-is and only registered). A reused skill's `kind` may be `"other"` when it maps to no scouted component type.
 - `moduleMap[]` mirrors the INVENTORY Module/Area Map 1:1.
 - Consumers (orchestrator, subagents) prefer `repo-profile.json` for exact command strings and `INVENTORY.md` for routing decisions.

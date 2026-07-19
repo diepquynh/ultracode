@@ -13,12 +13,19 @@ This runs as **two workflows with a user-approval gate between them** — a work
 background and cannot pause for input, so scouting and generation are separate runs and you hold the gate:
 
 ```
-Workflow A: init-kit-scout      detect (1) → scout (N, parallel) → propose (1)
+Workflow A: init-kit-scout      detect + discover existing skills (1) → scout (N, parallel) → propose (1)
                                                                           │
                                             ── YOU present the proposal, wait for approval ──
                                                                           │
-Workflow B: init-kit-generate   generate-skill (N, parallel) → generate-inventory (1)
+Workflow B: init-kit-generate   (re)generate-skill (N, parallel) → generate-inventory (1)
 ```
+
+**Re-using existing skills.** The repo may already carry skills under `.claude/skills/` (a prior init-kit run
+or hand-authored by the team). `detect` discovers them; `propose` marks each `status: existing` and defaults
+it to **reuse** (kept on disk, registered in the inventory, never regenerated), and folds any bespoke existing
+skill into the routing inventory too. At the approval gate you can override per skill to **regenerate** a stale
+one. Only skills you choose to (re)generate are fanned out in Workflow B; reused skills flow straight to
+`generate-inventory`. Re-scans are therefore idempotent — your manual edits survive unless you ask to overwrite.
 
 Extra user focus for this run (may be empty): `$ARGUMENTS`
 
@@ -57,9 +64,9 @@ export const meta = {
   name: 'init-kit-scout',
   description: 'Detect the stack, fan out parallel read-only scouts across repo slices, and propose a per-repo skill set for approval',
   phases: [
-    { title: 'Detect', detail: 'identify stack + plan the parallel slices' },
+    { title: 'Detect', detail: 'identify stack, plan slices, discover existing skills' },
     { title: 'Scout', detail: 'one read-only initializer per repo slice' },
-    { title: 'Propose', detail: 'merge findings, rank skills, write the proposal' },
+    { title: 'Propose', detail: 'merge findings, rank skills, reconcile with existing skills' },
   ],
 }
 
@@ -80,6 +87,7 @@ const DETECT_SCHEMA = {
     stack: { type: 'string', description: 'Detected stack: java-spring | typescript-node | python | go | generic' },
     referencePath: { type: 'string', description: 'Absolute path to the chosen stack reference file' },
     slices: { type: 'array', description: 'One entry per parallel scouting slice', items: SLICE },
+    existingSkillCount: { type: 'number', description: 'How many existing skills were discovered under the repo .claude/skills/' },
   },
 }
 const SCOUT_SCHEMA = {
@@ -95,7 +103,8 @@ const PROPOSE_SCHEMA = {
   required: ['proposalPath'],
   properties: {
     proposalPath: { type: 'string', description: 'Absolute path to the written ultracode-proposal.json' },
-    recommendedCount: { type: 'number', description: 'How many skills are recommended (recommend=true)' },
+    recommendedCount: { type: 'number', description: 'How many NEW skills are recommended (status=new, recommend=true)' },
+    reuseCount: { type: 'number', description: 'How many existing skills will be reused (status=existing)' },
   },
 }
 
@@ -110,12 +119,14 @@ Repo root: ${repoRoot}.
 User focus: ${userFocus}
 Session dir: ${sessionDir}.
 Detect the stack, choose the matching reference from your refs library, and write the scout plan (the list
-of slices to scout in parallel + the candidate component types). Return the scout-plan path, the stack, the
-chosen reference path, and the structured slice list (descriptor, paths, slug) for the parallel fan-out.`,
+of slices to scout in parallel + the candidate component types). Also discover every skill already present
+under ${repoRoot}/.claude/skills/ and record it in the scout plan's Existing Skills table (name, kind guess,
+path, description) so propose can re-use it. Return the scout-plan path, the stack, the chosen reference path,
+the structured slice list (descriptor, paths, slug) for the parallel fan-out, and the existing-skill count.`,
   { label: 'detect', agentType: 'ultracode:initializer', schema: DETECT_SCHEMA },
 )
 
-log(`Stack: ${detect.stack} · scouting ${detect.slices.length} slice(s) in parallel`)
+log(`Stack: ${detect.stack} · scouting ${detect.slices.length} slice(s) in parallel · ${detect.existingSkillCount || 0} existing skill(s) found`)
 
 phase('Scout')
 const scouted = (await parallel(
@@ -144,10 +155,13 @@ const propose = await agent(
 Scout findings: ${findingsPaths.join(', ')}.
 Scout plan: ${detect.scoutPlanPath}.
 Session dir: ${sessionDir}.
-Merge and dedupe component types across slices, rank by cross-module ubiquity, and write BOTH the human
-proposal (ultracode-proposal.md) and its machine twin (ultracode-proposal.json). The JSON must carry: stack,
-referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, and skills[] (name, kind, componentType,
-count, sliceSpread, recommend, rationale). Return the ultracode-proposal.json path.`,
+Merge and dedupe component types across slices, rank by cross-module ubiquity, then reconcile against the
+scout plan's Existing Skills table: give each skill a status (new|existing) with its existingPath, default
+every existing skill to reuse, and fold every bespoke existing skill into skills[] as a kind:"other" entry.
+Write BOTH the human proposal (ultracode-proposal.md) and its machine twin (ultracode-proposal.json). The JSON
+must carry: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, and skills[] (name, kind,
+componentType, count, sliceSpread, status, existingPath, recommend, rationale). Return the
+ultracode-proposal.json path, the recommended-new count, and the reuse count.`,
   { label: 'propose', agentType: 'ultracode:initializer', schema: PROPOSE_SCHEMA },
 )
 
@@ -170,15 +184,26 @@ version). If the file is missing or `skills[]` is empty, tell the user scouting 
 components and stop.
 
 **Present the proposal to the user** as a compact table — proposed skill name, kind, component type,
-occurrence count, slice spread, rationale — plus the detected commands and module map. Ask which skills to
-generate (default: every skill with `recommend: true`). **STOP and wait for the user's decision. Do not run
-the generate workflow yet.**
+occurrence count, slice spread, **status** (`new` or `existing`), and rationale — plus the detected commands
+and module map. Call out the existing skills explicitly: a skill with `status: existing` is **re-used as-is by
+default** (kept on disk and registered in the inventory, not regenerated), and a bespoke existing skill (kind
+`other`) is registered for routing only. Ask the user two things: (1) which `new` skills to generate (default:
+every `new` skill with `recommend: true`); (2) whether to **regenerate** any `existing` skill from the current
+code (default: none — reuse them all). Only a `creation`, `convention`, or `module-hub` existing skill can be
+regenerated; a bespoke `other` skill has no captured exemplar to regenerate from, so it can only be reused or
+dropped. **STOP and wait for the user's decision. Do not run the generate workflow yet.**
 
 ## Step 3 — Run the GENERATE workflow (skill fan-out → inventory)
 
-After the user approves (or edits) the list, build `approvedSkills` from `ultracode-proposal.json`: the
-subset the user approved, each as `{ "name", "kind", "componentType" }` (use `null` componentType for the
-`convention` and `module-hub` skills).
+After the user approves (or edits) the list, build `approvedSkills` from `ultracode-proposal.json` — every
+skill that will appear in the final inventory, each as `{ "name", "kind", "componentType", "disposition", "path" }`:
+
+- `componentType`: the skill's component type, or `null` for the `convention`, `module-hub`, and bespoke (`other`) skills.
+- `disposition`: `"generate"` for an approved `new` skill; `"reuse"` for an `existing` skill the user kept (the default); `"regenerate"` for an `existing` skill the user chose to overwrite from current code.
+- `path`: the existing `SKILL.md` path (`existingPath` from the proposal JSON) for a `reuse` or `regenerate` skill; `null` for a `generate` skill.
+
+Include EVERY existing skill the user did not drop (default: all of them) so each is registered in the
+inventory — the bespoke `other` skills included.
 
 Call the **Workflow** tool again. Pass the script below **verbatim** as `script`, and this `args` object
 (read `findingsPaths` from the proposal JSON):
@@ -187,7 +212,7 @@ Call the **Workflow** tool again. Pass the script below **verbatim** as `script`
 {
   "sessionDir": "{ULTRACODE_SESSION}",
   "repoRoot": "{absolute repo root}",
-  "approvedSkills": [ { "name": "…", "kind": "…", "componentType": null } ],
+  "approvedSkills": [ { "name": "…", "kind": "…", "componentType": null, "disposition": "reuse", "path": ".claude/skills/…/SKILL.md" } ],
   "proposalPath": "{ULTRACODE_SESSION}/ultracode-proposal.json",
   "findingsPaths": [ "…" ]
 }
@@ -198,10 +223,10 @@ Script (`script` parameter):
 ```js
 export const meta = {
   name: 'init-kit-generate',
-  description: 'Generate the approved per-repo skills in parallel (one agent each), then assemble the routing INVENTORY.md + repo-profile.json',
+  description: 'Generate the approved new/regenerated per-repo skills in parallel (one agent each), then assemble the routing INVENTORY.md + repo-profile.json over the generated plus reused skills',
   phases: [
-    { title: 'Generate skills', detail: 'one initializer per approved skill, in parallel', model: 'opus' },
-    { title: 'Assemble inventory', detail: 'write INVENTORY.md + repo-profile.json + report' },
+    { title: 'Generate skills', detail: 'one initializer per skill to (re)generate, in parallel', model: 'opus' },
+    { title: 'Assemble inventory', detail: 'write INVENTORY.md + repo-profile.json + report over generated + reused skills' },
   ],
 }
 
@@ -230,39 +255,48 @@ const approvedSkills = args.approvedSkills
 const proposalPath = args.proposalPath
 const findingsList = (args.findingsPaths || []).join(', ')
 
+// Split the approved set: (re)generate writes a SKILL.md; reuse keeps the existing file and only registers it.
+const toGenerate = approvedSkills.filter((s) => s.disposition === 'generate' || s.disposition === 'regenerate')
+const reused = approvedSkills.filter((s) => s.disposition === 'reuse')
+
 phase('Generate skills')
 const written = (await parallel(
-  approvedSkills.map((skill) => () =>
+  toGenerate.map((skill) => () =>
     agent(
       `Mode: generate-skill.
 Skill name: ${skill.name}.
 Skill kind: ${skill.kind}.
 Component type: ${skill.componentType || 'none'}.
+Disposition: ${skill.disposition}.
 Proposal: ${proposalPath}.
 Scout findings: ${findingsList}.
 Session dir: ${sessionDir}.
 Repo root: ${repoRoot}.
 Write ONLY your one skill into ${repoRoot}/.claude/skills/${skill.name}/ , grounded in this component type's
-captured exemplar + invariants + distilled template from the scout findings. For a module-hub skill, also
-write any warranted references/{area}.md files. Self-review against the meta-author checklist. Return your
-skill's name, kind, componentType, and the SKILL.md path.`,
+captured exemplar + invariants + distilled template from the scout findings. If Disposition is regenerate,
+your Write overwrites the existing SKILL.md with the fresh generation. For a module-hub skill, also write any
+warranted references/{area}.md files. Self-review against the meta-author checklist. Return your skill's name,
+kind, componentType, and the SKILL.md path.`,
       { label: `gen:${skill.name}`, phase: 'Generate skills', agentType: 'ultracode:initializer', model: 'opus', schema: GEN_SKILL_SCHEMA },
     )
   )
 )).filter(Boolean)
 
-log(`Generated ${written.length}/${approvedSkills.length} skill(s)`)
+log(`Generated ${written.length}/${toGenerate.length} skill(s) · reusing ${reused.length} existing skill(s)`)
 
 phase('Assemble inventory')
 const report = await agent(
   `Mode: generate-inventory.
 Generated skills: ${JSON.stringify(written)}.
+Reused skills: ${JSON.stringify(reused)}.
 Proposal: ${proposalPath}.
 Scout findings: ${findingsList}.
 Session dir: ${sessionDir}.
 Repo root: ${repoRoot}.
 Write ${repoRoot}/.claude/ultracode/INVENTORY.md and ${repoRoot}/.claude/ultracode/repo-profile.json. EVERY
-skill in "Generated skills" MUST appear in both the Skills Inventory table and the profile skills[] array.
+skill in "Generated skills" AND every skill in "Reused skills" MUST appear in both the Skills Inventory table
+and the profile skills[] array (mark each profile skills[] entry source: generated or reused). For each reused
+skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
 Seed commands + Review Rule Set from the proposal (read the stack reference at the proposal's referencePath).
 Self-review for consistency, then write the generation report. Return the report path and the full list of
 files written.`,
@@ -273,22 +307,26 @@ return {
   reportPath: report.reportPath,
   filesWritten: report.filesWritten,
   skillsGenerated: written.length,
+  skillsReused: reused.length,
   skillsApproved: approvedSkills.length,
 }
 ```
 
 The skill-generation agents each write only their own `.claude/skills/{name}/` directory (disjoint paths),
-so the parallel fan-out needs no worktree isolation; the single `generate-inventory` agent runs after them
-(a barrier) because the inventory must list every skill that was actually written. The `generate-skill`
-agents run on **Opus** (`model: 'opus'`) — skill authoring is the highest-value, quality-sensitive step, so
-it gets the strongest model; detect / scout / propose / generate-inventory stay on the initializer's default
-(Sonnet). **Wait for the workflow's completion notification before continuing.**
+so the parallel fan-out needs no worktree isolation; only skills whose disposition is `generate` or
+`regenerate` are fanned out, while `reuse` skills are left untouched on disk and passed straight to
+`generate-inventory`. The single `generate-inventory` agent runs after them (a barrier) because the inventory
+must list every generated AND every reused skill. The `generate-skill` agents run on **Opus**
+(`model: 'opus'`) — skill authoring is the highest-value, quality-sensitive step, so it gets the strongest
+model; detect / scout / propose / generate-inventory stay on the initializer's default (Sonnet). **Wait for
+the workflow's completion notification before continuing.**
 
 ## Step 4 — Report + reload
 
 Read the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`). Tell the user:
-1. Which files were written (per-skill SKILL.md files, INVENTORY.md, repo-profile.json), and any approved
-   skill the report lists as skipped.
+1. Which files were written (per-skill SKILL.md files, INVENTORY.md, repo-profile.json), which existing skills
+   were reused (kept as-is and registered without regeneration), and any approved skill the report lists as
+   skipped.
 2. That newly generated skills register on the next session — advise running `/reload-plugins` or restarting
    the session so `.claude/skills/*` are discovered. (The INVENTORY.md routing works immediately because
    agents read it as a file.)
