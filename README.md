@@ -22,8 +22,8 @@ other way on purpose. It spends tokens where they buy quality:
   enumerates the branches first, then `write-test` covers one path per test.
 - **Grounded, not generic.** The initializer scouts your codebase and writes per-repo skills, so generated code
   follows *your* patterns instead of a framework's defaults.
-- **Parallel where it pays.** A dynamic workflow fans scouting out across the repo in parallel slices — and
-  skill generation out to one agent per skill — so more tokens don't linearly become more wall-clock time.
+- **Parallel where it pays.** `/init-kit` fans scouting out across the repo in parallel slices — and skill
+  generation out to one agent per skill — so more tokens don't linearly become more wall-clock time.
 
 The payoff: you spend more tokens than a quick prompt would, and you get an end-to-end change — explored,
 planned, implemented, reviewed, tested, and documented — that you'd otherwise stitch together by hand across a
@@ -161,13 +161,14 @@ at a time; an EPA report's enumerated paths become `write-test`'s coverage contr
   `SKILL.md` or prompt file) and then resume the original agent; `STUCK:` asks for rescue context or a user
   decision after repeated failures.
 
-**Initialization talks over a different channel.** `/init-kit` fans the `initializer` out with the
-**Workflow** tool, and workflow scripts have no filesystem access — so data between fan-out stages moves as
-**typed JSON return values** (one schema per stage), while the bulky content lands in the session dir as files
-the JSON points to.
+**Initialization runs on the same channel, spawned directly.** `/init-kit` fans the `initializer` out with the
+**Agent tool** — the main loop spawns it in each mode, in parallel where the work is independent (multiple
+Agent calls in one message). Each stage writes its output to the session dir as a file and returns the path;
+the main loop reads that file to drive the next stage, and the `propose` stage's machine-readable
+`ultracode-proposal.json` is the structured hand-off it reads to build the approved skill set.
 
-Scouting and generation are two separate workflow runs with a **user-approval gate** between them, because a
-headless workflow can't stop to ask.
+Scouting and generation straddle a **user-approval gate**: the main loop presents the proposal and waits for
+your decision before it spawns the generate agents.
 
 ## Install
 
@@ -216,8 +217,8 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 In any repo where the plugin is enabled:
 
-1. **`/init-kit`** — the command drives two dynamic **Workflows** that fan the `initializer` agent out,
-   with your approval gate between them:
+1. **`/init-kit`** — the command spawns the `initializer` agent directly, fanning it out in parallel where the
+   work is independent, with your approval gate in the middle:
    - **detect** (1 agent) — identify the stack, pick `refs/<stack>.md`, plan the parallel slices, and
      discover any skills already under `.claude/skills/`.
    - **scout** (N agents, in parallel, read-only) — each owns one slice, finds every recurring component
@@ -279,7 +280,8 @@ Step D2). The `_generic.md` fallback handles unknown stacks by discovering compo
 - **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block the orchestrator
   follows when spawning each subagent, so a repo tunes cost vs. capability without touching the plugin.
   `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own skill generation always runs
-  on Opus, set by the initializer Workflow — that's separate from this block.)
+  on Opus, set by the `/init-kit` command when it spawns the generate-skill agents — that's separate from this
+  block.)
   - `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
     `prompt-generation`/`module-documentation` run on Opus; `code-reviewer` and `execution-path-analyzer` run
     on Sonnet.

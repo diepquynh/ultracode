@@ -176,7 +176,7 @@ the spawn's `model` argument like this:
   agents carry no `model` in their front matter. (Profiles written before model routing existed keep working.)
 
 Pass the resolved name as the spawn's `model` argument (`haiku` | `sonnet` | `opus` | `fable`). The
-`initializer` is not covered here — the `/init-kit` Workflow spawns it and sets its model, not you.
+`initializer` is not covered here — the `/init-kit` command spawns it and sets its model, not you.
 
 ## Step 1 — Classify the request
 
