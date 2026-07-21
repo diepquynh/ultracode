@@ -29,6 +29,21 @@ The payoff: you spend more tokens than a quick prompt would, and you get an end-
 planned, implemented, reviewed, tested, and documented — that you'd otherwise stitch together by hand across a
 dozen turns.
 
+## Benchmarks
+
+None. On purpose.
+
+| Benchmark | Ultracode's score |
+| --- | --- |
+| SWE-bench Verified | didn't run it |
+| HumanEval | pass@🤷 |
+| That leaderboard in your other tab | not on it |
+| Your repo, at 11pm before the demo | the only eval we play |
+
+A benchmark is a fixed test with a public answer key. Your repo isn't in the set and its answer key doesn't
+exist — so there's no *max* to benchmaxx toward. The only number we keep is [what a real task
+costs](#how-much-does-it-actually-cost-in-a-real-world-task). :")
+
 ## The team you don't have
 
 Every classic SDLC pain has a classic fix — a code review, a QA pass, a design sign-off, a second pair of
@@ -295,3 +310,13 @@ The rest of the implementation? I let it run and go to sleep, then wake up the f
 and plan for the migration :")
 
 By the time I wrote this README file and created this kit, I was using the Claude Max 5x plan.
+
+Two honest disclaimers, then. **This isn't for vibe coding** — prompt-and-pray and your quota runs dry long
+before you have a working MVP. **And it isn't for the blank slate** — Ultracode matches your repo's existing
+patterns, so a fresh `git init` gives it nothing to work with. Bring a real task and a real repo. :")
+
+## Going against the crowd — for now
+
+Everyone else is racing to spend *fewer* tokens; we spend more, on purpose, because that's today's honest price
+for a change that's actually reviewed and tested. *On purpose* isn't *forever*, though — next we want the cost
+down without losing the fan-out's reactivity and quality. :")
