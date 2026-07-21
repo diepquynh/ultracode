@@ -7,7 +7,6 @@ description: >
   be fixed. It reads the implement report to identify changed files, reads the execution-path-analysis (EPA)
   report to learn which paths need coverage, loads the test skills named by the orchestrator, and writes
   tests that strictly follow them. It writes ONLY test code — never implementation code.
-model: sonnet
 effort: high
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 timeout: 600

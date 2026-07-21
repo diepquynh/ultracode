@@ -7,7 +7,6 @@ description: >
   learned before changing code, (5) the user asks to research/investigate/understand/analyze something.
   It reads the repo inventory and module-hub, explores the code, traces data flows, and writes a structured
   research document for downstream agents. It does NOT modify project source.
-model: sonnet
 effort: high
 tools: Read, Bash, Grep, Glob, WebSearch, WebFetch
 timeout: 600

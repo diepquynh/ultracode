@@ -7,7 +7,6 @@ description: >
   security, test coverage, and clarity must be verified as a quality gate. It detects changed files from git,
   loads the repo's Review Rule Set from the inventory, reviews each change, and returns findings as a single
   JSON object the orchestrator parses. It does NOT modify project source.
-model: sonnet
 effort: high
 tools: Read, Bash, Grep, Glob
 timeout: 600

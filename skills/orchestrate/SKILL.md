@@ -37,14 +37,15 @@ later rule collapses to the single-repo flow.
      `{repo-root}/.claude/ultracode/repo-profile.json` now. These are **that repo's** source of truth for its
      **Skills Inventory** (which skill covers which component/file type), its **Skill Application Mapping**
      (file type → skills to load), its **Module/Area Map**, its **Commands** (build/test/testOne/format/lint),
-     and its **Review Rule Set** (IDs + severity + which are auto-fixable). Route that repo's work by these
-     tables **by name** — never by skill descriptions, never with another repo's tables.
+     its **Review Rule Set** (IDs + severity + which are auto-fixable), and its **Model Routing** (the profile's
+     `models` block — which model to spawn each subagent with; see **Model selection**). Route that repo's work
+     by these tables **by name** — never by skill descriptions, never with another repo's tables.
 3. **Assign each repo a short repo key** — a lowercase slug, e.g. `backend`, `web`, `api`. Use it to tag tasks,
    session subdirs, and spawn prompts.
 
 Store, **per repo key**: its absolute root, its resolved command strings (build, test, testOne, format, lint),
-and its auto-fixable rule-ID set. These hold for the rest of the session. Never apply one repo's commands,
-skills, or rules to another repo's files.
+its auto-fixable rule-ID set, and its model routing (`models.byAgent` + `models.byPhaseComplexity`). These hold
+for the rest of the session. Never apply one repo's commands, skills, rules, or models to another repo's files.
 
 ## Session isolation
 
@@ -157,6 +158,26 @@ invocation and every fix, include a `Required skills:` line whose contents you d
 **Skill Application Mapping** for the file types being changed. The `plan` agent writes a `## Required Skills`
 section per phase (also derived from the INVENTORY).
 
+## Model selection (per repo, per phase)
+
+Spawn every subagent with the model **that spawn's repo** assigns in its `repo-profile.json` `models` block —
+this is how a repo tunes cost vs. capability per stage, and per phase for the two phase-driven agents. Resolve
+the spawn's `model` argument like this:
+
+- **Static-model agents** — `explore`, `plan`, `code-reviewer`, `execution-path-analyzer`,
+  `module-documentation`, `prompt-generation`: use `models.byAgent["{agent}"]`.
+- **Phase-driven agents** — `implement` and `write-test`: use `models.byPhaseComplexity["{agent}"]["{tier}"]`,
+  where `{tier}` is the phase's **Complexity** from the approved plan's Phase Index (also on each phase file
+  header and in the plan agent's return), lowercased to the profile key — `Low`→`low`, `Medium`→`medium`,
+  `High`→`high`. A low-stakes **inline** task with no plan counts as `low`. When you re-spawn `implement` or `write-test` to fix code-review findings, reuse the **same
+  tier** as the phase being fixed (or `low` for an inline task) so the fix runs on the phase's model.
+- **Fallback.** If the repo's profile has no `models` block, or no entry for the agent or tier, spawn **without**
+  a `model` argument — the agent then inherits the session (your, the orchestrator's) model, since the pipeline
+  agents carry no `model` in their front matter. (Profiles written before model routing existed keep working.)
+
+Pass the resolved name as the spawn's `model` argument (`haiku` | `sonnet` | `opus` | `fable`). The
+`initializer` is not covered here — the `/init-kit` Workflow spawns it and sets its model, not you.
+
 ## Step 1 — Classify the request
 
 | Category | Recognize by | Pipeline |
@@ -200,7 +221,9 @@ is in effect.
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}`, the phase/plan file path, prior
 reports, the resolved command strings from that repo's repo-profile, and (for implement/write-test) the
-`Required skills:` line.
+`Required skills:` line. Spawn each agent on the model resolved per **Model selection** — `implement` and
+`write-test` on this phase's **Complexity** tier (`models.byPhaseComplexity`), every other agent on its
+`models.byAgent` model.
 
 ## Step 3 — Relay and decide
 
@@ -268,3 +291,8 @@ the user and ask how to proceed. Do not auto-run a 4th.
     cross-repo dependency exists, queue (Rule M5).
 12. **Single repo, unchanged.** With one in-scope repo, behave exactly as the single-repo flow — no
     parallelism, and the repo key is cosmetic.
+13. **Spawn on the profile's model.** Resolve each subagent's model from its repo's `repo-profile.json`
+    `models` block (**Model selection**): static agents from `models.byAgent`, and `implement`/`write-test`
+    from `models.byPhaseComplexity` on the phase's **Complexity** tier (`low` for inline no-plan tasks). Fall
+    back to the session model only when the profile is silent (agents carry no `model` front matter). Never
+    borrow another repo's models.

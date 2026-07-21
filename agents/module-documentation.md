@@ -9,7 +9,6 @@ description: >
   generates from memory; (5) applies the meta-author standard (15 Laws, Chain-of-Thought) and Archetype C;
   (6) self-reviews each written file for accuracy, exhaustiveness, and top-to-bottom readability. It edits ONLY
   files under the references directory and writes one output report; it does not touch project source.
-model: opus
 effort: high
 tools: Read, Edit, Write, Bash, Grep, Glob
 timeout: 600

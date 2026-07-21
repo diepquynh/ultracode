@@ -64,9 +64,9 @@ export const meta = {
   name: 'init-kit-scout',
   description: 'Detect the stack, fan out parallel read-only scouts across repo slices, and propose a per-repo skill set for approval',
   phases: [
-    { title: 'Detect', detail: 'identify stack, plan slices, discover existing skills' },
-    { title: 'Scout', detail: 'one read-only initializer per repo slice' },
-    { title: 'Propose', detail: 'merge findings, rank skills, reconcile with existing skills' },
+    { title: 'Detect', detail: 'identify stack, plan slices, discover existing skills', model: 'sonnet' },
+    { title: 'Scout', detail: 'one read-only initializer per repo slice', model: 'sonnet' },
+    { title: 'Propose', detail: 'merge findings, rank skills, reconcile with existing skills', model: 'sonnet' },
   ],
 }
 
@@ -123,7 +123,7 @@ of slices to scout in parallel + the candidate component types). Also discover e
 under ${repoRoot}/.claude/skills/ and record it in the scout plan's Existing Skills table (name, kind guess,
 path, description) so propose can re-use it. Return the scout-plan path, the stack, the chosen reference path,
 the structured slice list (descriptor, paths, slug) for the parallel fan-out, and the existing-skill count.`,
-  { label: 'detect', agentType: 'ultracode:initializer', schema: DETECT_SCHEMA },
+  { label: 'detect', agentType: 'ultracode:initializer', model: 'sonnet', schema: DETECT_SCHEMA },
 )
 
 log(`Stack: ${detect.stack} · scouting ${detect.slices.length} slice(s) in parallel · ${detect.existingSkillCount || 0} existing skill(s) found`)
@@ -141,7 +141,7 @@ Session dir: ${sessionDir}.
 Find every instance of each candidate component type WITHIN your slice's paths only, count them, capture ONE
 real exemplar + the invariants + a distilled template per type, and write your scout-findings file
 (ultracode-findings-${slice.slug}.md). Return its path.`,
-      { label: `scout:${slice.slug}`, phase: 'Scout', agentType: 'ultracode:initializer', schema: SCOUT_SCHEMA },
+      { label: `scout:${slice.slug}`, phase: 'Scout', agentType: 'ultracode:initializer', model: 'sonnet', schema: SCOUT_SCHEMA },
     )
   )
 )).filter(Boolean)
@@ -162,7 +162,7 @@ Write BOTH the human proposal (ultracode-proposal.md) and its machine twin (ultr
 must carry: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, and skills[] (name, kind,
 componentType, count, sliceSpread, status, existingPath, recommend, rationale). Return the
 ultracode-proposal.json path, the recommended-new count, and the reuse count.`,
-  { label: 'propose', agentType: 'ultracode:initializer', schema: PROPOSE_SCHEMA },
+  { label: 'propose', agentType: 'ultracode:initializer', model: 'sonnet', schema: PROPOSE_SCHEMA },
 )
 
 return {
@@ -226,7 +226,7 @@ export const meta = {
   description: 'Generate the approved new/regenerated per-repo skills in parallel (one agent each), then assemble the routing INVENTORY.md + repo-profile.json over the generated plus reused skills',
   phases: [
     { title: 'Generate skills', detail: 'one initializer per skill to (re)generate, in parallel', model: 'opus' },
-    { title: 'Assemble inventory', detail: 'write INVENTORY.md + repo-profile.json + report over generated + reused skills' },
+    { title: 'Assemble inventory', detail: 'write INVENTORY.md + repo-profile.json + report over generated + reused skills', model: 'sonnet' },
   ],
 }
 
@@ -298,9 +298,13 @@ skill in "Generated skills" AND every skill in "Reused skills" MUST appear in bo
 and the profile skills[] array (mark each profile skills[] entry source: generated or reused). For each reused
 skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
 Seed commands + Review Rule Set from the proposal (read the stack reference at the proposal's referencePath).
+Seed the repo-profile.json "models" block with the default model routing from the output contract so the
+orchestrator can switch subagent models per repo and per phase: models.byAgent (explore/plan = opus;
+code-reviewer/execution-path-analyzer = sonnet; module-documentation/prompt-generation = opus) and models.byPhaseComplexity
+(implement and write-test each low = haiku, medium = haiku, high = sonnet).
 Self-review for consistency, then write the generation report. Return the report path and the full list of
 files written.`,
-  { label: 'assemble-inventory', agentType: 'ultracode:initializer', schema: GEN_INVENTORY_SCHEMA },
+  { label: 'assemble-inventory', agentType: 'ultracode:initializer', model: 'sonnet', schema: GEN_INVENTORY_SCHEMA },
 )
 
 return {
@@ -318,8 +322,13 @@ so the parallel fan-out needs no worktree isolation; only skills whose dispositi
 `generate-inventory`. The single `generate-inventory` agent runs after them (a barrier) because the inventory
 must list every generated AND every reused skill. The `generate-skill` agents run on **Opus**
 (`model: 'opus'`) — skill authoring is the highest-value, quality-sensitive step, so it gets the strongest
-model; detect / scout / propose / generate-inventory stay on the initializer's default (Sonnet). **Wait for
-the workflow's completion notification before continuing.**
+model; detect / scout / propose / generate-inventory run on **Sonnet**, set explicitly on each `agent()` call
+now that the initializer — like every pipeline agent — carries no `model` in its front matter. Those workflow
+models are the initializer Workflow's own; separately, `generate-inventory` writes a `models` block into
+`repo-profile.json` that routes which model the **orchestrator** later spawns each pipeline subagent with —
+`models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for `implement`/`write-test` by the
+plan phase's Complexity tier (default low/medium → haiku, high → sonnet). **Wait for the workflow's completion
+notification before continuing.**
 
 ## Step 4 — Report + reload
 

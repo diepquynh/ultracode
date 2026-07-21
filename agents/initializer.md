@@ -14,7 +14,6 @@ description: >
   every skill is written, assemble the routing INVENTORY.md and repo-profile.json over the generated plus the
   reused skills. It grounds every generated skill in real captured exemplars and never invents framework
   patterns.
-model: sonnet
 effort: high
 tools: Read, Write, Edit, Bash, Grep, Glob
 timeout: 600
@@ -47,7 +46,7 @@ context: fork
 | **scout findings** | A scout-mode output for one slice: component types found in that slice with counts, exemplars, and invariants. Written to `{session-dir}/ultracode-findings-<slice-slug>.md`. |
 | **proposal** | The propose-mode output: the ranked, merged, deduped skill recommendation for user approval. Written as `{session-dir}/ultracode-proposal.md` (human table) plus `{session-dir}/ultracode-proposal.json` (machine twin: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, skills[]) that the /init-kit generate Workflow and the generate modes consume. |
 | **INVENTORY.md** | The routing table written to `<repo>/.claude/ultracode/INVENTORY.md`. Source of truth for skill routing; read as a plain file by all agents. See `${CLAUDE_PLUGIN_ROOT}/refs/inventory-and-profile.md`. |
-| **repo-profile.json** | The machine-readable profile written to `<repo>/.claude/ultracode/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules. |
+| **repo-profile.json** | The machine-readable profile written to `<repo>/.claude/ultracode/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules, and model routing (the `models` block — which model the orchestrator spawns each subagent with). |
 | **existing skill** | A `SKILL.md` already present under `{repo}/.claude/skills/` before this run — written by a prior init-kit run or hand-authored by the team. Discovered read-only in `detect`. Re-used as-is by default; never overwritten unless its `disposition` is `regenerate`. |
 | **bespoke skill** | An existing skill whose `name` matches NO scouted component type and is neither `convention` nor `module-hub`. Registered in the inventory for routing but never regenerated. |
 | **status** | A per-skill field set by `propose`: `new` (no existing skill of this name) or `existing` (an existing skill of this name was found). |
@@ -389,13 +388,19 @@ mkdir -p {repo}/.claude/ultracode
 
 Per the contract, write:
 - `{repo}/.claude/ultracode/INVENTORY.md` — Commands table, Skills Inventory table, Skill Application Mapping, Module/Area map, Review Rule Set.
-- `{repo}/.claude/ultracode/repo-profile.json` — the machine profile.
+- `{repo}/.claude/ultracode/repo-profile.json` — the machine profile, including the `models` block.
 
 The repo's skill set is `Generated skills` PLUS `Reused skills`. EVERY skill in BOTH arrays MUST appear in the INVENTORY Skills Inventory table AND in the profile `skills` array (mirror them 1:1). On each profile `skills[]` entry set `source`: `generated` for a skill from `Generated skills`, `reused` for a skill from `Reused skills`. Build each skill's Skills Inventory `Load when` cell and Skill Application Mapping row from its component type when it has one; for a reused skill whose `componentType` is `null` (a bespoke skill), derive the `Load when` cell from the trigger in its own `SKILL.md` front-matter description, and add a Skill Application Mapping row only if a concrete file type triggers it. `commands` and `moduleMap` come from the proposal; the Review Rule Set is seeded from the stack reference with stable IDs.
 
+Write the profile's `models` block seeded with the contract's default model routing, so the orchestrator can switch subagent models per repo and per phase (see the `models` schema and defaults in `${CLAUDE_PLUGIN_ROOT}/refs/inventory-and-profile.md`):
+- `models.byAgent` — `explore`, `plan` → `opus`; `code-reviewer`, `execution-path-analyzer` → `sonnet`; `module-documentation`, `prompt-generation` → `opus`.
+- `models.byPhaseComplexity` — `implement` and `write-test` each `{ "low": "haiku", "medium": "haiku", "high": "sonnet" }`.
+
+Do not add `implement`, `write-test`, or `initializer` to `byAgent` (the first two are tier-driven; the initializer is Workflow-spawned). Keep these seeded defaults unless the user's focus asked for a different routing.
+
 ### Step GI4 — Self-review
 
-Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map. Fix any mismatch by editing.
+Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (six static agents) and `byPhaseComplexity` (`implement` + `write-test`, each low/medium/high) seeded to the contract defaults, and `implement`/`write-test`/`initializer` are absent from `byAgent`. Fix any mismatch by editing.
 
 ### Step GI5 — Write the generation report
 

@@ -251,9 +251,15 @@ Step D2). The `_generic.md` fallback handles unknown stacks by discovering compo
   server is assumed. If a code-graph MCP exists, agents prefer it; otherwise they fall back to Grep/Glob.
 - **Seeded from real setups.** The pipeline agents, `orchestrate`, `meta-author`, and the stack references
   were generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
-- **Model tiers.** Scouting and most pipeline stages run on Sonnet; authoring stages
-  (`prompt-generation`, `module-documentation`, and init-kit skill generation) run on Opus.
-  Override per your needs.
+- **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block the orchestrator
+  follows when spawning each subagent, so a repo tunes cost vs. capability without touching the plugin.
+  `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
+  `prompt-generation`/`module-documentation` run on Opus, while `code-reviewer` and `execution-path-analyzer`
+  run on Sonnet. `models.byPhaseComplexity` switches the `implement` and `write-test`
+  model by the plan phase's complexity/stake tier — the `plan` agent tags every phase Low/Medium/High, and the
+  default routing is `low`/`medium` → Haiku, `high` → Sonnet, so cheap phases stay cheap while hard phases get
+  a stronger model. `/init-kit` seeds these defaults into the profile; edit the block to override. (Init-kit's
+  own skill generation still runs on Opus, set by the initializer Workflow — separate from this block.)
 
 ## Publish
 

@@ -6,7 +6,6 @@ description: >
   file, (4) reviewing prompt quality or debugging ambiguous-instruction failures, (5) the user asks to write
   or improve any instruction prompt. It applies the meta-author standard (15 Laws, Chain-of-Thought,
   self-review) and writes or edits files directly.
-model: opus
 effort: high
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 timeout: 600

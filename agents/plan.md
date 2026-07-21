@@ -13,7 +13,6 @@ description: >
   the session directory. A plan may span multiple repos: each phase is tagged with its repo and its cross-repo
   dependencies so the orchestrator can run independent phases in parallel and queue blocked ones. The implement
   agent receives one phase file at a time. It does NOT modify project source.
-model: sonnet
 effort: high
 tools: Read, Bash, Grep, Glob
 timeout: 600
@@ -57,6 +56,7 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 | **step** | One atomic unit: one file, one action, one verification command. |
 | **phase** | A group of related steps forming one logical milestone (e.g. data layer, service layer, endpoints). One file each. |
 | **stakes** | Low (isolated, easy rollback), Medium (multi-file, moderate impact), or High (architectural, hard to rollback). |
+| **phase complexity** | A per-phase tier — **Low**, **Medium**, or **High** — combining the phase's own difficulty with its stakes. The orchestrator maps it (via the repo profile's `models.byPhaseComplexity`) to the model it spawns this phase's `implement` and `write-test` agents with. Distinct from a step's **Complexity** (Small/Medium/Large). |
 | **success criterion** | A measurable condition proving correctness (e.g. "build command passes", "endpoint returns expected shape"). |
 | **clarifying question** | A question only the user can answer, unanswerable from the repo and the research. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
@@ -190,6 +190,16 @@ signatures in the step. Rules:
   prerequisites has `Depends on: none`. A single-repo plan sets Repo to the one repo for every phase, and each
   phase's Depends on is simply the prior phase (the existing implicit order made explicit). A cross-repo plan
   uses Depends on to encode every producer→consumer edge from P1.
+- **P9 — Tag phase complexity (the model-routing tier).** Give every phase a **Complexity** of Low, Medium, or
+  High — the tier the orchestrator maps to the model it spawns this phase's `implement` and `write-test` agents
+  with. Classify from the phase's own difficulty, bounded by stakes:
+  - **Low** — mechanical or isolated: a single-file change, config/registration/wiring, or the documentation
+    phase; little branching logic.
+  - **Medium** — several related files, or moderate business logic, within one area.
+  - **High** — architectural, a schema/data migration, cross-module, intricate logic, or otherwise high blast
+    radius.
+  A High-stakes plan's risky phases are High; its incidental phases (docs, config) may still be Low. This
+  phase tier is independent of a step's Small/Medium/Large **Complexity** — do not conflate them.
 
 Step template:
 
@@ -247,12 +257,14 @@ dir:`). Substitute real values everywhere braces appear.
 ## Phase Index
 The **Repo** and **Depends on** columns are the orchestrator's scheduling graph: phases in different repos with
 no dependency between them may run in parallel; a phase waits until every phase in its Depends-on set has
-completed and passed review. Use phase numbers as IDs; `none` means no prerequisite.
+completed and passed review. Use phase numbers as IDs; `none` means no prerequisite. The **Complexity** column
+is the model-routing tier (Low/Medium/High, from P9) the orchestrator uses to pick this phase's `implement` and
+`write-test` model.
 
-| Phase | Name | Repo | Depends on | File Path | Steps | Description |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | {Name} | {repo key} | none | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-1-{slug}.md` | {N} | {one sentence} |
-| 2 | {Name} | {repo key} | 1 | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-2-{slug}.md` | {N} | {one sentence} |
+| Phase | Name | Repo | Complexity | Depends on | File Path | Steps | Description |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | {Name} | {repo key} | {Low/Medium/High} | none | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-1-{slug}.md` | {N} | {one sentence} |
+| 2 | {Name} | {repo key} | {Low/Medium/High} | 1 | `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-2-{slug}.md` | {N} | {one sentence} |
 
 ## Risks and Mitigations
 | Risk | Impact | Likelihood | Mitigation |
@@ -285,6 +297,7 @@ For each phase, `{session-dir}/ultracode-plan-{YYYYMMDD}-{HHmmss}-{topic-slug}-p
 **Repo:** {repo key}
 **Repo root:** {absolute root of this phase's repo}
 **Depends on:** {phase IDs that must complete first, in any repo, or "none"}
+**Complexity:** {Low | Medium | High} — model-routing tier (P9) for this phase's implement/write-test agents
 **Area(s):** {areas/modules this phase touches, from this repo's Module/Area Map}
 
 ## Required Skills
@@ -326,8 +339,9 @@ phase, each depending on that repo's last code phase.
 ## Step 8 — Return
 
 Return plain text to the orchestrator: master file path; each phase file path in order, and for each phase its
-**repo key** and **Depends on** set (so the orchestrator can schedule the graph); the repos in scope; a 2–3
-sentence plan summary; the stakes level; phase count; total step count; clarifying-question count (0 if none).
+**repo key**, its **Complexity** tier (so the orchestrator can pick that phase's implement/write-test model),
+and its **Depends on** set (so the orchestrator can schedule the graph); the repos in scope; a 2–3 sentence
+plan summary; the stakes level; phase count; total step count; clarifying-question count (0 if none).
 
 ## Constraints
 
@@ -343,5 +357,6 @@ sentence plan summary; the stakes level; phase count; total step count; clarifyi
 8. Complete plans only: success criteria, steps with verification, risks (Medium/High), and a documentation step.
 9. Skill references (from the phase's repo's INVENTORY mapping) on every code step; verification via that
    repo's `build` command only — never a hardcoded build tool, never a test command, never another repo's command.
-10. Every phase carries a Repo and a Depends on; cross-repo consumers depend on their producer phase (P1, P8).
-    A single-repo plan tags all phases with the one repo and chains Depends on to the prior phase.
+10. Every phase carries a Repo, a Complexity tier (P9), and a Depends on; cross-repo consumers depend on their
+    producer phase (P1, P8). A single-repo plan tags all phases with the one repo and chains Depends on to the
+    prior phase.
