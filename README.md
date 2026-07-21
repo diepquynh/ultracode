@@ -34,6 +34,7 @@ dozen turns.
 Every classic SDLC pain has a classic fix — a code review, a QA pass, a design sign-off, a second pair of
 eyes. The catch is that those fixes were built *for teams*. They assume an engineer who didn't write the code
 can review it, a tester who isn't you, and an org that enforces the steps so none get quietly skipped at 11pm.
+
 Solo, you inherit every pain and none of the headcount — and the discipline is the first thing to go, because
 nothing outside your own willpower is holding the gate.
 
@@ -51,7 +52,9 @@ runs them in order and won't let you skip the hard steps:
 | Drift from your own conventions | No teammate to say "we don't do it that way here" | every stage routes off your repo's scouted conventions, so new code matches the old |
 
 These are the pains the V-Model and every process after it were built to fix — and every one of those fixes
-assumed a team. Ultracode runs that process for a single person: the orchestrator is the senior who holds each
+assumed a team.
+
+Ultracode runs that process for a single person: the orchestrator is the senior who holds each
 gate so shipping doesn't ride on your discipline at 11pm, and the fan-out hands every role a fresh, focused
 context instead of one tired brain wearing seven hats. You don't get more headcount — you get the process the
 headcount was for.
@@ -118,8 +121,10 @@ artifact you can open and read.
 **The orchestrator is the only router.** Because leaf agents can't see the conversation, each spawn prompt is
 **self-contained** — it carries the session dir, the exact prior-report paths, the resolved build/test
 commands, and a `Required skills:` line derived from the inventory. An agent works, writes its report, and
-returns the path; the orchestrator reads that report and decides what runs next. Reports are written for the
-next agent to consume — exact paths, full signatures, patterns shown in full rather than referenced — and
+returns the path; the orchestrator reads that report and decides what runs next.
+
+Reports are written for the next agent to consume — exact paths, full signatures, patterns shown in full
+rather than referenced — and
 each stage's report is the contract for the one after it (a plan's per-phase files feed `implement` one phase
 at a time; an EPA report's enumerated paths become `write-test`'s coverage contract).
 
@@ -144,8 +149,10 @@ at a time; an EPA report's enumerated paths become `write-test`'s coverage contr
 **Initialization talks over a different channel.** `/init-kit` fans the `initializer` out with the
 **Workflow** tool, and workflow scripts have no filesystem access — so data between fan-out stages moves as
 **typed JSON return values** (one schema per stage), while the bulky content lands in the session dir as files
-the JSON points to. Scouting and generation are two separate workflow runs with a **user-approval gate**
-between them, because a headless workflow can't stop to ask.
+the JSON points to.
+
+Scouting and generation are two separate workflow runs with a **user-approval gate** between them, because a
+headless workflow can't stop to ask.
 
 ## Install
 
@@ -218,11 +225,14 @@ Commit the generated `.claude/ultracode/` and `.claude/skills/` so your team sha
 Re-running `/init-kit` — or running it the first time in a repo that already ships hand-authored skills — does
 **not** clobber what's there. During **detect** the initializer discovers every skill already under
 `.claude/skills/`. In **propose** each is marked `status: existing` and, by default, **re-used as-is**: kept
-on disk and registered in `INVENTORY.md`, never regenerated. At the approval gate you can override per skill
-and force a **regenerate** to refresh a stale one from the current code. Bespoke skills the team wrote — ones
-that map to no scouted component type (say a `deploy` or `db-migration` skill) — are folded into the routing
-inventory too, so the pipeline can load them. The upshot: re-scans are idempotent — your manual edits to a
-skill survive, and only the skills you explicitly ask to (re)generate are rewritten.
+on disk and registered in `INVENTORY.md`, never regenerated.
+
+At the approval gate you can override per skill and force a **regenerate** to refresh a stale one from the
+current code. Bespoke skills the team wrote — ones that map to no scouted component type (say a `deploy` or
+`db-migration` skill) — are folded into the routing inventory too, so the pipeline can load them.
+
+The upshot: re-scans are idempotent — your manual edits to a skill survive, and only the skills you explicitly
+ask to (re)generate are rewritten.
 
 ## Agents
 
@@ -253,13 +263,18 @@ Step D2). The `_generic.md` fallback handles unknown stacks by discovering compo
   were generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
 - **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block the orchestrator
   follows when spawning each subagent, so a repo tunes cost vs. capability without touching the plugin.
-  `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
-  `prompt-generation`/`module-documentation` run on Opus, while `code-reviewer` and `execution-path-analyzer`
-  run on Sonnet. `models.byPhaseComplexity` switches the `implement` and `write-test`
-  model by the plan phase's complexity/stake tier — the `plan` agent tags every phase Low/Medium/High, and the
-  default routing is `low`/`medium` → Haiku, `high` → Sonnet, so cheap phases stay cheap while hard phases get
-  a stronger model. `/init-kit` seeds these defaults into the profile; edit the block to override. (Init-kit's
-  own skill generation still runs on Opus, set by the initializer Workflow — separate from this block.)
+  `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own skill generation always runs
+  on Opus, set by the initializer Workflow — that's separate from this block.)
+  - `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
+    `prompt-generation`/`module-documentation` run on Opus; `code-reviewer` and `execution-path-analyzer` run
+    on Sonnet.
+  - `models.byPhaseComplexity` switches the `implement` and `write-test` model by the plan phase's
+    complexity/stake tier (the `plan` agent tags every phase Low/Medium/High) — default `low`/`medium` →
+    Haiku, `high` → Sonnet, so cheap phases stay cheap while hard phases get a stronger model.
+  - **Not everyone runs Claude Code on Anthropic-hosted models** — it can point at a gateway or proxy, Amazon
+    Bedrock, Google Vertex, or another backend, and each name resolves to whatever model *your* Claude Code
+    serves. That's why the block is per-subagent and per-repo: match every stage to the models your setup
+    actually runs and to your own cost, latency, and capability needs.
 
 ## Publish
 
@@ -274,8 +289,9 @@ Well.... :")
 ![Session cost breakdown](assets/cost.png)
 
 This is a single session on a multi-repo task, with Opus 4.8 as the orchestrator model. The task working repos are a multi-module Java
-backend, a FastAPI backend and React Native mobile app. The session involves 3 iterations of plan reviews and re-explore. The rest of
-the implementation? I let it run and go to sleep, then wake up the following day to review the codes, manual regression test and plan for
-the migration :")
+backend, a FastAPI backend and React Native mobile app. The session involves 3 iterations of plan reviews and re-explore.
+
+The rest of the implementation? I let it run and go to sleep, then wake up the following day to review the codes, manual regression test
+and plan for the migration :")
 
 By the time I wrote this README file and created this kit, I was using the Claude Max 5x plan.
