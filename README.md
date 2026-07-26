@@ -217,8 +217,8 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 In any repo where the plugin is enabled:
 
-1. **`/init-kit`** — the command spawns the `initializer` agent directly, fanning it out in parallel where the
-   work is independent, with your approval gate in the middle:
+1. **`/init-kit`** — the command spawns the `ultracode:initializer` agent directly, fanning it out in parallel
+   where the work is independent, with your approval gate in the middle:
    - **detect** (1 agent) — identify the stack, pick `refs/<stack>.md`, plan the parallel slices, and
      discover any skills already under `.claude/skills/`.
    - **scout** (N agents, in parallel, read-only) — each owns one slice, finds every recurring component
@@ -252,17 +252,26 @@ ask to (re)generate are rewritten.
 
 ## Agents
 
-| Agent | Role |
+Every agent is registered under the plugin's `ultracode:` namespace, so its **`subagent_type` is the prefixed
+name** — `ultracode:explore`, not `explore`. The prefix keeps `explore` and `plan` from colliding with Claude
+Code's built-in `Explore` and `Plan` agents, which are not ultracode agents and do not follow this pipeline.
+Spawn the names below verbatim.
+
+| Agent (`subagent_type`) | Role |
 | --- | --- |
-| `initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
-| `explore` | Research a topic; write a grounded research document. |
-| `plan` | Design a phased, verifiable implementation plan. |
-| `implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
-| `code-reviewer` | Review changes against the repo's Review Rule Set; emit JSON findings. |
-| `execution-path-analyzer` | Enumerate execution paths per function to drive test writing. |
-| `write-test` | Write one test per new execution path, using the repo's test framework. |
-| `module-documentation` | Update area references under `skills/module-hub/references/`. |
-| `prompt-generation` | Author/edit prompts, skills, and agent files via the meta-author standard. |
+| `ultracode:initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
+| `ultracode:explore` | Research a topic; write a grounded research document. |
+| `ultracode:plan` | Design a phased, verifiable implementation plan. |
+| `ultracode:implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
+| `ultracode:code-reviewer` | Review changes against the repo's Review Rule Set; emit JSON findings. |
+| `ultracode:execution-path-analyzer` | Enumerate execution paths per function to drive test writing. |
+| `ultracode:write-test` | Write one test per new execution path, using the repo's test framework. |
+| `ultracode:module-documentation` | Update area references under `skills/module-hub/references/`. |
+| `ultracode:prompt-generation` | Author/edit prompts, skills, and agent files via the meta-author standard. |
+
+The prefix comes from the plugin loader, which registers each agent as `{plugin}:{frontmatter name}`. Agent
+files therefore keep a **bare** `name:` in their front matter — writing `name: ultracode:explore` would register
+it as `ultracode:ultracode:explore`. The same holds for `repo-profile.json`'s `models` keys, which stay bare.
 
 ## Extending to a new stack
 

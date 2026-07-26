@@ -396,11 +396,13 @@ Write the profile's `models` block seeded with the contract's default model rout
 - `models.byAgent` — `explore`, `plan` → `opus`; `code-reviewer`, `execution-path-analyzer` → `sonnet`; `module-documentation`, `prompt-generation` → `opus`.
 - `models.byPhaseComplexity` — `implement` and `write-test` each `{ "low": "haiku", "medium": "haiku", "high": "sonnet" }`.
 
+Every key in both maps is the agent's **bare** name — never write an `ultracode:`-prefixed key (e.g. `explore`, NOT `ultracode:explore`). The orchestrator looks a model up by the bare key and re-adds the `ultracode:` prefix when it spawns, so a prefixed key would never match.
+
 Do not add `implement`, `write-test`, or `initializer` to `byAgent` (the first two are tier-driven; the initializer is spawned by the /init-kit command). Keep these seeded defaults unless the user's focus asked for a different routing.
 
 ### Step GI4 — Self-review
 
-Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (six static agents) and `byPhaseComplexity` (`implement` + `write-test`, each low/medium/high) seeded to the contract defaults, and `implement`/`write-test`/`initializer` are absent from `byAgent`. Fix any mismatch by editing.
+Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (six static agents) and `byPhaseComplexity` (`implement` + `write-test`, each low/medium/high) seeded to the contract defaults, every `models` key is a bare agent name with no `ultracode:` prefix, and `implement`/`write-test`/`initializer` are absent from `byAgent`. Fix any mismatch by editing.
 
 ### Step GI5 — Write the generation report
 

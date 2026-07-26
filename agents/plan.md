@@ -56,7 +56,7 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 | **step** | One atomic unit: one file, one action, one verification command. |
 | **phase** | A group of related steps forming one logical milestone (e.g. data layer, service layer, endpoints). One file each. |
 | **stakes** | Low (isolated, easy rollback), Medium (multi-file, moderate impact), or High (architectural, hard to rollback). |
-| **phase complexity** | A per-phase tier — **Low**, **Medium**, or **High** — combining the phase's own difficulty with its stakes. The orchestrator maps it (via the repo profile's `models.byPhaseComplexity`) to the model it spawns this phase's `implement` and `write-test` agents with. Distinct from a step's **Complexity** (Small/Medium/Large). |
+| **phase complexity** | A per-phase tier — **Low**, **Medium**, or **High** — combining the phase's own difficulty with its stakes. The orchestrator maps it (via the repo profile's `models.byPhaseComplexity`) to the model it spawns this phase's `ultracode:implement` and `ultracode:write-test` agents with. Distinct from a step's **Complexity** (Small/Medium/Large). |
 | **success criterion** | A measurable condition proving correctness (e.g. "build command passes", "endpoint returns expected shape"). |
 | **clarifying question** | A question only the user can answer, unanswerable from the repo and the research. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
@@ -191,7 +191,7 @@ signatures in the step. Rules:
   phase's Depends on is simply the prior phase (the existing implicit order made explicit). A cross-repo plan
   uses Depends on to encode every producer→consumer edge from P1.
 - **P9 — Tag phase complexity (the model-routing tier).** Give every phase a **Complexity** of Low, Medium, or
-  High — the tier the orchestrator maps to the model it spawns this phase's `implement` and `write-test` agents
+  High — the tier the orchestrator maps to the model it spawns this phase's `ultracode:implement` and `ultracode:write-test` agents
   with. Classify from the phase's own difficulty, bounded by stakes:
   - **Low** — mechanical or isolated: a single-file change, config/registration/wiring, or the documentation
     phase; little branching logic.
@@ -258,8 +258,8 @@ dir:`). Substitute real values everywhere braces appear.
 The **Repo** and **Depends on** columns are the orchestrator's scheduling graph: phases in different repos with
 no dependency between them may run in parallel; a phase waits until every phase in its Depends-on set has
 completed and passed review. Use phase numbers as IDs; `none` means no prerequisite. The **Complexity** column
-is the model-routing tier (Low/Medium/High, from P9) the orchestrator uses to pick this phase's `implement` and
-`write-test` model.
+is the model-routing tier (Low/Medium/High, from P9) the orchestrator uses to pick this phase's
+`ultracode:implement` and `ultracode:write-test` model.
 
 | Phase | Name | Repo | Complexity | Depends on | File Path | Steps | Description |
 | --- | --- | --- | --- | --- | --- | --- | --- |

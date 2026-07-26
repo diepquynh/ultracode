@@ -5,10 +5,13 @@ argument-hint: "[optional: focus area, module glob, or 're-scan']"
 
 # /init-kit — Generate this repo's skill inventory
 
-You are about to bootstrap **ultracode** for the current repository. The `initializer` agent is a leaf agent:
-it does one slice/skill of work and returns a file path. **You (the main loop) own the fan-out and the approval
-gate** — you spawn the `initializer` directly with the **Agent tool**. Where the work is independent, spawn in
-parallel: emit multiple Agent tool calls in a **single message** and they run concurrently.
+You are about to bootstrap **ultracode** for the current repository. The `ultracode:initializer` agent is a leaf
+agent: it does one slice/skill of work and returns a file path. **You (the main loop) own the fan-out and the
+approval gate** — you spawn `ultracode:initializer` directly with the **Agent tool**. Where the work is
+independent, spawn in parallel: emit multiple Agent tool calls in a **single message** and they run concurrently.
+
+**Spawn the prefixed name.** Every spawn below passes `subagent_type: ultracode:initializer` verbatim — the
+`ultracode:` prefix is part of the agent's registered name, not decoration. Never spawn a bare `initializer`.
 
 This runs as a five-mode pipeline with a user-approval gate in the middle:
 
@@ -27,7 +30,7 @@ skill into the routing inventory too. At the approval gate you can override per 
 one. Only skills you choose to (re)generate are fanned out in the generate step; reused skills flow straight to
 `generate-inventory`. Re-scans are therefore idempotent — your manual edits survive unless you ask to overwrite.
 
-**Model per mode.** The `initializer` carries no `model` in its front matter, so set the `model` argument on
+**Model per mode.** The `ultracode:initializer` carries no `model` in its front matter, so set the `model` argument on
 every spawn below. Spawn `detect`, `scout`, `propose`, and `generate-inventory` on **Sonnet**; spawn every
 `generate-skill` agent on **Opus** — skill authoring is the highest-value, quality-sensitive step, so it gets
 the strongest model.
@@ -59,7 +62,7 @@ Keep `$ULTRACODE_SESSION` (session dir) and the repo root (`$PWD`, an absolute p
 
 ## Step 1 — DETECT (1 initializer)
 
-Spawn ONE `initializer` agent:
+Spawn ONE `ultracode:initializer` agent:
 
 ```
 subagent_type: ultracode:initializer
@@ -81,7 +84,7 @@ fan-out, the candidate component types, and the **Existing Skills** table.
 
 ## Step 2 — SCOUT (N initializers, IN PARALLEL — read-only)
 
-For EACH slice in the scout plan's Slices table, spawn one `initializer` agent — **send them all in a single
+For EACH slice in the scout plan's Slices table, spawn one `ultracode:initializer` agent — **send them all in a single
 message so they run concurrently** (scouts are read-only, so the parallel fan-out is safe):
 
 ```
@@ -102,7 +105,7 @@ Collect every returned scout-findings path.
 
 ## Step 3 — PROPOSE (1 initializer) → user approval gate
 
-Spawn ONE `initializer` agent:
+Spawn ONE `ultracode:initializer` agent:
 
 ```
 subagent_type: ultracode:initializer
@@ -148,8 +151,8 @@ inventory — the bespoke `other` skills included.
 
 ### Step 4a — GENERATE-SKILL (one initializer per skill to (re)generate, IN PARALLEL)
 
-For every skill in `approvedSkills` whose `disposition` is `generate` or `regenerate`, spawn one `initializer`
-agent — **send them all in a single message so they run concurrently.** Each writes only its own
+For every skill in `approvedSkills` whose `disposition` is `generate` or `regenerate`, spawn one
+`ultracode:initializer` agent — **send them all in a single message so they run concurrently.** Each writes only its own
 `.claude/skills/{name}/` directory (disjoint paths), so the parallel fan-out needs no worktree isolation. Skip
 skills whose `disposition` is `reuse` — they are left untouched on disk and passed straight to Step 4b.
 
@@ -178,7 +181,7 @@ Wait for every generate-skill agent to return. Collect their `{name, kind, compo
 
 ### Step 4b — GENERATE-INVENTORY (1 initializer, AFTER every generate-skill returns)
 
-Spawn ONE `initializer` agent — this is a barrier, because the inventory must list every generated AND every
+Spawn ONE `ultracode:initializer` agent — this is a barrier, because the inventory must list every generated AND every
 reused skill:
 
 ```

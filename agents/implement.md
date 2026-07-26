@@ -280,7 +280,7 @@ If a handoff is needed:
    | Field | Value |
    | --- | --- |
    | **Blocked at step** | {step number and title} |
-   | **Required agent** | `prompt-generation` |
+   | **Required agent** | `ultracode:prompt-generation` |
    | **Task description** | {exactly what the specialist must produce — file paths, names, prompt-content requirements, context from the plan} |
    | **Context files** | {session-dir paths the specialist should read} |
    | **Resume instructions** | {what this agent should do after the handoff result is available — remaining steps} |
@@ -290,22 +290,26 @@ If a handoff is needed:
    orchestrator can detect it:
 
    ```
-   HANDOFF: Blocked at step {N} ({title}). Need prompt-generation to author {what}.
+   HANDOFF: Blocked at step {N} ({title}). Need ultracode:prompt-generation to author {what}.
    Report: {session-dir}/ultracode-implement-{...}.md
 
    Completed: {X} steps
-   Blocked: Step {N} requires prompt-generation
+   Blocked: Step {N} requires ultracode:prompt-generation
    Remaining: {Z} steps after handoff
    ```
+
+Always name the specialist by its **`ultracode:`-prefixed** agent name — that is the exact `subagent_type` the
+orchestrator spawns. A bare `prompt-generation` or `write-test` risks the orchestrator resolving a built-in
+agent instead of the ultracode one.
 
 ### Handoff Trigger Table
 
 | Plan step involves… | Required agent | Trigger |
 | --- | --- | --- |
-| Writing AI/LLM prompt text (system-prompt content, operational requirements, output format) | `prompt-generation` | Step authors prompt text or an AI inferencing prompt |
-| Creating or editing a `SKILL.md` file | `prompt-generation` | Step targets `.claude/skills/*/SKILL.md` or `skills/*/SKILL.md` |
-| Creating or editing an agent markdown file | `prompt-generation` | Step targets `.claude/agents/*.md` or `agents/*.md` |
-| Writing unit tests for implementation code | `write-test` | Step mentions writing tests, test classes, or coverage |
+| Writing AI/LLM prompt text (system-prompt content, operational requirements, output format) | `ultracode:prompt-generation` | Step authors prompt text or an AI inferencing prompt |
+| Creating or editing a `SKILL.md` file | `ultracode:prompt-generation` | Step targets `.claude/skills/*/SKILL.md` or `skills/*/SKILL.md` |
+| Creating or editing an agent markdown file | `ultracode:prompt-generation` | Step targets `.claude/agents/*.md` or `agents/*.md` |
+| Writing unit tests for implementation code | `ultracode:write-test` | Step mentions writing tests, test classes, or coverage |
 
 ## Step 5 — Phase Verification
 
