@@ -121,17 +121,32 @@ artifact you can open and read.
    │  no agent calls another; every hop is a report file in the SESSION DIR
    │  (.claude/ultracode/session/ultracode-session-XXXX) — written by one agent, read by the next
    ▼
-   explore                 ─▶ research doc
-   plan                    ─▶ master plan + one self-contained file per phase
+   explore                 ─▶ research doc + criteria doc (rates the request single-spec | multi-spec)
+   generate-spec           ─▶ spec index + one SDD spec per shippable deliverable   (multi-spec only)
+   plan                    ─▶ master plan + one self-contained file per phase       (one plan agent per spec)
+   ── per spec, in spec order ──
    ── per phase (two independent review loops, one per fix agent) ──
    implement               ─▶ change report    (its Changed Files list = what to trace & cover)
    code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
    execution-path-analyzer ─▶ EPA report       (one path per test: P1, P2 … NEW/EXISTING)
    write-test              ─▶ test report
    code-reviewer (tests)   ⇄  write-test       (⇄ review ledger, loops until clean)
-   ── after all phases ──
+   ── after all phases of all specs ──
    module-documentation    ─▶ area references  (reads every prior report)
 ```
+
+**The spec tier is gated, not mandatory.** `explore` rates each request's **requirement scale**. A
+`single-spec` request — one repo, one shippable deliverable, no criterion waiting on a contract another
+criterion creates — skips `generate-spec` and goes straight to `plan`. A `multi-spec` request runs
+`generate-spec`, which groups the criteria into an ordered set of specs, each stating its requirements in
+**EARS** notation (`WHEN <trigger> THE SYSTEM SHALL <response>`) with Given/When/Then acceptance criteria and an
+explicit list of the contracts it provides and consumes. One `plan` agent then runs per spec — in parallel,
+since planning is read-only — and the orchestrator executes the resulting plans **one spec at a time**, so every
+spec lands as a verified, shippable increment. Inside the plan currently executing, phases still fan out
+wherever they don't block each other.
+
+Two user-approval gates sit on that path: the **spec set** is approved before any planning starts, and the
+**plans** are approved before any code is written.
 
 **The orchestrator is the only router.** Because leaf agents can't see the conversation, each spawn prompt is
 **self-contained** — it carries the session dir, the exact prior-report paths, the resolved build/test
@@ -211,8 +226,8 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 > **Always invoke `ultracode:orchestrate` first — before doing anything else.** It is the pipeline's single
 > router; every task should begin by activating the orchestrate skill, which then drives the whole flow
-> (explore → plan → implement → code-review → execution-path-analysis → write-test → code-review →
-> module-docs). It's set to activate at session start and for any code-changing task, but if it hasn't kicked
+> (explore → generate-spec (if `multi-spec`) → plan → implement → code-review → execution-path-analysis →
+> write-test → code-review → module-docs). It's set to activate at session start and for any code-changing task, but if it hasn't kicked
 > in, start it explicitly before touching code.
 
 In any repo where the plugin is enabled:
@@ -231,8 +246,8 @@ In any repo where the plugin is enabled:
 2. **Reload** so the new project skills register: `/reload-plugins` or restart the session. (Routing via
    `INVENTORY.md` works immediately regardless; only the Skill-tool registration needs a reload.)
 3. **Work normally.** The `ultracode:orchestrate` skill drives the pipeline
-   (explore → plan → implement → code-review → execution-path-analysis → write-test → code-review →
-   module-docs), routing every decision through the generated inventory.
+   (explore → generate-spec (if `multi-spec`) → plan → implement → code-review → execution-path-analysis →
+   write-test → code-review → module-docs), routing every decision through the generated inventory.
 
 Commit the generated `.claude/ultracode/` and `.claude/skills/` so your team shares them.
 
@@ -260,8 +275,9 @@ Spawn the names below verbatim.
 | Agent (`subagent_type`) | Role |
 | --- | --- |
 | `ultracode:initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
-| `ultracode:explore` | Research a topic; write a grounded research document. |
-| `ultracode:plan` | Design a phased, verifiable implementation plan. |
+| `ultracode:explore` | Research a topic; write a grounded research document plus a criteria document that rates the request `single-spec` or `multi-spec`. |
+| `ultracode:generate-spec` | Group the criteria into an ordered set of SDD specs (EARS + Given/When/Then), each with its provided/consumed contracts. |
+| `ultracode:plan` | Design a phased, verifiable implementation plan — one agent per spec, or one from the criteria when the request is `single-spec`. |
 | `ultracode:implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
 | `ultracode:code-reviewer` | Review changes against the repo's Review Rule Set; emit JSON findings. |
 | `ultracode:execution-path-analyzer` | Enumerate execution paths per function to drive test writing. |

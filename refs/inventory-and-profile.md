@@ -112,6 +112,7 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
   "models": {
     "byAgent": {
       "explore": "opus",
+      "generate-spec": "opus",
       "plan": "opus",
       "code-reviewer": "sonnet",
       "execution-path-analyzer": "sonnet",
@@ -132,7 +133,7 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
 - Each `skills[]` entry carries `source`: `"generated"` (written this run) or `"reused"` (an existing skill kept as-is and only registered). A reused skill's `kind` may be `"other"` when it maps to no scouted component type.
 - `moduleMap[]` mirrors the INVENTORY Module/Area Map 1:1.
 - `models` routes which Claude model the orchestrator spawns each subagent with — this is how a repo tunes cost vs. capability per stage. Values are harness model names: `haiku`, `sonnet`, `opus`, or `fable`. The block (and every entry in it) is **optional**: when it or an entry is absent, the orchestrator spawns without a `model` override, so the agent inherits the session model (the orchestrator's own model). The pipeline agents carry no `model` in their front matter — this block is their only model source — and profiles written before this field still work.
-  - `models.byAgent` — the **static** model per fixed-model pipeline agent the orchestrator spawns, keyed by agent name (no `ultracode:` prefix). Defaults: `explore`, `plan` = `opus`; `code-reviewer`, `execution-path-analyzer` = `sonnet`; `module-documentation`, `prompt-generation` = `opus`.
+  - `models.byAgent` — the **static** model per fixed-model pipeline agent the orchestrator spawns, keyed by agent name (no `ultracode:` prefix). Defaults: `explore`, `generate-spec`, `plan` = `opus`; `code-reviewer`, `execution-path-analyzer` = `sonnet`; `module-documentation`, `prompt-generation` = `opus`. `generate-spec` authors the requirements contract every later stage is bound by, so it warrants the strongest model.
   - `models.byPhaseComplexity` — the **dynamic** model for the two phase-driven agents, `implement` and `write-test` (also unprefixed keys). Each carries its own `{ low, medium, high }` map keyed by the plan phase's complexity/stake tier; the orchestrator picks the value for the phase being implemented, and an inline no-plan task counts as `low`. Because their model is tier-driven, `implement` and `write-test` are NOT listed in `byAgent`. Defaults: `low` = `haiku`, `medium` = `haiku`, `high` = `sonnet` for each.
   - **Keys stay bare; spawns stay prefixed.** Every key in both maps is the agent's unprefixed name. The orchestrator looks a model up by the bare key, then spawns the agent as `ultracode:{key}` (e.g. key `explore` → `subagent_type: ultracode:explore`). Never write an `ultracode:`-prefixed key into this file — it would not match on lookup.
   - The `initializer` is absent by design — the `/init-kit` command (not the orchestrator) spawns it, as `ultracode:initializer`, and sets its model; it runs before this profile exists.
