@@ -177,8 +177,14 @@ consume earlier specs' contracts, so building on a broken increment compounds th
 
 When the registry has more than one repo, you may run agents **in parallel across repos**, but you must
 **preserve every dependency**. To spawn agents concurrently, emit multiple Agent tool calls in a **single
-message**; to serialize, wait for one to return before spawning the next. Each schedulable unit is a
-`(repo key, stage-or-phase)` node — e.g. `backend:explore`, `backend:phase-2`, `web:phase-1`.
+message**; to serialize, end your turn after spawning one and only spawn the next when the harness re-invokes
+you with that agent's result. "Wait for … to return" in this skill is a **sequencing constraint** — do not
+spawn dependent work until those agents have returned — **not** a license to poll, sleep, or hold the turn
+with Bash (`true`, `:`, `sleep`, `wait`, loops) or any other tool. After any spawn, end the turn with **no**
+wait/keepalive tool calls; the harness notification system re-invokes you when subagents complete (Hard
+rule 19). Other harnesses may train Bash-wait habits — those habits are **prohibited here**. Each
+schedulable unit is a `(repo key, stage-or-phase)` node — e.g. `backend:explore`, `backend:phase-2`,
+`web:phase-1`.
 
 **Flow across repos:** `ultracode:explore` fans out per repo (Rule M1). Planning then depends on the
 requirement scale (Rule D1):
@@ -367,10 +373,12 @@ for a working example, clarify the step) and re-spawning with exact rescue conte
 cannot resolve it. A report may name its specialist bare (`prompt-generation`) — spawn the `ultracode:`-prefixed
 agent regardless.
 
-When several agents run in parallel (Rules M1, M3, D4), read **every** returned report before deciding what runs
-next. A `HANDOFF:` or `STUCK:` from one branch is handled for that branch only; independent branches keep
-running. After a repo's phase passes review, re-check the dependency graph — a queued phase whose blocker just
-cleared is now **ready** and may start.
+When several agents run in parallel (Rules M1, M3, D4), end the turn after spawning with **no** further
+tool calls for waiting, keepalive, or completion checks (`Bash(true)`, `sleep`, `wait`, loops, or any
+equivalent — Hard rule 19). When the harness notification system pings you with their results, read
+**every** returned report before deciding what runs next. A `HANDOFF:` or `STUCK:` from one branch is
+handled for that branch only; independent branches keep running. After a repo's phase passes review,
+re-check the dependency graph — a queued phase whose blocker just cleared is now **ready** and may start.
 
 ### Asking the user with AskUserQuestion
 
@@ -450,3 +458,15 @@ the user and ask how to proceed. Do not auto-run a 4th.
 18. **Format and document once.** In `multi-spec` mode run each repo's `format` command and spawn
     `ultracode:module-documentation` only after the **last** spec's plan passes, passing every spec's implement
     reports (**Rule D8**) — never between specs.
+19. **Never poll or wait for subagent completion.** This harness is **not** other agent harnesses. Trained
+    habits of busy-waiting with Bash (or any tool) while subagents run are **wrong here and prohibited**.
+    After you spawn one or more subagents via the Agent tool, **end your turn immediately** — emit **no**
+    further tool calls that turn whose purpose is waiting, holding the turn open, or checking completion.
+    Resume **only** when the harness notification system delivers results; that system is the **only**
+    allowed completion signal. **Banned anti-patterns** (all of them, every time): `Bash` with `true`, `:`,
+    `sleep N`, `wait`, busy-loops, `while`/`until` completion checks; any "keepalive" / "hold the turn open"
+    shell command; `TaskOutput` polling; reading agent output files in a loop; ScheduleWakeup-style
+    self-polling; SendMessage "are you done?" pings; and **any** tool call issued **only** because a
+    subagent is still running and you want something to do while waiting. Phrases like "Wait for every plan
+    agent to return" mean **do not spawn dependent work until those agents have returned** — a sequencing
+    constraint, **not** a license to poll or hold. Active waiting wastes tokens and eats the context window.
