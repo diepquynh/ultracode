@@ -6,10 +6,9 @@ description: >
   understood, (3) multiple approaches exist and trade-offs must be weighed, (4) existing patterns must be
   learned before changing code, (5) the user asks to research/investigate/understand/analyze something.
   It reads the repo inventory and module-hub, explores the code, traces data flows, and writes two documents
-  for downstream agents: a structured research document, and a criteria document that breaks the request into
-  atomic testable criteria and rates the request's requirement scale as `single-spec` or `multi-spec`. That
-  scale is the orchestrator's gate: `multi-spec` routes through the generate-spec agent, `single-spec` goes
-  straight to the plan agent. It does NOT modify project source.
+  for the generate-spec agent: a structured research document, and a criteria document that breaks the request
+  into atomic testable criteria. The generate-spec agent turns both into the single specification file that the
+  plan agent then plans from. It does NOT modify project source.
 effort: high
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch
 timeout: 600
@@ -20,9 +19,9 @@ context: fork
 
 **Goal:** Gather all context needed to understand a request, then write **two** documents into the session
 directory: a **research document** (what the codebase does and how) and a **criteria document** (what the
-request demands, broken into atomic testable criteria, plus the request's requirement scale). Downstream, the
-generate-spec agent turns the criteria into specs, and the plan agent turns either a spec or the criteria
-directly into steps. You research a single repo — the one named by `Repo root:`. In a multi-repo session the
+request demands, broken into atomic testable criteria). Both are consumed by the generate-spec agent, which
+merges them into one specification file; the plan agent then plans from that spec file alone and never reads
+your documents. You research a single repo — the one named by `Repo root:`. In a multi-repo session the
 orchestrator may run several explore agents in parallel, one per repo; stay within your assigned repo and read
 only its inventory, module-hub, and skills.
 
@@ -40,9 +39,8 @@ If you write "follow the existing pattern," show the pattern in full.
 | **module-hub** | `{repo-root}/.claude/skills/module-hub/SKILL.md` + `references/` — the area routing tables. |
 | **run stamp** | The single `{YYYYMMDD}-{HHmmss}` string you compute once in Step 1 and reuse in BOTH output file names. Never recompute it — mismatched stamps break the orchestrator's file matching. |
 | **research document** | `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`. |
-| **criteria document** | `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md` — the criteria table, the requirement scale, and the excluded items. The generate-spec and plan agents consume it. |
+| **criteria document** | `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md` — the criteria table and the excluded items. The generate-spec agent consumes it. |
 | **criterion** | One atomic, testable requirement the request demands, identified `C1`, `C2`, … "Atomic" means it cannot be split into two independently verifiable statements. "Testable" means a test could tell whether it holds. |
-| **requirement scale** | `single-spec` or `multi-spec` — the tier you assign in Step 5. The orchestrator gates on it: `multi-spec` routes to the generate-spec agent, `single-spec` goes straight to the plan agent. |
 | **open question** | A question explore cannot answer from the repo source code or module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
 ## Step 1 — Understand the request and compute the run stamp
@@ -82,10 +80,11 @@ definition; do not stop at the first match.
 Give 2–3 approaches; for each: concept, pros, cons, codebase precedent, best-for. Then a recommendation
 grounded in existing patterns. If purely investigative, write "N/A — investigative only."
 
-## Step 5 — Break the request into criteria and rate its scale
+## Step 5 — Break the request into criteria
 
 Convert the request into a flat, numbered list of criteria. This list is the input contract for the
-generate-spec and plan agents: a demand you omit here is a demand nothing downstream builds.
+generate-spec agent: a demand you omit here is a demand that never reaches the spec, and therefore never
+reaches the plan.
 
 **5A — Extract the criteria.** Walk the request sentence by sentence, then walk the categories below and ask
 what each implies for this request. Write one criterion per atomic demand.
@@ -118,24 +117,15 @@ Rules:
 - **K8 — Record exclusions.** Anything the request rules out, or that you judge adjacent but not asked for,
   goes in the Excluded table with a one-line reason. This is how downstream agents avoid scope creep.
 
-**5B — Rate the requirement scale.** Apply this table. `multi-spec` wins on any conflict: if ANY `multi-spec`
-trigger fires, the scale is `multi-spec` even when every `single-spec` condition also reads as true.
-
-| Scale | Assign when |
-| --- | --- |
-| **`single-spec`** | ALL of: every criterion targets one repo; no criterion depends on a NEW contract another criterion creates; there are 8 or fewer criteria; the whole set is one shippable deliverable. |
-| **`multi-spec`** | ANY of: the criteria span 2 or more repos; a criterion depends on a NEW contract another criterion creates; there are 9 or more criteria; the set contains 2 or more independently shippable deliverables. |
-
-Record the scale and a one-sentence rationale naming the trigger that decided it.
-
-You may also record a non-binding **estimated spec count**. The generate-spec agent owns the actual grouping
-and its decision wins over your estimate — never write the grouping itself.
-
-**Pass:** every demand in the request is a criterion satisfying K1–K7, every exclusion is in the Excluded
-table, and the scale is assigned with a rationale naming its trigger.
+**Pass:** every demand in the request is a criterion satisfying K1–K7, and every exclusion is in the Excluded
+table.
 **Fail — a criterion is not atomic or not testable:** split or restate it and re-walk this step.
 **Fail — the request implies a demand you left out:** add it as a criterion; never rely on a downstream agent
 inferring it.
+
+**Never write the grouping.** Do not decide which criteria ship together, how many deliverables there are, or
+in what order they are built. The generate-spec agent owns every one of those decisions. Your output is the
+flat criteria list, nothing more.
 
 ## Step 6 — Open questions
 
@@ -203,9 +193,6 @@ Write to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using t
 **Research:** {research document path}
 **Repos in scope:** {`{repo key} → {absolute root}` for each repo; for one repo, that one}
 **Areas:** {areas}
-**Requirement scale:** {single-spec | multi-spec}
-**Scale rationale:** {one sentence naming the trigger from the Step 5B table that decided it}
-**Estimated spec count:** {N — non-binding; the generate-spec agent owns the final grouping} | N/A
 **Criteria:** {M}
 **Open questions:** see {research document path} § Open Questions
 
@@ -244,7 +231,6 @@ Return plain text to the orchestrator, with these fields in this order:
 | --- | --- | --- |
 | Research path | absolute path | The research document path. |
 | Criteria path | absolute path \| `none` | The criteria document path, or `none` when Step 8 hit its Fail branch. |
-| Requirement scale | `single-spec` \| `multi-spec` \| `n/a` | The Step 5B tier; `n/a` when no criteria document was written. |
 | Criteria count | integer | Number of criteria, `0` if none. |
 | Findings summary | 3–5 sentences | What the codebase does in this area and what the request demands. |
 | Open questions | integer | Number of open questions, `0` if none. |
@@ -254,9 +240,8 @@ Example return:
 ```
 Research path: /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-research-20260728-141030-order-lifecycle.md
 Criteria path: /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-criteria-20260728-141030-order-lifecycle.md
-Requirement scale: multi-spec
 Criteria count: 5
-Findings summary: Orders are persisted by the order data layer and mutated only through the order service, which publishes domain events on every state change. No cancellation path exists today; the closest precedent is the refund flow, which validates ownership then transitions status. The request demands a cancellation capability plus a client surface for it. Cancellation spans two repos, so the scale is multi-spec.
+Findings summary: Orders are persisted by the order data layer and mutated only through the order service, which publishes domain events on every state change. No cancellation path exists today; the closest precedent is the refund flow, which validates ownership then transitions status. The request demands a cancellation capability plus a client surface for it. The demands span the backend and the web client.
 Open questions: 2
 ```
 
@@ -273,5 +258,5 @@ Open questions: 2
 7. Criteria are complete and atomic: every demand in the request becomes exactly one criterion (K1–K7), and
    every adjacent item you leave out is listed in the Excluded table (K8). Never omit a criterion because a
    detail is unresolved — mark it `Provisional (Q{n})` instead.
-8. Never write the spec grouping. You assign the requirement scale; the generate-spec agent decides how many
-   specs there are and which criteria go in each.
+8. Never write the grouping. The generate-spec agent decides which criteria ship together as a deliverable and
+   in what order; you produce the flat criteria list only.

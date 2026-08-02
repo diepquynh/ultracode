@@ -32,8 +32,8 @@ the files, never from general knowledge of the stack.
 | **session dir** | Scratch dir from the prompt's `Session dir:`. Already exists — do not mkdir. |
 | **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), `moduleMap`. |
 | **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` — the `## Module / Area Map` (`Path glob → Area → Reference`) is the routing source. |
-| **input report** | A prior pipeline file: research (`{session-dir}/ultracode-research-*.md`), spec (`{session-dir}/ultracode-spec-*-{NN}-*.md`, present only on a spec-driven run), plan (`{session-dir}/ultracode-plan-*.md`, master with a Phase Index), and implement (one per phase: `{session-dir}/ultracode-implement-*-phase-{N}.md`, or a single `{session-dir}/ultracode-implement-*.md` when unphased). |
-| **spec-driven run** | A run the orchestrator drove through several specs: the prompt names **more than one** master plan (`ultracode-plan-*-spec-{NN}.md`) and the implement reports of every spec. Read them in ascending `{NN}` spec order, then document the **final** state of each area — the feature as all specs together left it, never an intermediate state one spec passed through. |
+| **input report** | A prior pipeline file: research (`{session-dir}/ultracode-research-*.md`), spec (`{session-dir}/ultracode-spec-*.md` — at most one, present only on a spec-driven run), plan (`{session-dir}/ultracode-plan-*.md`, master with a Phase Index), and implement (one per phase: `{session-dir}/ultracode-implement-*-phase-{N}.md`, or a single `{session-dir}/ultracode-implement-*.md` when unphased). |
+| **spec-driven run** | A run the orchestrator drove from a specification: the prompt names one spec file (`ultracode-spec-*.md`) alongside the master plan and the implement reports. The spec groups the work into deliverables `D1`, `D2`, … built in that order, so the implement reports may show an area changed by more than one deliverable. Document the **final** state of each area — the feature as every phase together left it, never an intermediate state one deliverable passed through. |
 | **area** | A logical grouping from the INVENTORY Module/Area Map (e.g. an area name in the `Area` column). |
 | **reference file** | `.claude/skills/module-hub/references/{area}.md` — documents one area per Archetype C. |
 | **affected area** | An area whose path glob matches at least one changed source file. |
@@ -42,12 +42,11 @@ the files, never from general knowledge of the stack.
 
 ## Step 1 — Read inputs and load routing
 
-Read, in order: the repo profile, the inventory, the research report, every spec file the prompt names, every
-plan report the prompt names, and EVERY implement
-report path the orchestrator provided. On a spec-driven run there are several master plans and several specs —
-read them all, in ascending `{NN}` spec order, and treat the union of their implement reports as one change set.
-For phased runs, read each `ultracode-implement-*-phase-{N}.md`; for
-unphased runs, read the single implement report.
+Read, in order: the repo profile, the inventory, the research report, the spec file if the prompt names one,
+every plan report the prompt names, and EVERY implement report path the orchestrator provided. Treat the union
+of the implement reports as one change set: on a spec-driven run they span every deliverable, so an area may
+appear in several of them. For phased runs, read each `ultracode-implement-*-phase-{N}.md`; for unphased runs,
+read the single implement report.
 
 From ALL implement reports (aggregated), extract: the complete list of changed file paths, the change type
 per file (created | modified | deleted), and a one-line summary of what each change accomplished.
@@ -164,8 +163,8 @@ Write the output report to `{session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmm
 | Type | Path |
 | --- | --- |
 | Research  | `{session-dir}/ultracode-research-*.md` |
-| Spec      | `{session-dir}/ultracode-spec-*-{NN}-*.md` (one row per spec; omit the row on a non-spec run) |
-| Plan      | `{session-dir}/ultracode-plan-*.md` (one row per master plan) |
+| Spec      | `{session-dir}/ultracode-spec-*.md` (one row; omit the row on a non-spec run) |
+| Plan      | `{session-dir}/ultracode-plan-*.md` (the master plan) |
 | Implement | `{session-dir}/ultracode-implement-*-phase-{N}.md` (one row per phase, or a single unphased row) |
 
 ## Affected Areas
