@@ -32,7 +32,7 @@ coverage. Never write "obvious path" or "standard checks"; there is no such thin
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
-| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
+| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}`. You inherit `CLAUDE_CODE_SESSION_ID` from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the write-test agent reads your EPA report from this exact path. |
 | **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first for `commands.*` and `moduleMap`. |
 | **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md` — the Skill Application Mapping (file type → test skills) and Module/Area map. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `{session-dir}/ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |

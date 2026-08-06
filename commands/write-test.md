@@ -1,0 +1,67 @@
+---
+description: Spawn ultracode:write-test directly — write one test per NEW execution path from the EPA report, following this repo's test skills.
+argument-hint: "[epa report path]"
+---
+
+# /write-test — cover the new execution paths
+
+Spawns the `ultracode:write-test` agent directly. The EPA report is its coverage contract: one test per path
+marked NEW, written strictly per this repo's test skills. It writes only test code, never implementation code.
+
+**Spawn the prefixed name** — `subagent_type: ultracode:write-test`, verbatim.
+
+Arguments (may be empty): `$ARGUMENTS`
+
+## Step 1 — Resolve the reports, skills, and model
+
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SESSION_ROOT="$REPO_ROOT/.claude/ultracode/session"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+mkdir -p "$SESSION_DIR"
+echo "session=$SESSION_DIR"
+ls -t "$SESSION_DIR" 2>/dev/null | grep -E '^ultracode-(epa|implement)-.*\.md$'
+```
+
+The session dir is **derived** from the harness's `CLAUDE_CODE_SESSION_ID` (inherited unchanged by subagents), so
+it is the same path `/epa` and `/implement` wrote their reports to earlier in this session — no searching for the
+newest dir.
+
+The listing is newest-first and relative to `$SESSION_DIR`; prefix a name with `$SESSION_DIR/` to get its path.
+No output means no such artifact yet (`grep` exits 1 — that is not an error). Never glob the session dir
+directly: an unmatched glob aborts the command under zsh.
+
+- **An EPA path in `$ARGUMENTS`** → use it, plus the implement report it names.
+- **Empty arguments** → the newest `ultracode-epa-*.md` and the newest `ultracode-implement-*.md` in the newest
+  session dir. Match them by phase number when both are phased.
+- **No EPA report** → stop and tell the user to run `/epa` first. This agent needs both inputs: the implement
+  report for the changed files and the EPA report for the paths to cover.
+
+Read `$REPO_ROOT/.claude/ultracode/repo-profile.json` and `INVENTORY.md`:
+
+- **Model:** `models.byPhaseComplexity["write-test"]["{tier}"]`, where `{tier}` is the phase's **Complexity**
+  lowercased, or `low` when there is no plan. Profile keys are **bare**. Absent → omit the `model` argument.
+- **Required skills:** the test skills the INVENTORY **Skill Application Mapping** names for the changed file
+  types, plus `convention`.
+
+## Step 2 — Spawn
+
+```
+subagent_type: ultracode:write-test
+model: {models.byPhaseComplexity["write-test"][tier], or omit}
+prompt: "Repo root: {REPO_ROOT}.
+Session dir: {SESSION_DIR}.
+Implement report: {implement report path}.
+EPA report: {EPA report path}.
+Required skills: {test skill names, comma-separated}.
+Test command: {commands.test from the profile, verbatim}.
+Test-one command: {commands.testOne from the profile, verbatim}.
+Write one test per NEW path in the EPA report, following the test skills exactly, and verify them with the
+profile's commands. Return the report path, the test files written, and the verification results."
+```
+
+## Step 3 — Review
+
+Read the test report and summarize the tests written and their verification results. Then run the test-context
+code review — `/code-review test` — since tests are a reviewed change like any other. Do not report the phase
+done until that review passes.

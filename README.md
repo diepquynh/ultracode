@@ -51,6 +51,7 @@ The deep dives live under [`docs/`](docs/):
 - [The team you don't have](docs/philosophy.md) — the SDLC pains Ultracode's roles map to, and why they were built for teams.
 - [Architecture](docs/architecture.md) — the plugin/per-repo split, inventory-based routing, how agents communicate, and design notes.
 - [Agents](docs/agents.md) — every `subagent_type`, its role, the namespace prefix rule, and how existing skills are re-used.
+- [Commands](docs/commands.md) — the slash command per pipeline stage, for running one agent instead of the whole pipeline.
 - [Tested models](docs/tested-models.md) — field notes per role, per model, to seed your `repo-profile.json` `models` block.
 - [Extending & publishing](docs/extending.md) — add a new stack reference, and publish/validate the plugin.
 
@@ -117,6 +118,10 @@ In any repo where the plugin is enabled:
 3. **Work normally.** The `ultracode:orchestrate` skill drives the pipeline
    (explore → generate-spec → plan → implement → code-review → execution-path-analysis →
    write-test → code-review → module-docs), routing every decision through the generated inventory.
+
+Want one stage instead of the whole pipeline? Each has its own slash command — `/explore`, `/generate-spec`,
+`/plan`, `/implement`, `/code-review`, `/epa`, `/write-test`, `/module-docs`, `/prompt-gen` — that spawns just
+that agent and infers its inputs from the current session directory. See [Commands](docs/commands.md).
 
 Commit the generated `.claude/ultracode/` and `.claude/skills/` so your team shares them.
 

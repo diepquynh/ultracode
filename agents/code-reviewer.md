@@ -29,7 +29,7 @@ number, explicit action. Never write "fix accordingly" or "update as needed" —
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and repo-relative source path in this file resolves against it. Run all git/build commands with it as the working directory (e.g. `git -C {repo-root} status`) so change detection targets the right repo. |
-| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
+| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}`. You inherit `CLAUDE_CODE_SESSION_ID` from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — your report would land where the next agent will not look. |
 | **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map, review rules. Read it first. |
 | **inventory** | `{repo-root}/.claude/ultracode/INVENTORY.md`. Its **Review Rule Set** table is the source of truth for rule IDs, severity, and which rules are auto-fixable. Its **Skill Application Mapping** says which conventions apply to a file type. |
 | **review ledger** | `{session-dir}/ultracode-review-ledger.md` — prior findings and fix rationale across passes. |

@@ -66,17 +66,35 @@ for the rest of the session. Never apply one repo's commands, skills, rules, or 
 
 ## Session isolation
 
-At session start, create one scratch directory under the primary repo root (`$PWD`):
+At session start, derive one scratch directory under the primary repo root (`$PWD`) from the harness's session
+ID:
 
 ```bash
 SESSION_ROOT="$PWD/.claude/ultracode/session"                                # repo-local scratch (was /tmp)
-mkdir -p "$SESSION_ROOT"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+mkdir -p "$SESSION_DIR"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
-SESSION_DIR="$SESSION_ROOT/ultracode-session-$(openssl rand -hex 4)"
-mkdir -p "$SESSION_DIR"; echo "$SESSION_DIR"
+echo "$SESSION_DIR"
 ```
 
 `$PWD` is the primary repo's root, so `$SESSION_DIR` is absolute — subagents resolve it directly.
+
+**The path is derived, not generated.** `CLAUDE_CODE_SESSION_ID` is the harness's own session identifier, and
+**every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`). So the formula above
+is a pure function of the session and the repo root: it yields the same path every time you run it, from any
+working directory, in the orchestrator and in any agent. Consequences worth relying on:
+
+- **Re-running it is safe.** It is idempotent, so you never create a second dir mid-session and never strand
+  artifacts in a dir the next stage will not look in. `mkdir -p` on the existing dir is a no-op.
+- **Never generate a random suffix** (`openssl rand`, `$RANDOM`, a timestamp) and never discover the dir by
+  picking the newest match under `$SESSION_ROOT`. A random suffix splits one session's artifacts across two
+  dirs; newest-match discovery silently picks another session's dir when two run against one repo.
+- **Still pass `Session dir:` in every spawn.** It stays an explicit part of the prompt contract (Hard rule 3) —
+  the derivation is the fallback that lets an agent recover the path when a prompt omits it, not a licence to
+  drop the line.
+
+If `CLAUDE_CODE_SESSION_ID` is unset, the fallback `no-session-id` still gives one stable shared path, so the
+pipeline degrades to a single working dir rather than failing.
 
 Give **each repo its own subdirectory** so parallel repos never collide on report filenames:
 

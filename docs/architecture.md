@@ -10,7 +10,8 @@ The plugin is intentionally split into two layers:
 │  skills/    orchestrate + meta-author  (stack-neutral)│
 │  refs/      java-spring · typescript-node · python ·  │ ← the initializer's case-by-case library
 │             go · _generic · archetypes · contracts    │
-│  commands/  /init-kit        hooks/  SessionStart     │
+│  commands/  /init-kit + one per pipeline stage        │
+│  hooks/     SessionStart                              │
 └────────────────────────┬──────────────────────────────┘
                          │  run /init-kit in a repo
                          ▼
@@ -40,12 +41,31 @@ path. All coordination runs through a single hub (the orchestrator) and a single
 directory), so every stage gets a clean context focused on one task — and every handoff between stages is an
 artifact you can open and read.
 
+That shared medium needs one path everybody agrees on, and a forked agent cannot see how the orchestrator chose
+it. So the path is **derived, never generated**:
+
 ```
- ORCHESTRATOR — the only router: mints the session dir, hands each agent a
+{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID}
+```
+
+`CLAUDE_CODE_SESSION_ID` is the harness's session identifier, and **every subagent inherits it unchanged** (they
+also carry `CLAUDE_CODE_CHILD_SESSION=1`). Two properties follow, and the pipeline leans on both. It is
+**idempotent** — any agent, in any working directory, at any point in the session, recomputes the same path, so
+re-running the derivation never forks a second dir mid-run. And it is **collision-free per session** — two
+sessions against one repo get separate dirs without coordinating.
+
+Prompts still carry an explicit `Session dir:` line; the derivation is the fallback for when one doesn't, not a
+reason to drop it. What the derivation replaced was worse on both counts: a random suffix (`openssl rand`) that
+had to be threaded through every prompt or the artifacts scattered, and a "newest dir under `session/`" lookup
+that silently picked up a *different* session's artifacts whenever two ran against one repo. Neither is safe in
+a forked-context pipeline; if you extend ultracode, derive the path rather than reintroducing either.
+
+```
+ ORCHESTRATOR — the only router: derives the session dir, hands each agent a
  self-contained prompt, reads the report it returns, decides the next step.
    │
    │  no agent calls another; every hop is a report file in the SESSION DIR
-   │  (.claude/ultracode/session/ultracode-session-XXXX) — written by one agent, read by the next
+   │  (.claude/ultracode/session/ultracode-session-$CLAUDE_CODE_SESSION_ID) — written by one, read by the next
    ▼
    explore                 ─▶ research doc + criteria doc      (one agent per repo)
    generate-spec           ─▶ ONE spec file, deliverables D1…Dn inside it

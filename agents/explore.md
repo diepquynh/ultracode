@@ -34,7 +34,7 @@ If you write "follow the existing pattern," show the pattern in full.
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
-| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. |
+| **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}`. You inherit `CLAUDE_CODE_SESSION_ID` from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the generate-spec agent reads both your documents from this exact path. |
 | **repo profile** | `{repo-root}/.claude/ultracode/repo-profile.json` — stack, commands, module map. Read it first. |
 | **module-hub** | `{repo-root}/.claude/skills/module-hub/SKILL.md` + `references/` — the area routing tables. |
 | **run stamp** | The single `{YYYYMMDD}-{HHmmss}` string you compute once in Step 1 and reuse in BOTH output file names. Never recompute it — mismatched stamps break the orchestrator's file matching. |
