@@ -27,6 +27,11 @@ searched for, so each command reads exactly what the previous one wrote and neve
 /explore <topic> → /generate-spec → /plan → /implement → /code-review → /epa → /write-test → /code-review → /module-docs
 ```
 
+The three test stages (`/epa`, `/write-test`, and the test `/code-review`) are the ones the orchestrator skips
+for a phase the plan tags `Test policy: Skip` — a phase whose every step is boilerplate with no execution path
+to cover. Running `/epa` by hand overrides that tag: the command notes the phase was planned to skip tests and
+analyzes it anyway.
+
 Each command resolves its own model the same way the orchestrator does: from the repo's `repo-profile.json`
 `models` block, by the **bare** agent name (`models.byAgent["explore"]`), falling back to the session model when
 the profile is silent. `/implement` and `/write-test` resolve theirs from `models.byPhaseComplexity` on the
@@ -44,3 +49,6 @@ A command is one spawn, so the orchestrator's cross-stage guarantees are yours t
 - **The approval gates.** `/generate-spec` and `/plan` each present their artifact for approval, and a
   requirement change after the spec exists means re-running `/generate-spec` — never hand-editing a spec or a
   phase file.
+- **The test policy gate.** The plan tags each phase `Required` or `Skip`, but only the orchestrator acts on
+  it. Run the commands yourself and you decide per phase whether to run `/epa` and `/write-test` — the phase
+  file's `Test policy:` header tells you what the plan concluded.

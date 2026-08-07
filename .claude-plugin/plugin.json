@@ -1,7 +1,7 @@
 {
   "name": "ultracode",
   "displayName": "Ultracode",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "A repo-agnostic agentic engineering pipeline plus a codebase-scouting initializer that generates per-repo skills and a routing inventory for any language or framework.",
   "author": {
     "name": "Diep Quynh",

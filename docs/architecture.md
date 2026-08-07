@@ -73,12 +73,23 @@ a forked-context pipeline; if you extend ultracode, derive the path rather than 
    ── per phase (two independent review loops, one per fix agent) ──
    implement               ─▶ change report    (its Changed Files list = what to trace & cover)
    code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
+   ── the three stages below run only if the phase's Test policy is Required ──
    execution-path-analyzer ─▶ EPA report       (one path per test: P1, P2 … NEW/EXISTING)
    write-test              ─▶ test report
    code-reviewer (tests)   ⇄  write-test       (⇄ review ledger, loops until clean)
    ── after all phases ──
    module-documentation    ─▶ area references  (reads every prior report)
 ```
+
+**A phase that writes only boilerplate skips the test pipeline.** The `plan` agent tags every phase with a
+**Test policy** of `Required` or `Skip`, alongside its complexity tier. `Skip` means every step in the phase
+produces a file with no execution path of its own — a DTO or value type, an interface or enum declaration, a
+config/DI/registration file, a re-export index — so there is nothing for the EPA to trace and nothing for a
+test to assert. The orchestrator then goes straight from the implementation review to the next phase, saving
+three subagent spawns. One logic step anywhere in the phase, or one step the plan agent can't confidently
+classify, makes it `Required`: the tie always breaks toward testing, because a wasted test pass costs tokens
+while a wrongly skipped one ships untested behavior. The verdict is visible in the Phase Index at the
+plan-approval gate, so you can overrule it before any code is written.
 
 **Every planned request goes through the spec tier, and the spec is one file.** `generate-spec` merges the
 criteria and research into a single `ultracode-spec-*.md` stating every requirement in **EARS** notation

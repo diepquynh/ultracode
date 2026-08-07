@@ -52,9 +52,10 @@ Session dir: {SESSION_DIR}.
 Specification: {spec file path}.
 Request: {the spec's Objective, one line}.
 Plan this specification: phases in dependency order, each phase tagged with its deliverable, its repo, its
-Depends-on set, and its Complexity tier; every step naming one file, one prose action, its required skills, and
-its verification command from this repo's profile. Return the master plan path, every phase file path, and each
-phase's Complexity tier."
+Depends-on set, its Complexity tier, and its Test policy (Required or Skip, per your rule P12, with the
+one-sentence rationale); every step naming one file, one prose action, its required skills, and its
+verification command from this repo's profile. Return the master plan path, every phase file path, and each
+phase's Complexity tier and Test policy."
 ```
 
 Pass **only** the spec file path. Do not pass the research document, the criteria document, or loose user
@@ -64,8 +65,13 @@ For a multi-repo plan, replace `Repo root:` with `Repos in scope: {repo key} →
 
 ## Step 3 — Approval gate
 
-Read the master plan. Present the Phase Index (phase, deliverable, repo, depends-on, complexity), the risks,
-and the success criteria. Surface any Clarifying Questions with the **AskUserQuestion** tool.
+Read the master plan. Present the Phase Index (phase, deliverable, repo, depends-on, complexity, test policy),
+the risks, and the success criteria. Surface any Clarifying Questions with the **AskUserQuestion** tool.
+
+Call out every phase tagged `Test policy: Skip` by name, with its rationale from the master plan's Test Policy
+Rationale table — those phases get no EPA, no tests, and no test review, and this gate is the user's chance to
+overrule that. If the user wants a skipped phase tested, note it and treat that phase as `Required` when
+running it.
 
 A requirement change at this gate restarts at the spec: re-run `/generate-spec` with the change, get the
 updated spec approved, then re-run `/plan` on it. Never patch a phase file to match a new requirement.

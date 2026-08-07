@@ -70,6 +70,8 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 | **phase** | A group of related steps forming one logical milestone (e.g. data layer, service layer, endpoints). One file each. A phase belongs to exactly one deliverable. |
 | **stakes** | Low (isolated, easy rollback), Medium (multi-file, moderate impact), or High (architectural, hard to rollback). |
 | **phase complexity** | A per-phase tier — **Low**, **Medium**, or **High** — combining the phase's own difficulty with its stakes. The orchestrator maps it (via the repo profile's `models.byPhaseComplexity`) to the model it spawns this phase's `ultracode:implement` and `ultracode:write-test` agents with. Distinct from a step's **Complexity** (Small/Medium/Large). |
+| **test policy** | A per-phase verdict — **Required** or **Skip** — telling the orchestrator whether to run the test pipeline (`ultracode:execution-path-analyzer` → `ultracode:write-test` → test code review) after this phase's implementation review passes. `Skip` is for a phase that writes only boilerplate, where there is no execution path to cover. Rule P12 defines it. |
+| **boilerplate step** | A step whose file carries no execution path of its own: a data holder / DTO / value type with no logic beyond field access; an interface, protocol, abstract-type, or type-alias declaration with no logic-bearing default body; an enum or constant declaration with no computed member; a configuration, dependency-injection, registration, or module/index re-export file; a build or dependency manifest; a static resource, template, or documentation file; or tool-generated code the repo regenerates rather than hand-writes. Any other step is a **logic step**. |
 | **success criterion** | A measurable condition proving correctness (e.g. "build command passes", "endpoint returns expected shape"). |
 | **clarifying question** | A question only the user can answer, unanswerable from the spec and the repo. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
 
@@ -259,6 +261,32 @@ missing something necessary, raise it as a Step 4 clarifying question — never 
   - PASS: a step whose `**Delivers**` line reads `R2, R5`, with both IDs marked in the ledger.
   - FAIL: a requirement left unmarked in the ledger when you finish designing steps → add the step that
     delivers it.
+- **P12 — Tag the test policy (the phase's test-pipeline gate).** After a phase's steps are designed, give the
+  phase a **Test policy** of `Required` or `Skip`. This is the orchestrator's gate: `Required` runs
+  `ultracode:execution-path-analyzer` → `ultracode:write-test` → the test code-review loop after the phase's
+  implementation review passes; `Skip` proceeds straight to the next phase. Decide it by this test, in order:
+  1. Classify **every** step in the phase as a **boilerplate step** or a **logic step**, using the Definitions
+     entry for **boilerplate step**. Classify by what the step's `**Action**` prose actually says the file will
+     contain — never by the file's name, folder, or type suffix.
+  2. **ANY step is a logic step** → `Test policy: Required`. One logic step is enough; a phase does not become
+     skippable because most of it is boilerplate.
+  3. **ALL steps are boilerplate steps** → `Test policy: Skip`.
+  4. **You cannot confidently classify a step** → `Test policy: Required`. **Priority on conflict:** this
+     bullet wins over bullet 3. An unnecessary test pass costs tokens; a skipped test pass on logic ships
+     untested behavior, and no later stage catches it.
+
+  Write a one-sentence **Test policy rationale** naming the evidence: for `Skip`, the fact that makes every
+  step boilerplate; for `Required`, the first logic step (its ID) that forces it. Never write `Skip` without a
+  rationale that names what each step contains.
+  - PASS (`Skip`): a phase whose only steps add three enum members and register the new enum in a
+    dependency-injection module — rationale: "Steps 4.1–4.3 declare enum members and one DI registration; no
+    step adds a branch, a computed value, or a call."
+  - PASS (`Required`): a phase adding a DTO plus a mapper that null-checks and formats a field — rationale:
+    "Step 5.2 adds mapping logic with a null branch."
+  - FAIL: tagging `Skip` on a phase containing a repository/data-access step, because "the framework generates
+    the query" — the step still has execution paths (empty result, not-found, error) → tag `Required`.
+  - FAIL: tagging `Skip` on a validation, mapping, or state-transition step because it "is only a few lines" —
+    line count is not the test; presence of a branch, a computed value, or a call is.
 
 Step template:
 
@@ -275,8 +303,11 @@ Step template:
 ```
 
 **Pass:** all steps have paths, a `Delivers` line, prose actions, skills, verification; each phase has a
-Required Skills list and a deliverable ID; and every ledger row is marked delivered by at least one step (P11).
+Required Skills list, a deliverable ID, and a Test policy with a rationale (P12); and every ledger row is
+marked delivered by at least one step (P11).
 **Fail — a ledger row is unmarked:** add the step that delivers it before continuing.
+**Fail — a phase has no Test policy, or a `Skip` with no rationale naming what each step contains:** apply P12
+to that phase and write both before continuing.
 
 ## Step 6 — Document risks
 
@@ -336,12 +367,22 @@ The **Repo** and **Depends on** columns are the orchestrator's scheduling graph:
 no dependency between them may run in parallel; a phase waits until every phase in its Depends-on set has
 completed and passed review. Phase IDs are bare numbers in one sequence across the plan (rule P10); `none`
 means no prerequisite. The **Complexity** column is the model-routing tier (Low/Medium/High, from P9) the
-orchestrator uses to pick this phase's `ultracode:implement` and `ultracode:write-test` model.
+orchestrator uses to pick this phase's `ultracode:implement` and `ultracode:write-test` model. The **Test
+policy** column (Required/Skip, from P12) is the orchestrator's test gate: `Required` runs the EPA → write-test
+→ test-review pipeline after this phase's implementation review passes; `Skip` goes straight to the next phase.
 
-| Phase | Name | Deliverable | Repo | Complexity | Depends on | File Path | Steps | Description |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | {Name} | D1 | {repo key} | {Low/Medium/High} | none | `{session-dir}/{phase file name}` | {N} | {one sentence} |
-| 2 | {Name} | D1 | {repo key} | {Low/Medium/High} | 1 | `{session-dir}/{phase file name}` | {N} | {one sentence} |
+| Phase | Name | Deliverable | Repo | Complexity | Test policy | Depends on | File Path | Steps | Description |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | {Name} | D1 | {repo key} | {Low/Medium/High} | {Required/Skip} | none | `{session-dir}/{phase file name}` | {N} | {one sentence} |
+| 2 | {Name} | D1 | {repo key} | {Low/Medium/High} | {Required/Skip} | 1 | `{session-dir}/{phase file name}` | {N} | {one sentence} |
+
+## Test Policy Rationale
+{One row per phase tagged `Skip`, proving rule P12. Write "None — every phase is Test policy Required." when no
+phase is skipped.}
+
+| Phase | Rationale |
+| --- | --- |
+| {N} | {the one sentence naming what each of this phase's steps contains} |
 
 ## Requirement Traceability
 {One row per requirement in the spec, proving rule P11.}
@@ -358,7 +399,8 @@ orchestrator uses to pick this phase's `ultracode:implement` and `ultracode:writ
 ## Verification Strategy
 - **Per-step / per-phase:** the phase's repo's `build` command after each step and each phase.
 - **Final:** each repo's `build` command after all of that repo's phases.
-- **Testing:** handled separately by the execution-path-analyzer + write-test pipeline. No test steps here.
+- **Testing:** handled separately by the execution-path-analyzer + write-test pipeline, which the orchestrator
+  runs per phase according to that phase's Test policy (P12). No test steps here.
 
 ## Step Count Summary
 - Total phases: {N}
@@ -385,6 +427,7 @@ e.g. `data-layer`, `service-layer`, `endpoints`).
 **Repo root:** {absolute root of this phase's repo}
 **Depends on:** {phase IDs that must complete first, in any repo, or "none"}
 **Complexity:** {Low | Medium | High} — model-routing tier (P9) for this phase's implement/write-test agents
+**Test policy:** {Required | Skip} — {the one-sentence rationale from P12}
 **Area(s):** {areas/modules this phase touches, from this repo's Module/Area Map}
 
 ## Required Skills
@@ -441,7 +484,7 @@ Return plain text to the orchestrator, with these fields in this order:
 | --- | --- | --- |
 | Spec path | absolute path | The spec file you planned. |
 | Master plan path | absolute path | The master plan file path. |
-| Phases | one line per phase, in order | `phase {N} · {deliverable ID} · {repo key} · complexity {Low\|Medium\|High} · depends on {phase IDs or none} · {absolute phase file path}` |
+| Phases | one line per phase, in order | `phase {N} · {deliverable ID} · {repo key} · complexity {Low\|Medium\|High} · tests {Required\|Skip} · depends on {phase IDs or none} · {absolute phase file path}` |
 | Repos in scope | list | `{repo key} → {absolute root}` for each repo. |
 | Summary | 2–3 sentences | What this plan builds and why. |
 | Stakes | `Low` \| `Medium` \| `High` | The Step 3 level. |
@@ -449,10 +492,12 @@ Return plain text to the orchestrator, with these fields in this order:
 | Step count | integer | Total steps across every phase. |
 | Requirement coverage | `{M} of {M}` | Requirements delivered over requirements in the spec (P11). These MUST be equal. |
 | Clarifying questions | integer | Number of questions, `0` if none. |
+| Phases skipping tests | `{K} of {N}` | Phases tagged `Test policy: Skip` over total phases (P12). `0 of {N}` when every phase is tested. |
 | Ignored inputs | list \| `none` | Any research or criteria document path the prompt named and Step 1 ignored; `none` when the prompt named only the spec. |
 
 The **Complexity** tier per phase is how the orchestrator picks that phase's `ultracode:implement` and
-`ultracode:write-test` model; the **Depends on** set is how it schedules the graph. Report both for every phase.
+`ultracode:write-test` model; the **Test policy** is how it decides whether to run the test pipeline for that
+phase at all; the **Depends on** set is how it schedules the graph. Report all three for every phase.
 
 Example return:
 
@@ -460,16 +505,17 @@ Example return:
 Spec path: /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-spec-20260728-141030-order-lifecycle.md
 Master plan path: /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle.md
 Phases:
-phase 1 · D1 · backend · complexity Medium · depends on none · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-1-data-layer.md
-phase 2 · D1 · backend · complexity High · depends on 1 · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-2-service-layer.md
-phase 3 · D2 · web · complexity Medium · depends on 2 · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-3-cancellation-ui.md
+phase 1 · D1 · backend · complexity Medium · tests Required · depends on none · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-1-data-layer.md
+phase 2 · D1 · backend · complexity High · tests Required · depends on 1 · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-2-service-layer.md
+phase 3 · D2 · web · complexity Low · tests Skip · depends on 2 · /repo/.claude/ultracode/session/ultracode-session-a1b2/ultracode-plan-20260728-141530-order-lifecycle-phase-3-cancellation-types.md
 Repos in scope: backend → /repo, web → /web
-Summary: Implements the order-cancellation contract across the order data and service layers, then the web client that consumes it. The service layer phase is High complexity because it changes state-transition rules other flows depend on.
+Summary: Implements the order-cancellation contract across the order data and service layers, then the web client's request/response types that consume it. The service layer phase is High complexity because it changes state-transition rules other flows depend on.
 Stakes: Medium
 Phase count: 3
 Step count: 12
 Requirement coverage: 11 of 11
 Clarifying questions: 0
+Phases skipping tests: 1 of 3
 Ignored inputs: none
 ```
 
@@ -494,7 +540,11 @@ Ignored inputs: none
    documentation phase — `ultracode:module-documentation` covers documentation once, after every phase.
 10. Skill references (from the phase's repo's INVENTORY mapping) on every code step; verification via that
     repo's `build` command only — never a hardcoded build tool, never a test command, never another repo's command.
-11. Every phase carries a Deliverable ID (P0), a Repo, a Complexity tier (P9), and a Depends on; cross-repo and
-    cross-deliverable consumers depend on their producer phase (P1, P8).
+11. Every phase carries a Deliverable ID (P0), a Repo, a Complexity tier (P9), a Test policy with a rationale
+    (P12), and a Depends on; cross-repo and cross-deliverable consumers depend on their producer phase (P1, P8).
+12. **Skip tests only for pure boilerplate.** Tag a phase `Test policy: Skip` only when EVERY one of its steps
+    is a boilerplate step per the Definitions entry (P12). One logic step, or one step you cannot confidently
+    classify, makes the phase `Required`. Never tag `Skip` to save tokens, to speed a phase up, or because a
+    phase is small — only because no step in it has an execution path to cover.
 12. **One plan per request.** You are the only plan agent for this request, you cover every deliverable in the
     spec, and phase IDs are one unbroken `1`…`{N}` sequence across all of them (P10).

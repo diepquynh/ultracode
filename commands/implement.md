@@ -75,3 +75,10 @@ re-spawn `/implement` to continue.
 
 On success, tell the user code review is the next gate — run `/code-review` before writing tests, since the
 pipeline only reaches `/epa` and `/write-test` after the implementation review passes.
+
+Then name what follows the review, from the phase file's **Test policy** header:
+
+- **`Test policy: Required`**, or a phase file with no such header, or inline mode → `/epa` then `/write-test`.
+- **`Test policy: Skip`** → the phase is done after its implementation review; say so and quote the header's
+  one-sentence rationale, so the user sees why no tests are coming and can run `/epa` themselves if they
+  disagree.

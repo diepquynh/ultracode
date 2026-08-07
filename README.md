@@ -19,7 +19,9 @@ other way on purpose. It spends tokens where they buy quality:
   clean context window focused on one job — not one overloaded prompt juggling all of them.
 - **Verify, don't trust.** Every code change passes through a `code-reviewer` gate against your repo's own
   review rules, and the loop repeats until it clears. Tests aren't guessed — an `execution-path-analyzer`
-  enumerates the branches first, then `write-test` covers one path per test.
+  enumerates the branches first, then `write-test` covers one path per test. A phase that writes only
+  boilerplate (DTOs, enums, config, re-exports) has no branch to enumerate, so the planner marks it and the
+  whole test pass is skipped for it — spend the tokens where there's behavior to cover.
 - **Grounded, not generic.** The initializer scouts your codebase and writes per-repo skills, so generated code
   follows *your* patterns instead of a framework's defaults.
 - **Parallel where it pays.** `/init-kit` fans scouting out across the repo in parallel slices — and skill
