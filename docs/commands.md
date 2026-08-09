@@ -1,9 +1,9 @@
 # Commands
 
 Two ways to run the pipeline. The `ultracode:orchestrate` skill drives it end to end — classify, spec, plan,
-implement, review, test, document — and is what you want for a real task. The commands below spawn **one agent
-each**, for when you want a single stage and nothing else: re-run just the review, get an EPA report for code you
-wrote by hand, write a spec off a criteria doc you edited.
+implement, review, then offer to test and document — and is what you want for a real task. The commands below
+spawn **one agent each**, for when you want a single stage and nothing else: re-run just the review, get an EPA
+report for code you wrote by hand, write a spec off a criteria doc you edited.
 
 | Command | Agent it spawns | Reads | Writes |
 | --- | --- | --- | --- |
@@ -24,13 +24,17 @@ searched for, so each command reads exactly what the previous one wrote and neve
 (see [Architecture](architecture.md)). Running them in pipeline order therefore needs no arguments at all:
 
 ```
-/explore <topic> → /generate-spec → /plan → /implement → /code-review → /epa → /write-test → /code-review → /module-docs
+/explore <topic> → /generate-spec → /plan → /implement → /code-review   (repeat per phase)
+                 → then, optionally: /epa → /write-test → /code-review · /module-docs
 ```
 
-The three test stages (`/epa`, `/write-test`, and the test `/code-review`) are the ones the orchestrator skips
-for a phase the plan tags `Test policy: Skip` — a phase whose every step is boilerplate with no execution path
-to cover. Running `/epa` by hand overrides that tag: the command notes the phase was planned to skip tests and
-analyzes it anyway.
+Everything after the per-phase `/code-review` is **optional**, and belongs after **every** phase rather than
+between them. The orchestrator runs those stages only if you ask for them; running the commands yourself is
+itself the ask. `/epa` and `/write-test` write tests; `/module-docs` updates the area references.
+
+Within a test run, the plan's `Test policy: Skip` tag marks the phases not worth covering — every step
+boilerplate, no execution path to trace. Running `/epa` by hand overrides that tag: the command notes the phase
+was planned as boilerplate-only and analyzes it anyway.
 
 Each command resolves its own model the same way the orchestrator does: from the repo's `repo-profile.json`
 `models` block, by the **bare** agent name (`models.byAgent["explore"]`), falling back to the session model when
@@ -49,6 +53,7 @@ A command is one spawn, so the orchestrator's cross-stage guarantees are yours t
 - **The approval gates.** `/generate-spec` and `/plan` each present their artifact for approval, and a
   requirement change after the spec exists means re-running `/generate-spec` — never hand-editing a spec or a
   phase file.
-- **The test policy gate.** The plan tags each phase `Required` or `Skip`, but only the orchestrator acts on
-  it. Run the commands yourself and you decide per phase whether to run `/epa` and `/write-test` — the phase
-  file's `Test policy:` header tells you what the plan concluded.
+- **The closing gate.** The orchestrator waits until every phase has passed review, then offers tests and
+  module docs once and runs what you pick — and names what it skipped. Driving the commands by hand, that
+  bookkeeping is yours: nothing prompts you, and nothing reminds you that a phase went uncovered. The plan tags
+  each phase `Required` or `Skip`, and the phase file's `Test policy:` header tells you what it concluded.

@@ -1,9 +1,10 @@
 ---
 name: execution-path-analyzer
 description: >
-  Repo-agnostic execution-path analysis subagent for ultracode. Spawned by the orchestrator when:
-  (1) implementation code review has passed and execution paths must be analyzed before tests are written,
-  (2) the user explicitly asks to analyze execution paths. It reads the implement report to identify the
+  Repo-agnostic execution-path analysis subagent for ultracode. Spawned by the orchestrator when the user has
+  asked for tests — writing tests is optional and happens only on request, after every coding phase is
+  implemented and reviewed — so: (1) the user accepted the orchestrator's closing-gate offer to write tests,
+  (2) the user explicitly asks to analyze execution paths or to write tests. It reads the implement report to identify the
   changed source files, traces every execution path through each changed function/method (entry conditions,
   branches, early returns, error/exception paths, delegated helpers, empty/null and boundary cases), and
   writes a structured EPA report into the session directory for the write-test and code-reviewer agents to

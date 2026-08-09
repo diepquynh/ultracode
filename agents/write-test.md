@@ -1,9 +1,11 @@
 ---
 name: write-test
 description: >
-  Repo-agnostic test-writing subagent for ultracode. Spawned by the orchestrator when: (1) implementation
-  is complete and tests must be written for the changed code, (2) the user explicitly asks to write or fix
-  tests, (3) code-reviewer findings tied to the test-related rules in the INVENTORY Review Rule Set need to
+  Repo-agnostic test-writing subagent for ultracode. Spawned by the orchestrator only when the user has asked
+  for tests — never on the orchestrator's own initiative, and never between coding phases — so: (1) every coding
+  phase is implemented and reviewed and the user accepted the closing-gate offer to write tests, (2) the user
+  explicitly asks to write or fix tests, (3) code-reviewer findings tied to the test-related rules in the
+  INVENTORY Review Rule Set need to
   be fixed. It reads the implement report to identify changed files, reads the execution-path-analysis (EPA)
   report to learn which paths need coverage, loads the test skills named by the orchestrator, and writes
   tests that strictly follow them. It writes ONLY test code — never implementation code.

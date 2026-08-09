@@ -13,9 +13,9 @@ Spawn the names below verbatim.
 | `ultracode:plan` | Design a phased, verifiable implementation plan from the spec file alone — one agent per request. |
 | `ultracode:implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
 | `ultracode:code-reviewer` | Review changes against the repo's Review Rule Set; emit JSON findings. |
-| `ultracode:execution-path-analyzer` | Enumerate execution paths per function to drive test writing. |
-| `ultracode:write-test` | Write one test per new execution path, using the repo's test framework. |
-| `ultracode:module-documentation` | Update area references under `skills/module-hub/references/`. |
+| `ultracode:execution-path-analyzer` | Enumerate execution paths per function to drive test writing. Optional stage — runs after every phase, on request. |
+| `ultracode:write-test` | Write one test per new execution path, using the repo's test framework. Optional stage — runs after every phase, on request. |
+| `ultracode:module-documentation` | Update area references under `skills/module-hub/references/`. Optional stage — runs after every phase, on request. |
 | `ultracode:prompt-generation` | Author/edit prompts, skills, and agent files via the meta-author standard. |
 
 The prefix comes from the plugin loader, which registers each agent as `{plugin}:{frontmatter name}`. Agent

@@ -69,12 +69,14 @@ Read the master plan. Present the Phase Index (phase, deliverable, repo, depends
 the risks, and the success criteria. Surface any Clarifying Questions with the **AskUserQuestion** tool.
 
 Call out every phase tagged `Test policy: Skip` by name, with its rationale from the master plan's Test Policy
-Rationale table — those phases get no EPA, no tests, and no test review, and this gate is the user's chance to
-overrule that. If the user wants a skipped phase tested, note it and treat that phase as `Required` when
-running it.
+Rationale table. The tag does not decide whether tests get written — the user does, after every phase is
+implemented — it decides which phases a requested test run would cover: a `Skip` phase would get no EPA, no
+tests, and no test review. This gate is the user's chance to overrule that. If the user wants a skipped phase
+covered, note it and treat that phase as `Required` if a test run happens.
 
 A requirement change at this gate restarts at the spec: re-run `/generate-spec` with the change, get the
 updated spec approved, then re-run `/plan` on it. Never patch a phase file to match a new requirement.
 
 Once approved, tell the user to run `/implement` per phase (it picks up phase 1 by default), or to let
-`ultracode:orchestrate` drive the remaining phases end to end.
+`ultracode:orchestrate` drive the remaining phases end to end. Either way, tests and module docs come after
+**all** phases and only on request — the orchestrator offers both once the last phase passes review.

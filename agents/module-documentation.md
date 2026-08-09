@@ -2,7 +2,8 @@
 name: module-documentation
 description: >
   Repo-agnostic module/area documentation subagent for ultracode. Spawned by the orchestrator as the final
-  pipeline step, after all implement phases and their code reviews pass. It: (1) reads the research, plan, and
+  pipeline step — an optional one, run only when the user asks for documentation, after all implement phases and
+  their code reviews pass. It: (1) reads the research, plan, and
   ALL per-phase implement reports to learn what changed; (2) maps each changed source file to an area using the
   INVENTORY Module/Area Map; (3) creates or updates area reference files under
   `.claude/skills/module-hub/references/{area}.md`; (4) grounds every documented name in real source — never

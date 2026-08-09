@@ -73,12 +73,17 @@ section (search for a working example, clarify the ambiguous step) and re-spawn 
 user if you cannot resolve it. On a `HANDOFF:`, run the requested specialist (e.g. `/prompt-generation`), then
 re-spawn `/implement` to continue.
 
-On success, tell the user code review is the next gate — run `/code-review` before writing tests, since the
-pipeline only reaches `/epa` and `/write-test` after the implementation review passes.
+On success, tell the user code review is the next gate — run `/code-review`. The phase is complete once that
+review passes.
 
-Then name what follows the review, from the phase file's **Test policy** header:
+Then name what is left, without doing any of it:
 
-- **`Test policy: Required`**, or a phase file with no such header, or inline mode → `/epa` then `/write-test`.
-- **`Test policy: Skip`** → the phase is done after its implementation review; say so and quote the header's
-  one-sentence rationale, so the user sees why no tests are coming and can run `/epa` themselves if they
-  disagree.
+- **More phases remain** → `/implement` again for the next one. Nothing else runs between phases.
+- **This was the last phase** → the code is done. Tests and module docs are **optional closing steps** for after
+  every phase, run only if the user wants them: `/epa` then `/write-test` (then `/code-review` for the tests),
+  and `/module-docs`. Neither is a next step you take on your own.
+
+The phase file's **Test policy** header says whether the plan considered this phase worth covering *if* tests are
+requested — `Skip` means every step is boilerplate with no execution path. Quote it when you mention the test
+option, so the user knows what a test run would and would not cover. It is not a decision about whether to run
+tests at all; that is theirs.

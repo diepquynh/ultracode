@@ -14,12 +14,13 @@ source.
 
 Arguments (may be empty): `$ARGUMENTS`
 
-Run this **after** the implementation code review passes — analyzing code that is about to change wastes the
-pass.
+Run this **after** the implementation code review passes, and ideally after **every** phase is implemented —
+analyzing code a later phase is about to change wastes the pass.
 
-Running this command **is** the decision to analyze: it overrides a phase file's `Test policy: Skip`. When the
-resolved implement report's phase is tagged `Skip`, say so once ("phase {N} was planned to skip tests: {the
-header's rationale} — analyzing anyway because you asked") and proceed. Never refuse on the tag.
+Running this command **is** the request for tests, so no gate applies: it overrides a phase file's
+`Test policy: Skip`, which only marks which phases a test run would otherwise cover. When the resolved implement
+report's phase is tagged `Skip`, say so once ("phase {N} was planned as boilerplate-only: {the header's
+rationale} — analyzing anyway because you asked") and proceed. Never refuse on the tag.
 
 ## Step 1 — Resolve the implement report, session, and model
 

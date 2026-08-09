@@ -2,7 +2,9 @@
 name: orchestrate
 description: >
   Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session
-  isolation, request classification, delegation rules, the code-review loop, multi-repo scheduling, and hard
+  isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test
+  writing and module documentation optional user-requested stages after all coding phases, multi-repo
+  scheduling, and hard
   rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run
   time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos
   fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start
@@ -127,8 +129,8 @@ generate-spec    ─▶ ONE spec file (deliverables D1…Dn inside it) (one agen
 plan             ─▶ master plan + one self-contained file per phase (one agent, reads ONLY the spec file)
    ▼  ── user-approval gate ──
 phases run by the plan's dependency graph (parallel where non-blocking — Rules M2–M6)
-   ▼
-module-documentation                                             (once per repo, at the very end)
+   ▼  ── closing gate: tests? docs? — both optional, both user-requested (Rules T1–T7) ──
+write-test / module-documentation                                (only what the user asks for, once per repo)
 ```
 
 **Rule D1 — The spec tier is mandatory and produces exactly one file.** Every request classified PLAN or
@@ -185,10 +187,12 @@ unbroken sequence across every deliverable. Track and schedule by that number; e
 names the deliverable (`D{n}`) it belongs to, which is what you report to the user as progress through the
 delivery order.
 
-**Rule D8 — Documentation runs once, at the end.** Spawn `ultracode:module-documentation` for a repo only after
-**every** phase touching that repo has completed and passed review — never after an individual deliverable's
-phases. Pass it every implement report so it documents the finished feature, not an intermediate state. Run
-that repo's `format` command before it, also once.
+**Rule D8 — Documentation is optional, and runs once, at the end.** `ultracode:module-documentation` runs only
+when the user asks for it — at the closing gate (Rule T2) or by explicit request (Rule T3) — and only after
+**every** phase touching that repo has completed and passed review. Never after an individual deliverable's
+phases, and never on your own initiative. When it does run, pass it every implement report so it documents the
+finished feature, not an intermediate state. That repo's `format` command runs before the gate, once, and is not
+itself optional.
 
 **Rule D9 — A failing phase stops the deliverable's chain.** If a phase cannot complete — the review loop hits
 its 3-iteration cap with findings open, or an agent returns `STUCK:` you cannot resolve — do **not** start any
@@ -220,9 +224,9 @@ agent `Repos in scope:` = each `{repo key} → {absolute root}` and `Session dir
 one plan covers every repo. Its phases are each tagged with a **Deliverable**, a **Repo**, and a **Depends on**
 set — the dependency graph you schedule from.
 
-Implement and test then run per repo (each with its own `Repo root:` and
-`Session dir: {SESSION_DIR}/{repo-key}`) under Rules M2–M6. Skip the spec and plan stages entirely only for a
-low-stakes inline task with no plan (Rule M3's last bullet).
+Implementation then runs per repo (each with its own `Repo root:` and `Session dir: {SESSION_DIR}/{repo-key}`)
+under Rules M2–M6, and each repo reaches its own closing gate when its own phases are done (Rule T6). Skip the
+spec and plan stages entirely only for a low-stakes inline task with no plan (Rule M3's last bullet).
 
 **Rule M1 — Read-only stages fan out.** `ultracode:explore` and any read-only analysis have no write conflicts
 and no ordering constraints. For a request spanning N repos, spawn one `ultracode:explore` per repo **in one
@@ -231,8 +235,8 @@ every criteria doc before the spec stage. `ultracode:generate-spec` and `ultraco
 there is exactly one of each per request, however many repos are in scope (Rules D2, D4).
 
 **Rule M2 — One repo's pipeline stays sequential.** Within a single repo the IMPLEMENT per-phase loop
-(implement → code-review → EPA → write-test → code-review → next phase) is **strictly ordered**, exactly as in
-the single-repo flow. Never run two phases of the **same** repo in parallel.
+(implement → code-review → stage → next phase) is **strictly ordered**, exactly as in the single-repo flow.
+Never run two phases of the **same** repo in parallel.
 
 **Rule M3 — Cross-repo phases run by the dependency graph.** The plan tags every phase with its **Deliverable**
 (`D{n}`), its **Repo** (repo key), and its **Depends on** set (phase IDs, which may target another repo). A
@@ -253,10 +257,10 @@ plan's `Depends on` sets already encode every such edge; follow them rather than
 concurrency. If you cannot tell whether phase B depends on phase A, treat B as dependent on A and run them in
 order. **This rule wins over M3's parallel option on conflict.**
 
-**Rule M6 — Gates are per repo, per change.** Plan approval, the code-review loop, `format`, and
-`ultracode:module-documentation` run for **each repo's own** changes with **that repo's own** commands and
-rules. A parallel branch that fails review or returns `STUCK:` pauses **only that branch**; independent branches
-keep running.
+**Rule M6 — Gates are per repo, per change.** Plan approval, the code-review loop, `format`, and the closing
+gate's stages (the requested tests, `ultracode:module-documentation`) run for **each repo's own** changes with
+**that repo's own** commands and rules. A parallel branch that fails review or returns `STUCK:` pauses **only
+that branch**; independent branches keep running.
 
 **Concurrency cap.** Run at most one IMPLEMENT pipeline per repo at a time (Rule M2). Read-only
 `ultracode:explore` agents may all run at once. If ready parallel work is wider than you can track cleanly,
@@ -270,6 +274,10 @@ visible in the task list (e.g. `D1 · phase 2 — service layer`). In a multi-re
 key** (e.g. `D1 · backend: phase 2 — service layer`) and record every cross-phase blocker with `addBlockedBy`,
 mirroring the plan's `Depends on` sets. Skip tracking for QUICK ANSWER and single-agent RESEARCH.
 
+Create tasks for the closing stages **only once the user has opted into them** at the closing gate (Rule T2) or
+by explicit request (Rule T3) — a task list that lists tests and docs up front promises work the user has not
+asked for. When they do opt in, add one task per covered phase for the test stage plus one for the docs stage.
+
 ## Subagent inventory
 
 Agents are the ultracode plugin agents. The **Agent** column is the exact `subagent_type` string — spawn it
@@ -281,11 +289,11 @@ verbatim, prefix included. Each writes a report into the session dir.
 | `ultracode:generate-spec` | Any request that will be planned (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
 | `ultracode:plan` | Medium/high-stakes; needs a sequenced, phased strategy. Exactly one per request, given only the spec file (Rule D4). | master plan + per-phase files |
 | `ultracode:implement` | Code must be written/modified/deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
-| `ultracode:execution-path-analyzer` | After implementation review passes, **and** the phase's Test policy is `Required` (Rule T1); analyze paths before tests. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
-| `ultracode:write-test` | After EPA, on a `Required` phase only (Rule T1); write tests. Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
+| `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
+| `ultracode:write-test` | After that phase's EPA, in the same requested test stage (Rules T2–T4); write tests. Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
 | `ultracode:code-reviewer` | Uncommitted code changes must be reviewed. | JSON (inline) |
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
-| `ultracode:module-documentation` | After all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
+| `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
 **Repo scoping:** every spawn carries `Repo root: {absolute root}` and `Session dir: {SESSION_DIR}/{repo-key}`.
 The agent resolves every `.claude/...` path and source path against that root and reads **that repo's**
@@ -331,9 +339,9 @@ Pass the resolved name as the spawn's `model` argument (`haiku` | `sonnet` | `op
 | RESEARCH | investigate, explore, understand, explain | `ultracode:explore` |
 | SPEC | write specs, SDD, requirements breakdown, acceptance criteria | `ultracode:explore` → `ultracode:generate-spec` |
 | PLAN | design, architecture, breakdown, strategy | `ultracode:explore` → `ultracode:generate-spec` → `ultracode:plan` |
-| IMPLEMENT | write, add, fix, modify, refactor, delete | `ultracode:explore` (opt) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop (its test stages gated by the phase's Test policy — Rule T1) → `ultracode:module-documentation` |
+| IMPLEMENT | write, add, fix, modify, refactor, delete | `ultracode:explore` (opt) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop → `format` → closing gate: optional tests, optional docs (Rules T1–T7) |
 | VERIFY | test, validate, check it works | `ultracode:implement` (run the profile's test command) |
-| UNIT TEST | write/fix tests | `ultracode:explore`/`ultracode:plan` (opt) → `ultracode:execution-path-analyzer` → `ultracode:write-test` → `ultracode:code-reviewer` |
+| UNIT TEST | write/fix tests | `ultracode:explore`/`ultracode:plan` (opt) → `ultracode:execution-path-analyzer` → `ultracode:write-test` → `ultracode:code-reviewer`. This is an explicit test request — run it with no closing gate (Rule T3) |
 | PROMPT | write/edit AI prompt, SKILL.md, agent file | `ultracode:prompt-generation` → `ultracode:code-reviewer` (if code changed) |
 | QUICK ANSWER | factual question, no code change | answer directly |
 
@@ -348,41 +356,11 @@ low-stakes no-plan tasks):
 ```
 ultracode:implement  → ultracode:code-reviewer (implementation; scope: unstaged)  → [review loop]
                      → stage implementation files (git -C {repo-root} add)
-                     → ── Test policy gate (Rule T1) ──
-                        Skip     → next phase
-                        Required → ultracode:execution-path-analyzer
-                                 → ultracode:write-test
-                                 → ultracode:code-reviewer (tests; scope: unstaged) → [review loop]
-                                 → stage test files (git -C {repo-root} add)
-                                 → next phase
+                     → next phase
 ```
 
-### The test policy gate
-
-**Rule T1 — Run the test pipeline only when the phase's Test policy says `Required`.** The `ultracode:plan`
-agent tags every phase with a **Test policy** of `Required` or `Skip` (its rule P12), carried in the master
-plan's Phase Index, in the phase file header, and in the plan agent's return. Read that phase's value **after
-its implementation review passes**, then:
-
-- **`Required`** → run `ultracode:execution-path-analyzer`, then `ultracode:write-test`, then the test
-  code-review loop, exactly as the loop above shows.
-- **`Skip`** → skip all three. Stage the implementation files and go to the next phase. The phase is complete;
-  do not spawn the EPA, write-test, or test-review agents for it, and do not spawn them later to "catch up".
-- **The phase carries no Test policy** (a plan written before this field existed, or a field you cannot read) →
-  treat it as **`Required`**.
-- **A low-stakes inline task with no plan** → treat it as **`Required`**, unless the user's own instructions say
-  to skip tests. There is no plan agent verdict to read, so default to covering the change.
-
-**Priority on conflict:** any doubt resolves to `Required`. A needless test pass costs tokens; a skipped test
-pass on logic ships untested behavior that no later stage catches.
-
-**Never override the plan's `Skip` into a `Required` run yourself**, and never re-tag a phase — the verdict is
-the plan agent's, made from the phase's steps, and it was visible to the user at the plan-approval gate. If you
-believe a `Skip` is wrong, say so to the user and let them decide rather than silently running the pipeline.
-
-**Report every skip.** When a phase's Test policy is `Skip`, say so in that phase's progress update, with the
-plan's one-sentence rationale — e.g. "Phase 4 complete; tests skipped (steps 4.1–4.3 declare enum members and
-one DI registration)." A silent skip reads as a bug.
+The loop ends there. **Tests and documentation are not part of it** — both are optional closing stages that run
+after **every** coding phase for the repo is done, and only when the user asks (**The closing gate** below).
 
 This loop runs **per repo**. In a multi-repo session, schedule the phases across repos under **Multi-repo
 sessions** (Rules M2–M6): a repo's own phases stay sequential; independent phases in different repos run in
@@ -390,17 +368,12 @@ parallel; a phase blocked by another repo's phase stays queued until that phase 
 Use **each phase's own repo** for its build, format, and git — run `git -C {repo-root} …` so staging targets
 the right repo.
 
-After **every** phase touching a repo has passed review: run **that repo's** `format` command, then spawn
-`ultracode:module-documentation` for that repo, passing every implement report (Rule D8). Do **not** format or
-document after an individual deliverable's phases — both run once, at the end.
-
 If a phase cannot be completed, report it to the user (Rule D9) and do not start any phase that depends on it.
 
-**Staging** keeps each review focused: after implementation review passes, `git -C {repo-root} add` the
-implementation files (read the implement report's file list); after test review passes, `git -C {repo-root} add`
-the test files. Stage the implementation files whether the Test policy is `Required` or `Skip` — a `Skip` phase
-simply has no second staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` when
-staging is in effect.
+**Staging** keeps each review focused: after a phase's implementation review passes, `git -C {repo-root} add` the
+implementation files (read the implement report's file list). Test files are staged in the closing test stage, per
+phase, after that phase's test review passes — so a run where the user declines tests simply has no second
+staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` when staging is in effect.
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}`, the phase/plan file path, prior
 reports, the resolved command strings from that repo's repo-profile, and (for `ultracode:implement` /
@@ -408,6 +381,95 @@ reports, the resolved command strings from that repo's repo-profile, and (for `u
 selection** — `ultracode:implement` and `ultracode:write-test` on this phase's **Complexity** tier
 (`models.byPhaseComplexity`), every other agent on its `models.byAgent` model. The one exception to
 "include prior reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
+
+### The closing gate — optional tests, optional docs
+
+Once a repo's last coding phase has passed review, its code is complete. Two stages remain, and **neither runs
+on your own initiative**: writing tests, and updating the module documentation. Both are the user's call, both
+run after all phases rather than between them.
+
+```
+every coding phase for the repo passed review
+   ▼
+run that repo's `format` command                        (once, automatic — not gated)
+   ▼
+── CLOSING GATE (Rule T2) — one AskUserQuestion call, two questions ──
+   tests? ─ Yes → per Required phase (Rule T4): ultracode:execution-path-analyzer
+                                              → ultracode:write-test
+                                              → ultracode:code-reviewer (tests; scope: unstaged) → [review loop]
+                                              → stage test files (git -C {repo-root} add)
+   docs?  ─ Yes → ultracode:module-documentation, once, with every implement report
+   ▼
+completion report — name every closing stage that did NOT run (Rule T7)
+```
+
+**Rule T1 — Neither stage ever runs inside the per-phase loop.** Never spawn
+`ultracode:execution-path-analyzer`, `ultracode:write-test`, or `ultracode:module-documentation` between
+phases, and never spawn them later to "catch up" a phase you already finished. A phase is complete when its
+implementation review passes and its files are staged. Writing a phase's tests before the remaining phases have
+run means testing code that a later phase may still change.
+
+**Rule T2 — Offer both stages once, at the closing gate.** After the repo's last coding phase passes review and
+its `format` command has run, call **AskUserQuestion** with these two questions in **one** call:
+
+1. `question`: "All {N} phases are implemented and reviewed. Write tests for them?" · `header`: `Tests` ·
+   options: **"No — finish without tests (Recommended)"**, then "Yes — run the test pipeline now".
+2. `question`: "Update the module documentation for the changed areas?" · `header`: `Module docs` ·
+   options: **"No — finish without docs (Recommended)"**, then "Yes — update the area references".
+
+The recommended option goes first, as everywhere else in this skill (**Asking the user with AskUserQuestion**).
+Do not add an "Other" option — the tool adds it. Ask only what is actually on offer: if the user already asked
+for one of the two stages, drop that question (Rule T3) and ask the remaining one; if they asked for both, skip
+the gate entirely. Run the stages the user picked, tests first, then docs.
+
+**Rule T3 — An explicit request replaces the gate; never re-ask it.** When the user's own words already ask for
+a stage, that request **is** the decision — run it, without a gate. This covers a request classified UNIT TEST,
+a request to document the change, and any request that arrives **after** the gate already closed (e.g. "actually
+write the tests now", three turns later). Requirements still hold: run the test stage only once every coding
+phase is done (Rule T1), and pass `ultracode:module-documentation` every implement report (Rule D8).
+
+**Rule T4 — Once tests are requested, the phase's `Test policy` picks which phases get covered.** The tag no
+longer decides *whether* tests run — the user does. It decides *which* phases the requested run covers. The
+`ultracode:plan` agent tags every phase `Required` or `Skip` (its rule P12), carried in the master plan's Phase
+Index, in the phase file header, and in the plan agent's return. Read every phase's value, then run the test
+stage **in phase order** over:
+
+- **`Required`** → cover it: `ultracode:execution-path-analyzer`, then `ultracode:write-test`, then the test
+  code-review loop, then stage its test files.
+- **`Skip`** → do not cover it. Report it as uncovered with the plan's one-sentence rationale.
+- **No Test policy** (a plan written before the field existed, or a value you cannot read) → treat as
+  **`Required`**.
+- **A low-stakes inline task with no plan** → cover the whole change; there is no plan verdict to read.
+
+**Priority on conflict:** any doubt resolves to covering the phase. A needless test pass costs tokens; a
+wrongly skipped one ships untested behavior no later stage catches. Never re-tag a phase yourself — the verdict
+is the plan agent's, and the user saw it at the plan-approval gate. If the user asks for a `Skip` phase to be
+covered anyway, cover it and say you are overriding the tag on their instruction.
+
+**Rule T5 — A closing-gate answer is not a requirement change.** `Yes`/`No` here never re-spawns
+`ultracode:generate-spec`, never edits the spec file, and never invalidates the plan — the user is choosing
+which optional stages to spend tokens on, not changing what the system must do. This is the **one exception** to
+Rule D3 and Hard rule 17, which otherwise route every gate answer back into the spec. If the user attaches a
+real requirement change to their answer ("no tests, and drop the retry logic"), split it: the stage choice stays
+here, the requirement change goes through Rule D10.
+
+**Rule T6 — The gate is per repo, and batched.** Ask it for a repo when **that repo's** own phases are all done
+and its `format` has run (consistent with Rule M6) — a repo does not wait on another repo's phases. When several
+repos reach the gate in the same turn, combine their questions into **one** AskUserQuestion call, naming the
+repo key in each `question` and `header` (e.g. `header: backend tests`), up to the tool's 4-question limit; ask
+the rest in a second call.
+
+**Rule T7 — Report every closing stage that did not run.** The completion summary names each one and how to get
+it later: tests via `/epa` then `/write-test`, or by asking; docs via `/module-docs`, or by asking. When the test
+stage ran but left `Skip` phases uncovered, name those phases with the plan's rationale — e.g. "Tests written
+for phases 1–3; phase 4 uncovered (steps 4.1–4.3 declare enum members and one DI registration)." A silent
+omission reads as a bug.
+
+Both stages spawn with the same self-contained prompt contract as every other agent — `Repo root:`,
+`Session dir: {SESSION_DIR}/{repo-key}`, the prior report paths, that repo's resolved commands, and (for
+`ultracode:write-test`) the `Required skills:` line and the covered phase's **Complexity** tier for its model.
+Do **not** format, test, or document after an individual deliverable's phases: `format` runs once when the repo's
+last phase passes review, and each closing stage runs at most once per repo.
 
 ## Step 3 — Relay and decide
 
@@ -432,6 +494,7 @@ answer by **when** it arrives:
 | After `ultracode:plan`, before implementing | Into the **spec file first**, then a fresh plan | Re-spawn `ultracode:generate-spec` with the change, get the updated spec approved, then re-spawn `ultracode:plan` on it (Rule D10). |
 | During a phase, about an implementation detail the spec already settled | Nowhere new | The spec answers it — cite the requirement in the fix prompt to `ultracode:implement`. |
 | During a phase, changing a requirement | Into the **spec file first** | Stop the phase, apply Rule D10, then resume from the updated plan. |
+| At the closing gate — which optional stages to run | Nowhere new | Run the stages the user picked (Rule T2). This answer is a token-spend choice, not a requirement: never re-spawn `ultracode:generate-spec` for it (Rule T5). |
 
 **Priority on conflict:** the spec file always wins as the destination for a requirement-level answer. If you
 are unsure whether an answer is a requirement change or an implementation detail, treat it as a requirement
@@ -519,10 +582,13 @@ the user and ask how to proceed. Do not auto-run a 4th.
 17. **The spec is the contract, and every answer lands in it.** Never edit a spec file yourself and never let a
     plan widen, narrow, or contradict it. Once the spec exists, any requirement-level user answer goes back
     through a `ultracode:generate-spec` re-spawn (**Rule D3**, **Rule D10**, and **Where a user answer goes**) —
-    never straight into a plan or implement prompt.
-18. **Format and document once.** Run each repo's `format` command and spawn `ultracode:module-documentation`
-    only after **every** phase touching that repo has passed review, passing every implement report
-    (**Rule D8**) — never after an individual deliverable's phases.
+    never straight into a plan or implement prompt. The one answer this does **not** cover is the closing gate's
+    yes/no on tests and docs: that is a token-spend choice, not a requirement, so it never touches the spec
+    (**Rule T5**).
+18. **Format once, automatically; document once, only if asked.** Run each repo's `format` command after
+    **every** phase touching that repo has passed review — that is automatic. `ultracode:module-documentation`
+    is **optional**: spawn it only when the user asks at the closing gate or outright (**Rules T2, T3**), and
+    then once, with every implement report (**Rule D8**). Never after an individual deliverable's phases.
 19. **Never poll or wait for subagent completion.** This harness is **not** other agent harnesses. Trained
     habits of busy-waiting with Bash (or any tool) while subagents run are **wrong here and prohibited**.
     After you spawn one or more subagents via the Agent tool, **end your turn immediately** — emit **no**
@@ -535,8 +601,10 @@ the user and ask how to proceed. Do not auto-run a 4th.
     subagent is still running and you want something to do while waiting. Phrases like "Wait for every plan
     agent to return" mean **do not spawn dependent work until those agents have returned** — a sequencing
     constraint, **not** a license to poll or hold. Active waiting wastes tokens and eats the context window.
-20. **Honor the phase's Test policy.** Run `ultracode:execution-path-analyzer` → `ultracode:write-test` → the
-    test review loop only for a phase the plan tags `Test policy: Required`; skip all three for a phase tagged
-    `Skip` (**Rule T1**). A missing tag, an unreadable tag, or an inline no-plan task counts as `Required`.
-    Never re-tag a phase yourself and never skip tests on your own judgment — the verdict is the plan agent's,
-    and the user saw it at the plan-approval gate. Report every skip with the plan's rationale.
+20. **Tests are opt-in, and never mid-pipeline.** Never spawn `ultracode:execution-path-analyzer`,
+    `ultracode:write-test`, or the test review loop inside the per-phase loop (**Rule T1**). Run them only
+    after **every** coding phase for that repo has passed review **and** the user has asked for tests — at the
+    closing gate (**Rule T2**) or in their own words (**Rule T3**). Once asked, cover the phases the plan tags
+    `Test policy: Required` and report the `Skip` ones as uncovered (**Rule T4**); a missing tag, an unreadable
+    tag, or an inline no-plan task counts as `Required`. Never re-tag a phase yourself. Always report which
+    closing stages did not run, and how to get them (**Rule T7**).

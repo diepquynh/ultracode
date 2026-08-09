@@ -1,10 +1,10 @@
 # Ultracode
 
 **Burn more tokens — on purpose, for better software.** Ultracode turns a one-shot coding request into a full
-end-to-end engineering pipeline: a fleet of specialist subagents that explore, plan, implement, review, trace
-execution paths, test, review again, and document — every stage grounded in your repo's own conventions. One
-cheap prompt becomes many deliberate ones, and you trade tokens for correctness, coverage, and code that matches
-how your team already writes.
+end-to-end engineering pipeline: a fleet of specialist subagents that explore, plan, implement and review — then,
+when you ask for it, trace execution paths, test, review again, and document — every stage grounded in your repo's
+own conventions. One cheap prompt becomes many deliberate ones, and you trade tokens for correctness, coverage,
+and code that matches how your team already writes.
 
 Concretely, it's a portable Claude Code plugin: a **repo-agnostic agentic engineering pipeline** plus a
 **codebase-scouting initializer** that generates per-repo skills and a routing inventory for whatever language
@@ -16,20 +16,25 @@ Cheap, single-shot answers are cheap for a reason: one model, one pass, no verif
 other way on purpose. It spends tokens where they buy quality:
 
 - **Fan-out over one-shot.** Research, planning, implementation, and testing are separate subagents, each with a
-  clean context window focused on one job — not one overloaded prompt juggling all of them.
+  clean context window focused on one job — not one overloaded prompt juggling all of them. Separate stages also
+  mean you can stop after any of them.
 - **Verify, don't trust.** Every code change passes through a `code-reviewer` gate against your repo's own
-  review rules, and the loop repeats until it clears. Tests aren't guessed — an `execution-path-analyzer`
-  enumerates the branches first, then `write-test` covers one path per test. A phase that writes only
-  boilerplate (DTOs, enums, config, re-exports) has no branch to enumerate, so the planner marks it and the
-  whole test pass is skipped for it — spend the tokens where there's behavior to cover.
+  review rules, and the loop repeats until it clears.
+- **Tests when you want them, not by reflex.** Test writing is an **opt-in** stage that runs after *every* coding
+  phase is done — never between them, so a phase's tests are never written against code a later phase will still
+  change. Once the code is complete the orchestrator asks once: write tests? update the module docs? It runs what
+  you pick and tells you what it skipped. When you do want tests, they aren't guessed — an
+  `execution-path-analyzer` enumerates the branches first, then `write-test` covers one path per test, and a phase
+  the planner marked as pure boilerplate (DTOs, enums, config, re-exports) stays uncovered because it has no
+  branch to enumerate.
 - **Grounded, not generic.** The initializer scouts your codebase and writes per-repo skills, so generated code
   follows *your* patterns instead of a framework's defaults.
 - **Parallel where it pays.** `/init-kit` fans scouting out across the repo in parallel slices — and skill
   generation out to one agent per skill — so more tokens don't linearly become more wall-clock time.
 
 The payoff: you spend more tokens than a quick prompt would, and you get an end-to-end change — explored,
-planned, implemented, reviewed, tested, and documented — that you'd otherwise stitch together by hand across a
-dozen turns.
+planned, implemented, reviewed, and (on request) tested and documented — that you'd otherwise stitch together by
+hand across a dozen turns.
 
 ## Benchmarks
 
@@ -98,8 +103,8 @@ Use `--plugin-dir` for fast iteration; use the local marketplace to rehearse the
 
 > **Always invoke `ultracode:orchestrate` first — before doing anything else.** It is the pipeline's single
 > router; every task should begin by activating the orchestrate skill, which then drives the whole flow
-> (explore → generate-spec → plan → implement → code-review → execution-path-analysis →
-> write-test → code-review → module-docs). It's set to activate at session start and for any code-changing task, but if it hasn't kicked
+> (explore → generate-spec → plan → implement → code-review, per phase — then, only if you ask:
+> execution-path-analysis → write-test → code-review, and module-docs). It's set to activate at session start and for any code-changing task, but if it hasn't kicked
 > in, start it explicitly before touching code.
 
 In any repo where the plugin is enabled:
@@ -118,8 +123,9 @@ In any repo where the plugin is enabled:
 2. **Reload** so the new project skills register: `/reload-plugins` or restart the session. (Routing via
    `INVENTORY.md` works immediately regardless; only the Skill-tool registration needs a reload.)
 3. **Work normally.** The `ultracode:orchestrate` skill drives the pipeline
-   (explore → generate-spec → plan → implement → code-review → execution-path-analysis →
-   write-test → code-review → module-docs), routing every decision through the generated inventory.
+   (explore → generate-spec → plan → implement → code-review per phase, then the optional
+   execution-path-analysis → write-test → code-review and module-docs stages it offers once the code is done),
+   routing every decision through the generated inventory.
 
 Want one stage instead of the whole pipeline? Each has its own slash command — `/explore`, `/generate-spec`,
 `/plan`, `/implement`, `/code-review`, `/epa`, `/write-test`, `/module-docs`, `/prompt-gen` — that spawns just

@@ -13,8 +13,9 @@ in real source. It edits only those reference files.
 
 Arguments (may be empty): `$ARGUMENTS`
 
-This is the pipeline's last stage. Run it once, after **every** phase has passed review — not after each
-deliverable. Pass every implement report so it documents the finished feature rather than an intermediate state.
+This is the pipeline's last stage, and an **optional** one — the orchestrator runs it only when asked. Run it
+once, after **every** phase has passed review — not after each deliverable. Pass every implement report so it
+documents the finished feature rather than an intermediate state.
 
 ## Step 1 — Collect the reports, session, and model
 
