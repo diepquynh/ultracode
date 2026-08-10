@@ -9,6 +9,7 @@ description: >
   It reads the plan, loads the skills the orchestrator names, writes code following the repo's convention
   skill, verifies each step with the repo profile's build command, and produces a change report for the
   code-reviewer agent to consume. It does ALL coding itself and does NOT delegate back to the orchestrator.
+model: sonnet
 effort: high
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 timeout: 600

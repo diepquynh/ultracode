@@ -11,7 +11,7 @@ The plugin is intentionally split into two layers:
 │  refs/      java-spring · typescript-node · python ·  │ ← the initializer's case-by-case library
 │             go · _generic · archetypes · contracts    │
 │  commands/  /init-kit + one per pipeline stage        │
-│  hooks/     SessionStart                              │
+│  hooks/     SessionStart  +  PreToolUse model router  │
 └────────────────────────┬──────────────────────────────┘
                          │  run /init-kit in a repo
                          ▼
@@ -160,6 +160,20 @@ your decision before it spawns the generate agents.
   `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own skill generation always runs
   on Opus, set by the `/init-kit` command when it spawns the generate-skill agents — that's separate from this
   block.)
+  - **The block is enforced, not advised.** `hooks/model-router.sh` runs as a `PreToolUse` hook on
+    `Task|Agent`, and for every `ultracode:*` spawn it resolves these same tables from *that spawn's* repo and
+    rewrites the call's `model` argument via `updatedInput`. Subagent model resolution runs
+    `CLAUDE_CODE_SUBAGENT_MODEL` → per-invocation argument → front matter → session model, so rewriting the
+    argument is the only hook-side control point — `SubagentStart` is context-only and cannot set a model.
+    Leave `CLAUDE_CODE_SUBAGENT_MODEL` unset or `inherit`, or it outranks the profile. The hook fails open: no
+    `jq`, no profile, or no matching entry leaves the spawn untouched. It re-reads the profile from disk per
+    spawn, so mid-session edits apply to the next one.
+  - **Front matter is the floor.** Every agent carries a `model` default (`opus` for explore / generate-spec /
+    plan / prompt-generation / module-documentation, `sonnet` for the rest), so an un-profiled repo runs each
+    stage on a sane tier instead of inheriting the orchestrator's model for all of them.
+  - **Effort cannot be routed this way.** `effort` is a subagent-definition field only — the Agent tool takes no
+    per-invocation `effort`, and there is no `CLAUDE_CODE_SUBAGENT_EFFORT`. Every agent's `effort: high` in
+    front matter therefore holds regardless of tier, and it overrides the session effort level.
   - `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
     `prompt-generation`/`module-documentation` run on Opus; `code-reviewer` and `execution-path-analyzer` run
     on Sonnet.

@@ -12,6 +12,7 @@ description: >
   names every contract the work provides and consumes, so the plan agent can turn that one file into one
   implementation plan without reading anything else. It states WHAT the system must do, never HOW to build it,
   and it does NOT modify project source.
+model: opus
 effort: high
 tools: Read, Write, Bash, Grep, Glob
 timeout: 600

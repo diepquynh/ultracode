@@ -9,6 +9,7 @@ description: >
   for the generate-spec agent: a structured research document, and a criteria document that breaks the request
   into atomic testable criteria. The generate-spec agent turns both into the single specification file that the
   plan agent then plans from. It does NOT modify project source.
+model: opus
 effort: high
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch
 timeout: 600

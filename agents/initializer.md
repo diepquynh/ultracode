@@ -14,6 +14,7 @@ description: >
   every skill is written, assemble the routing INVENTORY.md and repo-profile.json over the generated plus the
   reused skills. It grounds every generated skill in real captured exemplars and never invents framework
   patterns.
+model: sonnet
 effort: high
 tools: Read, Write, Edit, Bash, Grep, Glob
 timeout: 600

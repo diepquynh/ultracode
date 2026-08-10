@@ -42,7 +42,7 @@ everything through that inventory.
 
 Read `$REPO_ROOT/.claude/ultracode/repo-profile.json` and take the model from `models.byAgent["explore"]`
 (profile keys are **bare** — no `ultracode:` prefix). If the `models` block or that key is absent, spawn
-**without** a `model` argument so the agent inherits the session model.
+**without** a `model` argument and let the agent's own `model` front matter stand.
 
 ## Step 2 — Spawn
 

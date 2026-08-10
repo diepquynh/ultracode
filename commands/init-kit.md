@@ -30,10 +30,12 @@ skill into the routing inventory too. At the approval gate you can override per 
 one. Only skills you choose to (re)generate are fanned out in the generate step; reused skills flow straight to
 `generate-inventory`. Re-scans are therefore idempotent — your manual edits survive unless you ask to overwrite.
 
-**Model per mode.** The `ultracode:initializer` carries no `model` in its front matter, so set the `model` argument on
-every spawn below. Spawn `detect`, `scout`, `propose`, and `generate-inventory` on **Sonnet**; spawn every
+**Model per mode.** The `ultracode:initializer` defaults to `model: sonnet` in its front matter, but its modes
+differ in stakes, so set the `model` argument explicitly on every spawn below — the per-invocation argument
+outranks front matter. Spawn `detect`, `scout`, `propose`, and `generate-inventory` on **Sonnet**; spawn every
 `generate-skill` agent on **Opus** — skill authoring is the highest-value, quality-sensitive step, so it gets
-the strongest model.
+the strongest model. The model router hook does not touch these spawns: the initializer is deliberately absent
+from `models.byAgent`, and it runs before the profile it would be routed by exists.
 
 **Passing data between stages.** Unlike a headless workflow, you (the main loop) can read files, so every
 hand-off flows through the session dir: each agent writes its output there and returns the path; you read that

@@ -10,6 +10,7 @@ description: >
   writes a structured EPA report into the session directory for the write-test and code-reviewer agents to
   consume — one execution path per test. It is read-only on project source; the only file it writes is its
   report in the session dir.
+model: sonnet
 effort: high
 tools: Read, Bash, Write, Grep, Glob
 timeout: 600

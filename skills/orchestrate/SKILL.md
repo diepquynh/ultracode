@@ -326,11 +326,26 @@ the prefixed `subagent_type`. Resolve the spawn's `model` argument like this:
   `ultracode:implement` or `ultracode:write-test` to fix code-review findings, reuse the **same tier** as the
   phase being fixed (or `low` for an inline task) so the fix runs on the phase's model.
 - **Fallback.** If the repo's profile has no `models` block, or no entry for the agent or tier, spawn **without**
-  a `model` argument — the agent then inherits the session (your, the orchestrator's) model, since the pipeline
-  agents carry no `model` in their front matter. (Profiles written before model routing existed keep working.)
+  a `model` argument. The agent then falls back to the `model` in its own front matter — `opus` for the
+  research/authoring stages, `sonnet` for the rest — **not** to your session model. (Profiles written before
+  model routing existed keep working; they just get those defaults.)
 
-Pass the resolved name as the spawn's `model` argument (`haiku` | `sonnet` | `opus` | `fable`). The
-`ultracode:initializer` is not covered here — the `/init-kit` command spawns it and sets its model, not you.
+Pass the resolved name as the spawn's `model` argument (`haiku` | `sonnet` | `opus` | `fable`, or whatever names
+your backend serves). The `ultracode:initializer` is not covered here — the `/init-kit` command spawns it and
+sets its model, not you.
+
+**The profile wins even if you get this wrong.** The plugin's `PreToolUse` hook (`hooks/model-router.sh`)
+intercepts every `ultracode:*` spawn, resolves the same tables itself, and rewrites the spawn's `model`
+argument. So the profile is authoritative, not advisory. Three consequences you must account for:
+
+- **Still resolve the model yourself.** The hook is a backstop, not a replacement — it is skipped when `jq` is
+  absent and it is a no-op on a malformed profile. Your argument is the fallback for both cases.
+- **Never claim which model ran.** If the user edited the profile mid-session, your stored routing is stale and
+  the hook silently used the newer value. Say which model you *requested*, or say nothing.
+- **`ultracode:implement` and `ultracode:write-test` spawns MUST carry `Phase file: {absolute path}`** as its own
+  prompt line whenever a plan exists. That line is how the hook reads the phase's **Complexity** header to pick
+  the tier. Omit it and the hook falls back to the phase number in any `…-phase-{N}…` path in the prompt, and
+  failing that to `low` — which would quietly run a High phase on the cheapest model.
 
 ## Step 1 — Classify the request
 
@@ -377,8 +392,9 @@ staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` 
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}`, the phase/plan file path, prior
 reports, the resolved command strings from that repo's repo-profile, and (for `ultracode:implement` /
-`ultracode:write-test`) the `Required skills:` line. Spawn each agent on the model resolved per **Model
-selection** — `ultracode:implement` and `ultracode:write-test` on this phase's **Complexity** tier
+`ultracode:write-test`) the `Required skills:` line plus a `Phase file: {absolute path}` line whenever a plan
+exists — the model router hook reads the phase's Complexity tier from it. Spawn each agent on the model resolved
+per **Model selection** — `ultracode:implement` and `ultracode:write-test` on this phase's **Complexity** tier
 (`models.byPhaseComplexity`), every other agent on its `models.byAgent` model. The one exception to
 "include prior reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
 
@@ -568,8 +584,8 @@ the user and ask how to proceed. Do not auto-run a 4th.
     `models` block (**Model selection**): static agents from `models.byAgent`, and
     `ultracode:implement`/`ultracode:write-test` from `models.byPhaseComplexity` on the phase's **Complexity**
     tier (`low` for inline no-plan tasks). Profile keys are the **bare** agent names — strip the `ultracode:`
-    prefix to look a model up. Fall back to the session model only when the profile is silent (agents carry no
-    `model` front matter). Never borrow another repo's models.
+    prefix to look a model up. When the profile is silent, omit the argument and let the agent's own `model`
+    front matter stand. Never borrow another repo's models.
 14. **Always spawn the prefixed name.** Every `subagent_type` you pass is `ultracode:{agent}` (**Agent
     naming**). Never spawn bare `explore` or `plan` — those are the harness's built-in agents, not ultracode's,
     and they ignore this pipeline.

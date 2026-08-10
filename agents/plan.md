@@ -15,6 +15,7 @@ description: >
   directory. A plan may span multiple repos: each phase is tagged with its repo and its cross-repo dependencies
   so the orchestrator can run independent phases in parallel and queue blocked ones. The implement agent
   receives one phase file at a time. It does NOT modify project source.
+model: opus
 effort: high
 tools: Read, Bash, Grep, Glob
 timeout: 600

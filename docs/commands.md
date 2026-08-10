@@ -37,9 +37,15 @@ boilerplate, no execution path to trace. Running `/epa` by hand overrides that t
 was planned as boilerplate-only and analyzes it anyway.
 
 Each command resolves its own model the same way the orchestrator does: from the repo's `repo-profile.json`
-`models` block, by the **bare** agent name (`models.byAgent["explore"]`), falling back to the session model when
-the profile is silent. `/implement` and `/write-test` resolve theirs from `models.byPhaseComplexity` on the
-phase's Complexity tier instead.
+`models` block, by the **bare** agent name (`models.byAgent["explore"]`), falling back to the agent's own
+`model` front matter when the profile is silent. `/implement` and `/write-test` resolve theirs from
+`models.byPhaseComplexity` on the phase's Complexity tier instead.
+
+That resolution is also enforced independently of the command text. The plugin's `PreToolUse` hook
+(`hooks/model-router.sh`) intercepts every `ultracode:*` spawn, reads the same tables from the spawn's own repo,
+and rewrites the `model` argument — so a command that resolves the model wrongly, or a stale in-context copy of
+a profile you edited mid-session, still lands on the model the profile currently names. The hook re-reads
+`repo-profile.json` from disk on every spawn, so edits take effect on the next one with no restart.
 
 ## What the commands don't do
 

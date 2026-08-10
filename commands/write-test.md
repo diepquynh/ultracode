@@ -40,7 +40,10 @@ directly: an unmatched glob aborts the command under zsh.
 Read `$REPO_ROOT/.claude/ultracode/repo-profile.json` and `INVENTORY.md`:
 
 - **Model:** `models.byPhaseComplexity["write-test"]["{tier}"]`, where `{tier}` is the phase's **Complexity**
-  lowercased, or `low` when there is no plan. Profile keys are **bare**. Absent → omit the `model` argument.
+  lowercased, or `low` when there is no plan. Profile keys are **bare**. Absent → omit the `model` argument and
+  let the agent's `model` front matter stand.
+- **Phase file:** the `ultracode-plan-*-phase-{N}-*.md` matching the implement report's phase number, when a
+  plan exists. Pass it in the prompt — the model router hook reads the Complexity tier from that file.
 - **Required skills:** the test skills the INVENTORY **Skill Application Mapping** names for the changed file
   types, plus `convention`.
 
@@ -51,6 +54,7 @@ subagent_type: ultracode:write-test
 model: {models.byPhaseComplexity["write-test"][tier], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
+Phase file: {phase file path}          # omit this line when there is no plan
 Implement report: {implement report path}.
 EPA report: {EPA report path}.
 Required skills: {test skill names, comma-separated}.
