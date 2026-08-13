@@ -18,13 +18,13 @@ Arguments (may be empty): `$ARGUMENTS`
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SESSION_ROOT="$REPO_ROOT/.claude/ultracode/session"
-SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$SESSION_DIR"
 echo "session=$SESSION_DIR"
 ls -t "$SESSION_DIR" 2>/dev/null | grep -E '^ultracode-spec-.*\.md$'
 ```
 
-The session dir is **derived** from the harness's `CLAUDE_CODE_SESSION_ID` (inherited unchanged by subagents), so
+The session dir is **derived** from `CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID` (inherited unchanged), so
 it is the same path `/generate-spec` wrote to earlier in this session — no searching for the newest dir, and no
 risk of planning another session's spec.
 

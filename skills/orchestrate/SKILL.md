@@ -73,7 +73,7 @@ ID:
 
 ```bash
 SESSION_ROOT="$PWD/.claude/ultracode/session"                                # repo-local scratch (was /tmp)
-SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$SESSION_DIR"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
 echo "$SESSION_DIR"
@@ -81,10 +81,11 @@ echo "$SESSION_DIR"
 
 `$PWD` is the primary repo's root, so `$SESSION_DIR` is absolute — subagents resolve it directly.
 
-**The path is derived, not generated.** `CLAUDE_CODE_SESSION_ID` is the harness's own session identifier, and
-**every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`). So the formula above
-is a pure function of the session and the repo root: it yields the same path every time you run it, from any
-working directory, in the orchestrator and in any agent. Consequences worth relying on:
+**The path is derived, not generated.** `CLAUDE_CODE_SESSION_ID` is the harness's own session identifier — under
+Grok that variable is absent and `GROK_SESSION_ID` carries the same value, which is why the formula falls back
+to it — and **every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`). So the
+formula above is a pure function of the session and the repo root: it yields the same path every time you run
+it, from any working directory, in the orchestrator and in any agent. Consequences worth relying on:
 
 - **Re-running it is safe.** It is idempotent, so you never create a second dir mid-session and never strand
   artifacts in a dir the next stage will not look in. `mkdir -p` on the existing dir is a no-op.
@@ -95,8 +96,8 @@ working directory, in the orchestrator and in any agent. Consequences worth rely
   the derivation is the fallback that lets an agent recover the path when a prompt omits it, not a licence to
   drop the line.
 
-If `CLAUDE_CODE_SESSION_ID` is unset, the fallback `no-session-id` still gives one stable shared path, so the
-pipeline degrades to a single working dir rather than failing.
+If neither `CLAUDE_CODE_SESSION_ID` nor `GROK_SESSION_ID` is set, the final fallback `no-session-id` still gives
+one stable shared path, so the pipeline degrades to a single working dir rather than failing.
 
 Give **each repo its own subdirectory** so parallel repos never collide on report filenames:
 

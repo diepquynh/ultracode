@@ -19,9 +19,10 @@ report for code you wrote by hand, write a spec off a criteria doc you edited.
 | `/prompt-gen` | `ultracode:prompt-generation` | the target instruction file | that file + a report |
 
 Every command takes optional arguments (`/plan path/to/spec.md`) and otherwise infers its input from this
-session's directory — `.claude/ultracode/session/ultracode-session-$CLAUDE_CODE_SESSION_ID`, derived rather than
-searched for, so each command reads exactly what the previous one wrote and never another session's artifacts
-(see [Architecture](architecture.md)). Running them in pipeline order therefore needs no arguments at all:
+session's directory — `.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-$GROK_SESSION_ID}`,
+derived rather than searched for, so each command reads exactly what the previous one wrote and never another
+session's artifacts (see [Architecture](architecture.md)). Running them in pipeline order therefore needs no
+arguments at all:
 
 ```
 /explore <topic> → /generate-spec → /plan → /implement → /code-review   (repeat per phase)

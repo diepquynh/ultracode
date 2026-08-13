@@ -45,14 +45,16 @@ That shared medium needs one path everybody agrees on, and a forked agent cannot
 it. So the path is **derived, never generated**:
 
 ```
-{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID}
+{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}
 ```
 
-`CLAUDE_CODE_SESSION_ID` is the harness's session identifier, and **every subagent inherits it unchanged** (they
-also carry `CLAUDE_CODE_CHILD_SESSION=1`). Two properties follow, and the pipeline leans on both. It is
-**idempotent** — any agent, in any working directory, at any point in the session, recomputes the same path, so
-re-running the derivation never forks a second dir mid-run. And it is **collision-free per session** — two
-sessions against one repo get separate dirs without coordinating.
+`CLAUDE_CODE_SESSION_ID` is the harness's session identifier — under Grok that variable is absent and
+`GROK_SESSION_ID` holds the same value, so the formula falls back to it, then to a fixed `no-session-id` when
+neither is set — and **every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`).
+Two properties follow, and the pipeline leans on both. It is **idempotent** — any agent, in any working
+directory, at any point in the session, recomputes the same path, so re-running the derivation never forks a
+second dir mid-run. And it is **collision-free per session** — two sessions against one repo get separate dirs
+without coordinating.
 
 Prompts still carry an explicit `Session dir:` line; the derivation is the fallback for when one doesn't, not a
 reason to drop it. What the derivation replaced was worse on both counts: a random suffix (`openssl rand`) that
@@ -65,7 +67,7 @@ a forked-context pipeline; if you extend ultracode, derive the path rather than 
  self-contained prompt, reads the report it returns, decides the next step.
    │
    │  no agent calls another; every hop is a report file in the SESSION DIR
-   │  (.claude/ultracode/session/ultracode-session-$CLAUDE_CODE_SESSION_ID) — written by one, read by the next
+   │  (.claude/ultracode/session/ultracode-session-<session-id>) — written by one, read by the next
    ▼
    explore                 ─▶ research doc + criteria doc      (one agent per repo)
    generate-spec           ─▶ ONE spec file, deliverables D1…Dn inside it

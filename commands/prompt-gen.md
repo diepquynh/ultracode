@@ -20,15 +20,15 @@ If the arguments are empty, ask what to write or edit and stop.
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SESSION_ROOT="$REPO_ROOT/.claude/ultracode/session"
-SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$SESSION_DIR"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"
 echo "session=$SESSION_DIR"
 ```
 
-The path is derived from the harness's `CLAUDE_CODE_SESSION_ID`, which subagents inherit unchanged — so it
-resolves to the same dir whether or not an earlier command in this session already created it. `mkdir -p` on an
-existing dir is a no-op.
+The path is derived from the harness's session ID (`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID`), which
+subagents inherit unchanged — so it resolves to the same dir whether or not an earlier command in this session
+already created it. `mkdir -p` on an existing dir is a no-op.
 
 Resolve the **target**: an explicit path in `$ARGUMENTS`, the file the task names, or `New` when the agent is
 creating one. If the target exists, note its path so the agent edits rather than rewrites blindly.

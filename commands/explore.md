@@ -26,16 +26,16 @@ they spawn — resolves the same path without being told it:
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SESSION_ROOT="$REPO_ROOT/.claude/ultracode/session"
-SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$SESSION_DIR"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"
 printf 'repo=%s\nsession=%s\n' "$REPO_ROOT" "$SESSION_DIR"
 test -f "$REPO_ROOT/.claude/ultracode/INVENTORY.md" && echo inventory=ok || echo inventory=MISSING
 ```
 
-`CLAUDE_CODE_SESSION_ID` is set by the harness and inherited unchanged by subagents, so this is a pure function
-of the session and the repo root: idempotent, and identical from any working directory. Do not add a random
-suffix — that would split this session's artifacts across two dirs.
+The session ID (`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID`) is set by the harness and inherited unchanged
+by subagents, so this is a pure function of the session and the repo root: idempotent, and identical from any
+working directory. Do not add a random suffix — that would split this session's artifacts across two dirs.
 
 If `inventory=MISSING`, stop and tell the user to run `/init-kit` in this repo first — the agent routes
 everything through that inventory.

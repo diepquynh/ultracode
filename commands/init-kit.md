@@ -52,7 +52,7 @@ Create the scratch dir (every initializer agent writes its files there) and reco
 
 ```bash
 SESSION_ROOT="$PWD/.claude/ultracode/session"                                # repo-local scratch (was /tmp)
-ULTRACODE_SESSION="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+ULTRACODE_SESSION="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$ULTRACODE_SESSION"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
 echo "session=$ULTRACODE_SESSION"
@@ -61,12 +61,13 @@ echo "repo=$PWD"
 
 Keep `$ULTRACODE_SESSION` (session dir) and the repo root (`$PWD`, an absolute path) for every spawn below.
 
-**The path is derived, not generated.** `CLAUDE_CODE_SESSION_ID` is the harness's session identifier, and every
-subagent inherits it unchanged — so this formula yields the same path in every mode below, from any working
-directory. Re-running it is a no-op, which is what keeps the five modes writing into and reading from one dir:
-`detect` writes the scout plan there, the parallel `scout` agents write their findings beside it, and `propose`
-reads all of them back. Never substitute a random suffix (`openssl rand`, `$RANDOM`, a timestamp) — a second dir
-mid-run would strand the scout findings where `propose` will not look for them.
+**The path is derived, not generated.** `CLAUDE_CODE_SESSION_ID` is the harness's session identifier (under Grok
+it is `GROK_SESSION_ID`, which the formula falls back to), and every subagent inherits it unchanged — so this
+formula yields the same path in every mode below, from any working directory. Re-running it is a no-op, which
+is what keeps the five modes writing into and reading from one dir: `detect` writes the scout plan there, the
+parallel `scout` agents write their findings beside it, and `propose` reads all of them back. Never substitute
+a random suffix (`openssl rand`, `$RANDOM`, a timestamp) — a second dir mid-run would strand the scout findings
+where `propose` will not look for them.
 
 ## Step 1 — DETECT (1 initializer)
 

@@ -22,13 +22,13 @@ documents the finished feature rather than an intermediate state.
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SESSION_ROOT="$REPO_ROOT/.claude/ultracode/session"
-SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}"
+SESSION_DIR="$SESSION_ROOT/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
 mkdir -p "$SESSION_DIR"
 echo "session=$SESSION_DIR"
 ls -t "$SESSION_DIR" 2>/dev/null | grep -E '^ultracode-(implement|spec|plan|research)-.*\.md$' | grep -vE '^ultracode-plan-.*-phase-'
 ```
 
-The session dir is **derived** from the harness's `CLAUDE_CODE_SESSION_ID` (inherited unchanged by subagents), so
+The session dir is **derived** from `CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID` (inherited unchanged), so
 every earlier stage's reports are in this one dir — which is what lets this command pick up *every* phase's
 implement report rather than whichever dir happened to be newest.
 

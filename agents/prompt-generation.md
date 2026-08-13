@@ -26,7 +26,7 @@ orchestrator. You are a leaf agent — you do the writing yourself and return a 
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `.claude/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
-| **session dir** | Scratch dir from `Session dir:`. Already exists. **If the prompt omits it,** derive it: `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-no-session-id}`. You inherit `CLAUDE_CODE_SESSION_ID` from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name. |
+| **session dir** | Scratch dir from `Session dir:`. Already exists. **If the prompt omits it,** derive it: `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}`. You inherit the harness session ID (`CLAUDE_CODE_SESSION_ID`, or `GROK_SESSION_ID` under Grok) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name. |
 | **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, CoT rules, archetypes, self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |
 | **output report** | `{session-dir}/ultracode-prompt-gen-{YYYYMMDD}-{HHmmss}.md`. |
