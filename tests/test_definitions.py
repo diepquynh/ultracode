@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "scripts" / "generate_definitions.py"
+INSTALLER = ROOT / "install.sh"
 CLAUDE_PLUGIN_ROOT = ROOT / "dist" / "claude" / "ultracode"
 CODEX_PLUGIN_ROOT = ROOT / "dist" / "codex" / "ultracode"
 BASELINE = json.loads((ROOT / "tests" / "claude-baseline.json").read_text(encoding="utf-8"))
@@ -396,6 +398,72 @@ class DefinitionTests(unittest.TestCase):
                 result = run_generator_with_default_output(target, check=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(str(expected_root), result.stdout)
+
+    def test_installer_dry_run_covers_both_harnesses(self) -> None:
+        for target in ("claude", "codex"):
+            with self.subTest(target=target):
+                result = subprocess.run(
+                    ["bash", str(INSTALLER), target, "--dry-run"],
+                    cwd=ROOT,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"for {target}", result.stdout)
+                self.assertIn("local marketplace", result.stdout)
+        both = subprocess.run(
+            ["bash", str(INSTALLER), "--dry-run"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(both.returncode, 0, both.stderr)
+        self.assertIn("for claude codex", both.stdout)
+
+    def test_installer_reports_missing_harness_before_installing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = subprocess.run(
+                ["bash", str(INSTALLER), "claude"],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": "/usr/bin:/bin",
+                    "ULTRACODE_INSTALL_DIR": str(Path(temp_dir) / "ultracode"),
+                },
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Missing harness CLI(s): claude", result.stderr)
+            self.assertIn("npm install -g @anthropic-ai/claude-code", result.stderr)
+            self.assertFalse((Path(temp_dir) / "ultracode").exists())
+
+    def test_installer_reports_missing_python_before_installing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bin_dir = Path(temp_dir) / "bin"
+            bin_dir.mkdir()
+            git_path = shutil.which("git")
+            self.assertIsNotNone(git_path)
+            (bin_dir / "git").symlink_to(str(git_path))
+            result = subprocess.run(
+                ["/bin/bash", str(INSTALLER), "claude"],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": str(bin_dir),
+                    "ULTRACODE_INSTALL_DIR": str(Path(temp_dir) / "ultracode"),
+                },
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Python 3 is required", result.stderr)
+            self.assertIn("https://www.python.org/downloads/", result.stderr)
+            self.assertFalse((Path(temp_dir) / "ultracode").exists())
 
     def test_model_router_rewrites_and_honors_explicit_fallbacks(self) -> None:
         for target, expected in (("claude", "sonnet"), ("codex", "gpt-5.6-terra")):
