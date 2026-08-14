@@ -30,6 +30,9 @@ HARNESS_TEMPLATE_KEYS = {
     "session_id_expr",
     "session_id_source",
     "session_id_names",
+    "session_id_agent_names",
+    "session_id_inheritance",
+    "session_id_unavailable",
     "reload_action",
     "balanced_model",
     "advanced_model",
@@ -40,6 +43,9 @@ HARNESS_SPECIFIC_SOURCE_TERMS = (
     ".codex/",
     "${CLAUDE_PLUGIN_ROOT}",
     "${PLUGIN_ROOT}",
+    "CLAUDE_CODE_SESSION_ID",
+    "GROK_SESSION_ID",
+    "CODEX_THREAD_ID",
 )
 AGENT_KEYS = {
     "schema_version",
@@ -162,6 +168,12 @@ def validate_harness_layout(path: Path, layout: Any) -> None:
         "skills_dir",
         "agents_dir",
         "plugin_root_env",
+        "session_id_expr",
+        "session_id_source",
+        "session_id_names",
+        "session_id_agent_names",
+        "session_id_inheritance",
+        "session_id_unavailable",
     }
     for target, values in layouts.items():
         require(isinstance(values, dict) and set(values) == required, f"{path}: invalid {target} layout")
@@ -467,15 +479,12 @@ def render_harness_template(
         "{{command_prefix}}": "/" if target == "claude" else "$",
         "{{agent_selector}}": "subagent_type" if target == "claude" else "agent_type",
         "{{agent_tool}}": "Agent" if target == "claude" else "spawn_agent",
-        "{{session_id_expr}}": "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
-        if target == "claude"
-        else "${CODEX_THREAD_ID:-no-session-id}",
-        "{{session_id_source}}": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID` (inherited unchanged)"
-        if target == "claude"
-        else "`CODEX_THREAD_ID`, falling back to `no-session-id` (inherited unchanged)",
-        "{{session_id_names}}": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID`"
-        if target == "claude"
-        else "`CODEX_THREAD_ID`, falling back to `no-session-id`",
+        "{{session_id_expr}}": layout["session_id_expr"],
+        "{{session_id_source}}": layout["session_id_source"],
+        "{{session_id_names}}": layout["session_id_names"],
+        "{{session_id_agent_names}}": layout["session_id_agent_names"],
+        "{{session_id_inheritance}}": layout["session_id_inheritance"],
+        "{{session_id_unavailable}}": layout["session_id_unavailable"],
         "{{reload_action}}": "running `/reload-plugins` or restarting the session"
         if target == "claude"
         else "starting a new Codex session",

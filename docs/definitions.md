@@ -28,7 +28,7 @@ Opus/Sol. Canonical capabilities and their Claude Code/Codex translations are ex
 direct `Skill` tool, so that mapping emits a skill-discovery instruction. Multiple Claude file/search tools map
 to Codex's `exec_command` or `apply_patch` capabilities.
 
-Harness-owned repo paths are defined in `definitions/harness-layout.json`. Claude Code output uses
+Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Claude Code output uses
 `.claude/ultracode` for its inventory/profile and `.claude/skills` for generated project skills. Codex output
 uses `.codex/ultracode` and its native `.agents/skills` discovery directory. The generator translates these
 paths in prompts, descriptions, references, session hooks, and the model router; do not hardcode a second
@@ -47,15 +47,20 @@ Use these tokens in neutral `prompt.md` files, definition descriptions, and shar
 | `{{command_prefix}}` | Explicit invocation prefix (`/` for Claude, `$` for Codex) |
 | `{{agent_selector}}` | Agent-spawn selector field (`subagent_type` or `agent_type`) |
 | `{{agent_tool}}` | Agent-spawn tool name (`Agent` or `spawn_agent`) |
-| `{{session_id_expr}}` | Harness session expression, including `CODEX_THREAD_ID` for Codex |
+| `{{session_id_expr}}` | Harness session expression configured by the selected layout |
 | `{{session_id_source}}` | Prose description of the harness session identifier |
+| `{{session_id_names}}` | Harness session identifier names and fallback behavior |
+| `{{session_id_agent_names}}` | Harness session identifier wording used by subagents |
+| `{{session_id_inheritance}}` | Harness session inheritance statement used by the orchestrator |
+| `{{session_id_unavailable}}` | Harness session-unavailable condition and fallback branch |
 | `{{balanced_model}}` / `{{advanced_model}}` | Concrete target models for pre-profile bootstrap spawns |
 | `{{reload_action}}` | Harness-specific instruction for discovering newly generated skills |
 
 For example, author the profile as `{repo-root}/{{runtime_dir}}/repo-profile.json` and a generated skill as
 `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Generation resolves the tokens to the selected harness. Validation
-rejects concrete `.claude/` or `.codex/` paths and harness-specific plugin-root variables in neutral sources,
-unknown template tokens, and unresolved template tokens in output.
+rejects concrete `.claude/` or `.codex/` paths, harness-specific plugin-root variables, and concrete harness
+session identifier names in neutral sources. It also rejects unknown template tokens and unresolved template
+tokens in output.
 
 ## Generate
 

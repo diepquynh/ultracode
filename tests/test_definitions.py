@@ -58,15 +58,12 @@ def adapt_for_target(text: str, target_name: str) -> str:
         if target_name == "claude"
         else "agent_type",
         "{{agent_tool}}": "Agent" if target_name == "claude" else "spawn_agent",
-        "{{session_id_expr}}": "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}"
-        if target_name == "claude"
-        else "${CODEX_THREAD_ID:-no-session-id}",
-        "{{session_id_source}}": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID` (inherited unchanged)"
-        if target_name == "claude"
-        else "`CODEX_THREAD_ID`, falling back to `no-session-id` (inherited unchanged)",
-        "{{session_id_names}}": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID`"
-        if target_name == "claude"
-        else "`CODEX_THREAD_ID`, falling back to `no-session-id`",
+        "{{session_id_expr}}": target["session_id_expr"],
+        "{{session_id_source}}": target["session_id_source"],
+        "{{session_id_names}}": target["session_id_names"],
+        "{{session_id_agent_names}}": target["session_id_agent_names"],
+        "{{session_id_inheritance}}": target["session_id_inheritance"],
+        "{{session_id_unavailable}}": target["session_id_unavailable"],
         "{{reload_action}}": "running `/reload-plugins` or restarting the session"
         if target_name == "claude"
         else "starting a new Codex session",
@@ -260,6 +257,9 @@ class DefinitionTests(unittest.TestCase):
                 ".codex/",
                 "${CLAUDE_PLUGIN_ROOT}",
                 "${PLUGIN_ROOT}",
+                "CLAUDE_CODE_SESSION_ID",
+                "GROK_SESSION_ID",
+                "CODEX_THREAD_ID",
             ):
                 self.assertNotIn(concrete_term, content, str(path))
 
@@ -599,6 +599,8 @@ class DefinitionTests(unittest.TestCase):
         for path in text_files:
             content = path.read_text(encoding="utf-8")
             self.assertNotIn(".claude/", content, str(path))
+            self.assertNotIn("CLAUDE_CODE_SESSION_ID", content, str(path))
+            self.assertNotIn("GROK_SESSION_ID", content, str(path))
         orchestrate = (
             CODEX_PLUGIN_ROOT / "skills" / "orchestrate" / "SKILL.md"
         ).read_text(encoding="utf-8")

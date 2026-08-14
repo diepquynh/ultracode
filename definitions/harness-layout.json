@@ -6,14 +6,26 @@
       "runtime_dir": ".claude/ultracode",
       "skills_dir": ".claude/skills",
       "agents_dir": ".claude/agents",
-      "plugin_root_env": "CLAUDE_PLUGIN_ROOT"
+      "plugin_root_env": "CLAUDE_PLUGIN_ROOT",
+      "session_id_expr": "${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}",
+      "session_id_source": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID` (inherited unchanged)",
+      "session_id_names": "`CLAUDE_CODE_SESSION_ID`, else `GROK_SESSION_ID`",
+      "session_id_agent_names": "`CLAUDE_CODE_SESSION_ID`, or `GROK_SESSION_ID` under Grok",
+      "session_id_inheritance": "`CLAUDE_CODE_SESSION_ID` is the harness's own session identifier — under\nGrok that variable is absent and `GROK_SESSION_ID` carries the same value, which is why the formula falls back\nto it — and **every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`)",
+      "session_id_unavailable": "If neither `CLAUDE_CODE_SESSION_ID` nor `GROK_SESSION_ID` is set,"
     },
     "codex": {
       "state_dir": ".codex",
       "runtime_dir": ".codex/ultracode",
       "skills_dir": ".agents/skills",
       "agents_dir": ".codex/agents",
-      "plugin_root_env": "PLUGIN_ROOT"
+      "plugin_root_env": "PLUGIN_ROOT",
+      "session_id_expr": "${CODEX_THREAD_ID:-no-session-id}",
+      "session_id_source": "`CODEX_THREAD_ID`, falling back to `no-session-id` (inherited unchanged)",
+      "session_id_names": "`CODEX_THREAD_ID`, falling back to `no-session-id`",
+      "session_id_agent_names": "`CODEX_THREAD_ID`, falling back to `no-session-id`",
+      "session_id_inheritance": "`CODEX_THREAD_ID` is the harness's own session identifier, and **every subagent inherits it unchanged**",
+      "session_id_unavailable": "If `CODEX_THREAD_ID` is not set,"
     }
   }
 }
