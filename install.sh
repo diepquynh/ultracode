@@ -51,7 +51,7 @@ if [ -n "$missing" ]; then
 fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  git -C "$INSTALL_DIR" pull --ff-only
+  git -C "$INSTALL_DIR" pull --rebase
 elif [ -e "$INSTALL_DIR" ]; then
   echo "$INSTALL_DIR exists but is not an Ultracode git checkout." >&2
   exit 1
