@@ -15,7 +15,7 @@ description: >
   reused skills. It grounds every generated skill in real captured exemplars and never invents framework
   patterns.
 model: sonnet
-effort: high
+effort: max
 tools: Read, Write, Edit, Bash, Grep, Glob
 timeout: 600
 context: fork

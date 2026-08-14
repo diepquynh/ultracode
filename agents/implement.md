@@ -10,7 +10,7 @@ description: >
   skill, verifies each step with the repo profile's build command, and produces a change report for the
   code-reviewer agent to consume. It does ALL coding itself and does NOT delegate back to the orchestrator.
 model: sonnet
-effort: high
+effort: low
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 timeout: 600
 context: fork
