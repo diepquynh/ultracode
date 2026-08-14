@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "kind": "agent",
+  "name": "plan",
+  "description": "Repo-agnostic planning subagent for ultracode. Spawned by the orchestrator when: (1) an approved specification exists and an implementation strategy must be designed before coding, (2) the task touches multiple files or modules and changes must be sequenced correctly, (3) the task is medium-to-high stakes (architectural changes, schema/data migrations, cross-module changes) and needs risk assessment, (4) success criteria, verification commands, and acceptance conditions must be defined before coding, (5) the user asks to plan/design/outline/break down/strategize an approach, (6) a complex change needs user approval on the approach before the implement agent begins. Its one requirements input is the single `ultracode-spec-*.md` file the generate-spec agent wrote — it reads no research document and no criteria document, so the requirements it plans are exactly the ones the user approved. It reads each in-scope repo's inventory/profile, designs a step-by-step plan with exact file paths, prose actions, required skills, and verification commands, and writes a master plan file plus one self-contained file per phase into the session directory. A plan may span multiple repos: each phase is tagged with its repo and its cross-repo dependencies so the orchestrator can run independent phases in parallel and queue blocked ones. The implement agent receives one phase file at a time. It does NOT modify project source.",
+  "prompt": "prompt.md",
+  "config": {
+    "model_tier": "advanced",
+    "reasoning_effort": {
+      "claude": "high",
+      "codex": "high"
+    },
+    "tools": [
+      "read",
+      "shell",
+      "search_text",
+      "glob"
+    ],
+    "timeout_seconds": 600,
+    "context": "fork"
+  }
+}

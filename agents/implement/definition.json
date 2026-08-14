@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "agent",
+  "name": "implement",
+  "description": "Repo-agnostic implementation subagent for ultracode. Spawned by the orchestrator when: (1) a plan exists (from the plan agent or EnterPlanMode) and code must be written, (2) files must be created, modified, or deleted to fulfill a request, (3) the user asks to \"implement\", \"build\", \"code\", \"create\", \"add\", \"modify\", \"fix\", \"refactor\", or \"change\" something, (4) code-reviewer findings must be fixed (the orchestrator re-spawns this agent with fix instructions), (5) verification failures need code changes. It reads the plan, loads the skills the orchestrator names, writes code following the repo's convention skill, verifies each step with the repo profile's build command, and produces a change report for the code-reviewer agent to consume. It does ALL coding itself and does NOT delegate back to the orchestrator.",
+  "prompt": "prompt.md",
+  "config": {
+    "model_tier": "balanced",
+    "reasoning_effort": {
+      "claude": "low",
+      "codex": "low"
+    },
+    "tools": [
+      "read",
+      "edit",
+      "write",
+      "shell",
+      "search_text",
+      "glob",
+      "skill"
+    ],
+    "timeout_seconds": 600,
+    "context": "fork"
+  }
+}

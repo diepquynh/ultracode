@@ -9,7 +9,7 @@ Creation and test skills are proposed from the stack reference's two catalogs â€
 (source components) and the **Test component catalog** (test types) â€” one skill per type that recurs.
 
 Every generated skill must also satisfy the meta-author standards in
-`${CLAUDE_PLUGIN_ROOT}/skills/meta-author/SKILL.md` (15 Laws, Chain-of-Thought, self-review).
+`{{plugin_root}}/skills/meta-author/SKILL.md` (15 Laws, Chain-of-Thought, self-review).
 
 ---
 

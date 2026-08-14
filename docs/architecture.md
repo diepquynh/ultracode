@@ -6,25 +6,33 @@ The plugin is intentionally split into two layers:
 
 ```
 ┌─ PLUGIN  (install once, everywhere) ─────────────────┐
-│  agents/    generalized pipeline  +  the INITIALIZER  │
-│  skills/    orchestrate + meta-author  (stack-neutral)│
+│  agents/    neutral definition + prompt sources        │
+│  skills/    neutral definition + prompt sources        │
 │  refs/      java-spring · typescript-node · python ·  │ ← the initializer's case-by-case library
 │             go · _generic · archetypes · contracts    │
-│  commands/  /init-kit + one per pipeline stage        │
+│  commands/  neutral definition + prompt sources        │
 │  hooks/     SessionStart  +  PreToolUse model router  │
 └────────────────────────┬──────────────────────────────┘
                          │  run /init-kit in a repo
                          ▼
-┌─ TARGET REPO  .claude/  (GENERATED, commit these) ────┐
-│  skills/<component>/SKILL.md × N   +  convention  +    │
-│  skills/module-hub/ (routing tables + references/)     │
-│  ultracode/INVENTORY.md   the master routing table     │
-│  ultracode/repo-profile.json  build/test/fmt · map     │
+┌─ TARGET REPO  (GENERATED, commit these) ──────────────┐
+│  harness skill dir: component skills + module hub      │
+│  harness runtime dir:                                  │
+│    INVENTORY.md          the master routing table      │
+│    repo-profile.json     build/test/fmt · map          │
 └───────────────────────────────────────────────────────┘
 ```
 
-The pipeline **agents never hardcode a build tool, skill name, or review rule.** At run time they read
-`.claude/ultracode/INVENTORY.md` and `repo-profile.json` — written by the initializer — and route from there.
+Harness-ready plugins are generated separately under `dist/claude/ultracode/` and
+`dist/codex/ultracode/`. Target-specific hook configs, shared hook scripts, references, assets, and neutral
+command definitions remain at the root and are translated into the applicable distribution.
+
+The pipeline **agents never hardcode a build tool, skill name, or review rule.** At run time they read the
+active harness's inventory and profile — `.claude/ultracode/` for Claude Code or `.codex/ultracode/` for
+Codex — and route from there. Generated project skills likewise use `.claude/skills/` or `.agents/skills/`.
+Agent, plugin-skill, and command authoring is harness-neutral: each definition directory contains
+`definition.json` and `prompt.md`. Both checked-in plugin distributions are generated from those sources. See
+[Definition authoring](definitions.md) for the layout and Codex target.
 
 ## Route by inventory, not by description
 
@@ -44,13 +52,11 @@ artifact you can open and read.
 That shared medium needs one path everybody agrees on, and a forked agent cannot see how the orchestrator chose
 it. So the path is **derived, never generated**:
 
-```
-{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}
-```
-
-`CLAUDE_CODE_SESSION_ID` is the harness's session identifier — under Grok that variable is absent and
-`GROK_SESSION_ID` holds the same value, so the formula falls back to it, then to a fixed `no-session-id` when
-neither is set — and **every subagent inherits it unchanged** (they also carry `CLAUDE_CODE_CHILD_SESSION=1`).
+Claude Code derives this as
+`{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}`.
+Codex derives it as
+`{repo-root}/.codex/ultracode/session/ultracode-session-${CODEX_THREAD_ID:-no-session-id}`. The selected harness
+identifier is inherited unchanged by spawned agents.
 Two properties follow, and the pipeline leans on both. It is **idempotent** — any agent, in any working
 directory, at any point in the session, recomputes the same path, so re-running the derivation never forks a
 second dir mid-run. And it is **collision-free per session** — two sessions against one repo get separate dirs
@@ -160,28 +166,23 @@ your decision before it spawns the generate agents.
 - **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block the orchestrator
   follows when spawning each subagent, so a repo tunes cost vs. capability without touching the plugin.
   `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own skill generation always runs
-  on Opus, set by the `/init-kit` command when it spawns the generate-skill agents — that's separate from this
-  block.)
-  - **The block is enforced, not advised.** `hooks/model-router.sh` runs as a `PreToolUse` hook on
-    `Task|Agent`, and for every `ultracode:*` spawn it resolves these same tables from *that spawn's* repo and
-    rewrites the call's `model` argument via `updatedInput`. Subagent model resolution runs
-    `CLAUDE_CODE_SUBAGENT_MODEL` → per-invocation argument → front matter → session model, so rewriting the
-    argument is the only hook-side control point — `SubagentStart` is context-only and cannot set a model.
-    Leave `CLAUDE_CODE_SUBAGENT_MODEL` unset or `inherit`, or it outranks the profile. The hook fails open: no
-    `jq`, no profile, or no matching entry leaves the spawn untouched. It re-reads the profile from disk per
-    spawn, so mid-session edits apply to the next one.
-  - **Front matter is the floor.** Every agent carries a `model` default (`opus` for explore / generate-spec /
-    plan / prompt-generation / module-documentation, `sonnet` for the rest), so an un-profiled repo runs each
-    stage on a sane tier instead of inheriting the orchestrator's model for all of them.
+  on the active harness's advanced model, set by the init-kit entry point when it spawns the generate-skill
+  agents — that's separate from this block.)
+  - **The block is enforced, not advised.** `hooks/model-router.py` runs as a `PreToolUse` hook on agent spawns,
+    resolves the route from *that spawn's* repo, translates neutral tiers for the active harness, and rewrites
+    the call's `model` argument via `updatedInput`. Once a profile exists, malformed or missing routes deny the
+    spawn. Set a route to `"default"` to select the generated agent default or `"inherit"` to intentionally
+    leave the spawn model untouched. The hook re-reads the profile per spawn, so mid-session edits apply next.
+  - **Generated defaults are the floor.** Claude agents retain their frontmatter defaults. Codex role TOML
+    omits `model`, because a role-level Codex model outranks the spawn argument; the hook supplies its generated
+    default when the profile is absent or explicitly says `"default"`.
   - **Effort cannot be routed this way.** `effort` is a subagent-definition field only — the Agent tool takes no
     per-invocation `effort`, and there is no `CLAUDE_CODE_SUBAGENT_EFFORT`. Every agent's `effort: high` in
     front matter therefore holds regardless of tier, and it overrides the session effort level.
-  - `models.byAgent` fixes a model per stage — `explore`, `plan`, and the authoring stages
-    `prompt-generation`/`module-documentation` run on Opus; `code-reviewer` and `execution-path-analyzer` run
-    on Sonnet.
-  - `models.byPhaseComplexity` switches the `implement` and `write-test` model by the plan phase's
-    complexity/stake tier (the `plan` agent tags every phase Low/Medium/High) — default `low`/`medium` →
-    Haiku, `high` → Sonnet, so cheap phases stay cheap while hard phases get a stronger model.
+  - `models.byAgent` fixes a neutral tier per stage — `explore`, `plan`, and the authoring stages use
+    `advanced`; `code-reviewer` and `execution-path-analyzer` use `balanced`.
+  - `models.byPhaseComplexity` switches `implement` and `write-test` by plan complexity — default
+    `low`/`medium` → `fast`, `high` → `balanced`.
   - **Not everyone runs Claude Code on Anthropic-hosted models** — it can point at a gateway or proxy, Amazon
     Bedrock, Google Vertex, or another backend, and each name resolves to whatever model *your* Claude Code
     serves. That's why the block is per-subagent and per-repo: match every stage to the models your setup

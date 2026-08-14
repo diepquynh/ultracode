@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "command",
+  "name": "write-test",
+  "description": "Spawn ultracode:write-test directly — write one test per NEW execution path from the EPA report, following this repo's test skills.",
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "[epa report path]"
+  }
+}

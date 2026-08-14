@@ -1,0 +1,5 @@
+interface:
+  display_name: "Write Test"
+  short_description: "Run the Write Test Ultracode stage explicitly."
+policy:
+  allow_implicit_invocation: false

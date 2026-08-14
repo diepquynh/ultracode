@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultracode.local/schemas/definition.schema.json",
+  "title": "Ultracode harness-neutral definition",
+  "oneOf": [
+    { "$ref": "#/$defs/agent" },
+    { "$ref": "#/$defs/skill" },
+    { "$ref": "#/$defs/command" }
+  ],
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "name", "description", "prompt", "config"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "agent" },
+        "name": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "pattern": "^[^/]+\\.md$" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_tier", "reasoning_effort", "tools", "timeout_seconds", "context"],
+          "properties": {
+            "model_tier": { "enum": ["fast", "balanced", "advanced"] },
+            "reasoning_effort": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "claude": { "enum": ["low", "medium", "high", "max"] },
+                "codex": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+              },
+              "minProperties": 1
+            },
+            "tools": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "uniqueItems": true
+            },
+            "timeout_seconds": { "type": "integer", "minimum": 1 },
+            "context": { "enum": ["fork"] }
+          }
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "name", "description", "prompt"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "skill" },
+        "name": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "pattern": "^[^/]+\\.md$" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "name", "description", "prompt", "config"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "kind": { "const": "command" },
+        "name": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "pattern": "^[^/]+\\.md$" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argument_hint"],
+          "properties": {
+            "argument_hint": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

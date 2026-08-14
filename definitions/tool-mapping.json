@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "capabilities": {
+    "read": {
+      "claude": "Read",
+      "codex": "exec_command",
+      "source_terms": ["Read"]
+    },
+    "edit": {
+      "claude": "Edit",
+      "codex": "apply_patch",
+      "source_terms": ["Edit"]
+    },
+    "write": {
+      "claude": "Write",
+      "codex": "apply_patch",
+      "source_terms": ["Write"]
+    },
+    "shell": {
+      "claude": "Bash",
+      "codex": "exec_command",
+      "source_terms": ["Bash"]
+    },
+    "search_text": {
+      "claude": "Grep",
+      "codex": "exec_command",
+      "source_terms": ["Grep"]
+    },
+    "glob": {
+      "claude": "Glob",
+      "codex": "exec_command",
+      "source_terms": ["Glob"]
+    },
+    "skill": {
+      "claude": "Skill",
+      "codex": "skill discovery",
+      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions.",
+      "source_terms": ["Skill"]
+    },
+    "web_search": {
+      "claude": "WebSearch",
+      "codex": "web_search",
+      "source_terms": ["WebSearch"]
+    },
+    "web_fetch": {
+      "claude": "WebFetch",
+      "codex": "web_search",
+      "source_terms": ["WebFetch"]
+    },
+    "delegate": {
+      "claude": "Agent",
+      "codex": "spawn_agent",
+      "source_terms": ["Agent", "Task"]
+    },
+    "ask_user": {
+      "claude": "AskUserQuestion",
+      "codex": "request_user_input",
+      "source_terms": ["AskUserQuestion"]
+    },
+    "plan": {
+      "claude": "EnterPlanMode",
+      "codex": "update_plan",
+      "source_terms": ["EnterPlanMode"]
+    }
+  }
+}

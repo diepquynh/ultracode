@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "layouts": {
+    "claude": {
+      "state_dir": ".claude",
+      "runtime_dir": ".claude/ultracode",
+      "skills_dir": ".claude/skills",
+      "agents_dir": ".claude/agents",
+      "plugin_root_env": "CLAUDE_PLUGIN_ROOT"
+    },
+    "codex": {
+      "state_dir": ".codex",
+      "runtime_dir": ".codex/ultracode",
+      "skills_dir": ".agents/skills",
+      "agents_dir": ".codex/agents",
+      "plugin_root_env": "PLUGIN_ROOT"
+    }
+  }
+}

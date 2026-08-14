@@ -5,9 +5,13 @@ implement, review, then offer to test and document — and is what you want for 
 spawn **one agent each**, for when you want a single stage and nothing else: re-run just the review, get an EPA
 report for code you wrote by hand, write a spec off a criteria doc you edited.
 
+Claude Code exposes these as slash commands (`/explore`). Codex packages the same workflows as explicit-only
+skills (`$explore`) because distributable Codex custom prompts are not a plugin component. In the table,
+`/<name>` means `/name` on Claude Code and `$name` on Codex.
+
 | Command | Agent it spawns | Reads | Writes |
 | --- | --- | --- | --- |
-| `/init-kit` | `ultracode:initializer` (5 modes, fanned out) | the repo | `.claude/skills/*`, `INVENTORY.md`, `repo-profile.json` |
+| `/init-kit` | `ultracode:initializer` (5 modes, fanned out) | the repo | harness skill directory, `INVENTORY.md`, `repo-profile.json` |
 | `/explore` | `ultracode:explore` | the repo + its inventory | research doc + criteria doc |
 | `/generate-spec` | `ultracode:generate-spec` | criteria + research docs | exactly one `ultracode-spec-*.md` |
 | `/plan` | `ultracode:plan` | the spec file, and nothing else | master plan + per-phase files |
@@ -18,16 +22,17 @@ report for code you wrote by hand, write a spec off a criteria doc you edited.
 | `/module-docs` | `ultracode:module-documentation` | every implement report | `module-hub/references/{area}.md` |
 | `/prompt-gen` | `ultracode:prompt-generation` | the target instruction file | that file + a report |
 
-Every command takes optional arguments (`/plan path/to/spec.md`) and otherwise infers its input from this
-session's directory — `.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-$GROK_SESSION_ID}`,
-derived rather than searched for, so each command reads exactly what the previous one wrote and never another
-session's artifacts (see [Architecture](architecture.md)). Running them in pipeline order therefore needs no
-arguments at all:
+Every command takes optional arguments (`/plan path/to/spec.md` or `$plan path/to/spec.md`) and otherwise
+infers its input from the harness runtime directory. Claude derives its session suffix from
+`CLAUDE_CODE_SESSION_ID`/`GROK_SESSION_ID`; Codex uses `CODEX_THREAD_ID`. Running the commands in pipeline order
+therefore needs no arguments at all:
 
 ```
 /explore <topic> → /generate-spec → /plan → /implement → /code-review   (repeat per phase)
                  → then, optionally: /epa → /write-test → /code-review · /module-docs
 ```
+
+The sequence above uses Claude syntax; replace each leading `/` with `$` on Codex.
 
 Everything after the per-phase `/code-review` is **optional**, and belongs after **every** phase rather than
 between them. The orchestrator runs those stages only if you ask for them; running the commands yourself is
@@ -38,15 +43,17 @@ boilerplate, no execution path to trace. Running `/epa` by hand overrides that t
 was planned as boilerplate-only and analyzes it anyway.
 
 Each command resolves its own model the same way the orchestrator does: from the repo's `repo-profile.json`
-`models` block, by the **bare** agent name (`models.byAgent["explore"]`), falling back to the agent's own
-`model` front matter when the profile is silent. `/implement` and `/write-test` resolve theirs from
-`models.byPhaseComplexity` on the phase's Complexity tier instead.
+`models` block, by the **bare** agent name (`models.byAgent["explore"]`). `/implement` and `/write-test`
+resolve theirs from `models.byPhaseComplexity` on the phase's Complexity tier instead. Routes normally use
+the neutral tiers `fast`, `balanced`, or `advanced`; `"default"` explicitly selects the generated agent
+default and `"inherit"` intentionally leaves the spawn model untouched.
 
 That resolution is also enforced independently of the command text. The plugin's `PreToolUse` hook
-(`hooks/model-router.sh`) intercepts every `ultracode:*` spawn, reads the same tables from the spawn's own repo,
+(`hooks/model-router.py`) intercepts every `ultracode:*` spawn, reads the same tables from the spawn's own repo,
 and rewrites the `model` argument — so a command that resolves the model wrongly, or a stale in-context copy of
 a profile you edited mid-session, still lands on the model the profile currently names. The hook re-reads
-`repo-profile.json` from disk on every spawn, so edits take effect on the next one with no restart.
+`repo-profile.json` from disk on every spawn, so edits take effect on the next one with no restart. Once a
+profile exists, a missing or malformed route is denied rather than treated as an accidental fallback.
 
 ## What the commands don't do
 

@@ -1,7 +1,7 @@
 # Output Contract — INVENTORY.md and repo-profile.json
 
 This file defines the exact structure the initializer's **generate** mode must write, and that the
-orchestrator and every subagent read. Both files live in the target repo at `.claude/ultracode/`.
+orchestrator and every subagent read. Both files live in the target repo at `{{runtime_dir}}/`.
 
 **Design principle — route by inventory, not by description.** Harnesses do not reliably route off
 skill front-matter `description` fields. Therefore the single source of truth is `INVENTORY.md`, a plain
@@ -12,12 +12,12 @@ reload) is a convenience layer on top; the inventory works the instant it is wri
 
 ## 1. INVENTORY.md
 
-Path: `.claude/ultracode/INVENTORY.md`. Use this exact section order and table shape.
+Path: `{{runtime_dir}}/INVENTORY.md`. Use this exact section order and table shape.
 
 ```markdown
 # {Repo Name} — ultracode Inventory
 
-Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `.claude/ultracode/repo-profile.json`
+Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `{{runtime_dir}}/repo-profile.json`
 
 > Route work by the tables below, BY NAME. Do not route by skill descriptions.
 > When a file type in a task matches a row in "Skill Application Mapping", load the listed skill(s) via the Skill tool.
@@ -52,7 +52,7 @@ Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `.c
 
 | Path glob                | Area        | Reference                                   |
 | ------------------------ | ----------- | ------------------------------------------- |
-| `{glob}`                 | {area name} | `.claude/skills/module-hub/references/{x}.md` or `—` |
+| `{glob}`                 | {area name} | `{{skills_dir}}/module-hub/references/{x}.md` or `—` |
 
 ## Review Rule Set
 
@@ -72,7 +72,7 @@ Seeded from the stack reference. IDs are stable; the code-reviewer and orchestra
 
 ## 2. repo-profile.json
 
-Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the inventory. Schema:
+Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventory. Schema:
 
 ```json
 {
@@ -97,9 +97,9 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
     { "glob": "src/**", "area": "app", "reference": null }
   ],
   "skills": [
-    { "name": "convention", "kind": "convention", "path": ".claude/skills/convention/SKILL.md", "componentType": null, "source": "generated" },
-    { "name": "entity", "kind": "creation", "path": ".claude/skills/entity/SKILL.md", "componentType": "entity", "source": "generated" },
-    { "name": "deploy", "kind": "other", "path": ".claude/skills/deploy/SKILL.md", "componentType": null, "source": "reused" }
+    { "name": "convention", "kind": "convention", "path": "{{skills_dir}}/convention/SKILL.md", "componentType": null, "source": "generated" },
+    { "name": "entity", "kind": "creation", "path": "{{skills_dir}}/entity/SKILL.md", "componentType": "entity", "source": "generated" },
+    { "name": "deploy", "kind": "other", "path": "{{skills_dir}}/deploy/SKILL.md", "componentType": null, "source": "reused" }
   ],
   "conventions": {
     "immutabilityKeyword": "final",
@@ -111,17 +111,17 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
   ],
   "models": {
     "byAgent": {
-      "explore": "opus",
-      "generate-spec": "opus",
-      "plan": "opus",
-      "code-reviewer": "sonnet",
-      "execution-path-analyzer": "sonnet",
-      "module-documentation": "opus",
-      "prompt-generation": "opus"
+      "explore": "advanced",
+      "generate-spec": "advanced",
+      "plan": "advanced",
+      "code-reviewer": "balanced",
+      "execution-path-analyzer": "balanced",
+      "module-documentation": "advanced",
+      "prompt-generation": "advanced"
     },
     "byPhaseComplexity": {
-      "implement":  { "low": "haiku", "medium": "haiku", "high": "sonnet" },
-      "write-test": { "low": "haiku", "medium": "haiku", "high": "sonnet" }
+      "implement":  { "low": "fast", "medium": "fast", "high": "balanced" },
+      "write-test": { "low": "fast", "medium": "fast", "high": "balanced" }
     }
   }
 }
@@ -132,9 +132,9 @@ Path: `.claude/ultracode/repo-profile.json`. Machine-readable twin of the invent
 - `skills[]` mirrors the INVENTORY Skills Inventory table 1:1.
 - Each `skills[]` entry carries `source`: `"generated"` (written this run) or `"reused"` (an existing skill kept as-is and only registered). A reused skill's `kind` may be `"other"` when it maps to no scouted component type.
 - `moduleMap[]` mirrors the INVENTORY Module/Area Map 1:1.
-- `models` routes which Claude model the orchestrator spawns each subagent with — this is how a repo tunes cost vs. capability per stage. Values are harness model names: `haiku`, `sonnet`, `opus`, or `fable`. The block (and every entry in it) is **optional**: when it or an entry is absent, the spawn carries no `model` override and the agent falls back to the `model` in its own front matter (`opus` for the research/authoring stages, `sonnet` for the rest) — never to the orchestrator's session model. Profiles written before this field still work; they just get those defaults. The block is enforced, not merely advised: the plugin's `PreToolUse` hook (`hooks/model-router.sh`) reads it on every `ultracode:*` spawn and rewrites the spawn's `model` argument, so editing this file retunes the pipeline mid-session without restarting.
-  - `models.byAgent` — the **static** model per fixed-model pipeline agent the orchestrator spawns, keyed by agent name (no `ultracode:` prefix). Defaults: `explore`, `generate-spec`, `plan` = `opus`; `code-reviewer`, `execution-path-analyzer` = `sonnet`; `module-documentation`, `prompt-generation` = `opus`. `generate-spec` authors the requirements contract every later stage is bound by, so it warrants the strongest model.
-  - `models.byPhaseComplexity` — the **dynamic** model for the two phase-driven agents, `implement` and `write-test` (also unprefixed keys). Each carries its own `{ low, medium, high }` map keyed by the plan phase's complexity/stake tier; the orchestrator picks the value for the phase being implemented, and an inline no-plan task counts as `low`. Because their model is tier-driven, `implement` and `write-test` are NOT listed in `byAgent`. Defaults: `low` = `haiku`, `medium` = `haiku`, `high` = `sonnet` for each.
+- `models` routes which model the orchestrator spawns each subagent with. Normal values are the harness-neutral tiers `fast`, `balanced`, and `advanced`; the generated hook resolves them through `definitions/model-mapping.json` for Claude Code or Codex. A concrete model name is also accepted, and an object such as `{ "claude": "custom-claude-model", "codex": "custom-codex-model" }` selects an explicit per-harness target without alias translation. Once a profile exists, every applicable route must be explicit: use `"default"` to select the agent definition's neutral default, or `"inherit"` to leave the spawn model untouched. Missing or malformed routes are denied by the model-router hook instead of silently falling back. When the whole profile is absent, generated agent defaults keep initialization possible. The hook (`hooks/model-router.py`) re-reads the file on every spawn, so editing it retunes the next spawn without restarting.
+  - `models.byAgent` — the **static** tier per fixed-model pipeline agent, keyed by agent name (no `ultracode:` prefix). Defaults: `explore`, `generate-spec`, `plan` = `advanced`; `code-reviewer`, `execution-path-analyzer` = `balanced`; `module-documentation`, `prompt-generation` = `advanced`.
+  - `models.byPhaseComplexity` — the **dynamic** tier for `implement` and `write-test`. Each carries its own `{ low, medium, high }` map keyed by the plan phase's complexity/stake tier; an inline no-plan task counts as `low`. Defaults: `low` = `fast`, `medium` = `fast`, `high` = `balanced` for each.
   - **Keys stay bare; spawns stay prefixed.** Every key in both maps is the agent's unprefixed name. The orchestrator looks a model up by the bare key, then spawns the agent as `ultracode:{key}` (e.g. key `explore` → `subagent_type: ultracode:explore`). Never write an `ultracode:`-prefixed key into this file — it would not match on lookup.
   - The `initializer` is absent by design — the `/init-kit` command (not the orchestrator) spawns it, as `ultracode:initializer`, and sets its model; it runs before this profile exists.
 - Consumers (orchestrator, subagents) prefer `repo-profile.json` for exact command strings and `INVENTORY.md` for routing decisions.

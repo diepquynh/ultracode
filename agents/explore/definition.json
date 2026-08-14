@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "agent",
+  "name": "explore",
+  "description": "Repo-agnostic research subagent for ultracode. Spawned by the orchestrator when: (1) a request is ambiguous and context must be gathered before planning, (2) an unfamiliar area of the codebase must be understood, (3) multiple approaches exist and trade-offs must be weighed, (4) existing patterns must be learned before changing code, (5) the user asks to research/investigate/understand/analyze something. It reads the repo inventory and module-hub, explores the code, traces data flows, and writes two documents for the generate-spec agent: a structured research document, and a criteria document that breaks the request into atomic testable criteria. The generate-spec agent turns both into the single specification file that the plan agent then plans from. It does NOT modify project source.",
+  "prompt": "prompt.md",
+  "config": {
+    "model_tier": "advanced",
+    "reasoning_effort": {
+      "claude": "high",
+      "codex": "high"
+    },
+    "tools": [
+      "read",
+      "write",
+      "shell",
+      "search_text",
+      "glob",
+      "web_search",
+      "web_fetch"
+    ],
+    "timeout_seconds": 600,
+    "context": "fork"
+  }
+}

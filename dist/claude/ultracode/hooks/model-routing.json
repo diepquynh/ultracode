@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "target": "claude",
+  "runtime_dir": ".claude/ultracode",
+  "tiers": {
+    "fast": "haiku",
+    "balanced": "sonnet",
+    "advanced": "opus"
+  },
+  "aliases": {
+    "haiku": "haiku",
+    "gpt-5.6-luna": "haiku",
+    "sonnet": "sonnet",
+    "gpt-5.6-terra": "sonnet",
+    "opus": "opus",
+    "gpt-5.6-sol": "opus"
+  },
+  "defaults": {
+    "code-reviewer": "sonnet",
+    "execution-path-analyzer": "sonnet",
+    "explore": "opus",
+    "generate-spec": "opus",
+    "implement": "sonnet",
+    "initializer": "sonnet",
+    "module-documentation": "opus",
+    "plan": "opus",
+    "prompt-generation": "opus",
+    "write-test": "sonnet"
+  }
+}

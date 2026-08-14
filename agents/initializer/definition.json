@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "agent",
+  "name": "initializer",
+  "description": "Repo-agnostic bootstrap + codebase-scouting agent for ultracode. Spawned directly by the /init-kit command (the main loop) in five modes: (1) detect — identify the stack, pick the matching stack reference, write a scout plan (stack, chosen reference, structured slice list, candidate component types), and discover any skills already under the repo's {{skills_dir}}/; (2) scout — read-only, fanned out N times in parallel, each owns one slice of the repo and captures the recurring component patterns + one exemplar + invariants per component type; (3) propose — merge scout findings, rank component types by cross-module ubiquity, reconcile against the existing skills (mark each new or existing, fold bespoke ones in), and write a skill proposal (markdown plus a machine JSON twin) for user approval; (4) generate-skill — fanned out once per skill the user chose to generate or regenerate, write that single per-repo skill (creation, convention, or module-hub) grounded in its captured exemplar; (5) generate-inventory — after every skill is written, assemble the routing INVENTORY.md and repo-profile.json over the generated plus the reused skills. It grounds every generated skill in real captured exemplars and never invents framework patterns.",
+  "prompt": "prompt.md",
+  "config": {
+    "model_tier": "balanced",
+    "reasoning_effort": {
+      "claude": "max",
+      "codex": "xhigh"
+    },
+    "tools": [
+      "read",
+      "write",
+      "edit",
+      "shell",
+      "search_text",
+      "glob"
+    ],
+    "timeout_seconds": 600,
+    "context": "fork"
+  }
+}

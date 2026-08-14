@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "agent",
+  "name": "module-documentation",
+  "description": "Repo-agnostic module/area documentation subagent for ultracode. Spawned by the orchestrator as the final pipeline step — an optional one, run only when the user asks for documentation, after all implement phases and their code reviews pass. It: (1) reads the research, plan, and ALL per-phase implement reports to learn what changed; (2) maps each changed source file to an area using the INVENTORY Module/Area Map; (3) creates or updates area reference files under `{{skills_dir}}/module-hub/references/{area}.md`; (4) grounds every documented name in real source — never generates from memory; (5) applies the meta-author standard (15 Laws, Chain-of-Thought) and Archetype C; (6) self-reviews each written file for accuracy, exhaustiveness, and top-to-bottom readability. It edits ONLY files under the references directory and writes one output report; it does not touch project source.",
+  "prompt": "prompt.md",
+  "config": {
+    "model_tier": "advanced",
+    "reasoning_effort": {
+      "claude": "high",
+      "codex": "high"
+    },
+    "tools": [
+      "read",
+      "edit",
+      "write",
+      "shell",
+      "search_text",
+      "glob"
+    ],
+    "timeout_seconds": 600,
+    "context": "fork"
+  }
+}

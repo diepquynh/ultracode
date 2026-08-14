@@ -1,0 +1,208 @@
+{
+  "agents": {
+    "code-reviewer": {
+      "frontmatter": {
+        "name": "code-reviewer",
+        "description": "Repo-agnostic post-change code review subagent for ultracode. Spawned by the orchestrator when: (1) an implement or write-test agent finishes and uncommitted code changes must be reviewed before proceeding, (2) the user asks to review the current working-tree changes, (3) correctness, convention adherence, security, test coverage, and clarity must be verified as a quality gate. It detects changed files from git, loads the repo's Review Rule Set from the inventory, reviews each change, and returns findings as a single JSON object the orchestrator parses. It does NOT modify project source.",
+        "model": "sonnet",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "06eba18ae134a79a13ea85bb9669e1c9e76ba687319a83f84b4b731ccaad2e57"
+    },
+    "execution-path-analyzer": {
+      "frontmatter": {
+        "name": "execution-path-analyzer",
+        "description": "Repo-agnostic execution-path analysis subagent for ultracode. Spawned by the orchestrator when the user has asked for tests — writing tests is optional and happens only on request, after every coding phase is implemented and reviewed — so: (1) the user accepted the orchestrator's closing-gate offer to write tests, (2) the user explicitly asks to analyze execution paths or to write tests. It reads the implement report to identify the changed source files, traces every execution path through each changed function/method (entry conditions, branches, early returns, error/exception paths, delegated helpers, empty/null and boundary cases), and writes a structured EPA report into the session directory for the write-test and code-reviewer agents to consume — one execution path per test. It is read-only on project source; the only file it writes is its report in the session dir.",
+        "model": "sonnet",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Bash",
+          "Write",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "d5f8ebfc7a074e67c1b54744ffc8b26505fa78bbf34de77067784f6ab18ad87a"
+    },
+    "explore": {
+      "frontmatter": {
+        "name": "explore",
+        "description": "Repo-agnostic research subagent for ultracode. Spawned by the orchestrator when: (1) a request is ambiguous and context must be gathered before planning, (2) an unfamiliar area of the codebase must be understood, (3) multiple approaches exist and trade-offs must be weighed, (4) existing patterns must be learned before changing code, (5) the user asks to research/investigate/understand/analyze something. It reads the repo inventory and module-hub, explores the code, traces data flows, and writes two documents for the generate-spec agent: a structured research document, and a criteria document that breaks the request into atomic testable criteria. The generate-spec agent turns both into the single specification file that the plan agent then plans from. It does NOT modify project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "719d57963365746d0c7accd88c1b6159c08ff91c51e34cceef0eb26b4a173f22"
+    },
+    "generate-spec": {
+      "frontmatter": {
+        "name": "generate-spec",
+        "description": "Repo-agnostic specification-authoring subagent for ultracode. Spawned by the orchestrator whenever a code-changing request needs a plan: (1) the explore agent has written a criteria document and the requirements must be turned into a contract before planning, (2) a request spans several deliverables that must be built in a set order, (3) a request spans more than one repo and each side's requirements must be stated, (4) the user asks to write specs / do spec-driven development / produce an SDD breakdown. It reads the criteria document and the research document(s) and writes exactly ONE specification file into the session directory — never a split set, never an index. That single file states every requirement in EARS notation with Given/When/Then acceptance criteria, groups the requirements into ordered deliverables, and names every contract the work provides and consumes, so the plan agent can turn that one file into one implementation plan without reading anything else. It states WHAT the system must do, never HOW to build it, and it does NOT modify project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "5a87ab2b03ec899a0dc5bf06b5b8c61fd50a2ea562a5ae7522940a7f106f250e"
+    },
+    "implement": {
+      "frontmatter": {
+        "name": "implement",
+        "description": "Repo-agnostic implementation subagent for ultracode. Spawned by the orchestrator when: (1) a plan exists (from the plan agent or EnterPlanMode) and code must be written, (2) files must be created, modified, or deleted to fulfill a request, (3) the user asks to \"implement\", \"build\", \"code\", \"create\", \"add\", \"modify\", \"fix\", \"refactor\", or \"change\" something, (4) code-reviewer findings must be fixed (the orchestrator re-spawns this agent with fix instructions), (5) verification failures need code changes. It reads the plan, loads the skills the orchestrator names, writes code following the repo's convention skill, verifies each step with the repo profile's build command, and produces a change report for the code-reviewer agent to consume. It does ALL coding itself and does NOT delegate back to the orchestrator.",
+        "model": "sonnet",
+        "effort": "low",
+        "tools": [
+          "Read",
+          "Edit",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob",
+          "Skill"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "67e1287e917b59f462c081ddb349de92fe5770b7724e7ec4a4e92299c9da5187"
+    },
+    "initializer": {
+      "frontmatter": {
+        "name": "initializer",
+        "description": "Repo-agnostic bootstrap + codebase-scouting agent for ultracode. Spawned directly by the /init-kit command (the main loop) in five modes: (1) detect — identify the stack, pick the matching stack reference, write a scout plan (stack, chosen reference, structured slice list, candidate component types), and discover any skills already under the repo's .claude/skills/; (2) scout — read-only, fanned out N times in parallel, each owns one slice of the repo and captures the recurring component patterns + one exemplar + invariants per component type; (3) propose — merge scout findings, rank component types by cross-module ubiquity, reconcile against the existing skills (mark each new or existing, fold bespoke ones in), and write a skill proposal (markdown plus a machine JSON twin) for user approval; (4) generate-skill — fanned out once per skill the user chose to generate or regenerate, write that single per-repo skill (creation, convention, or module-hub) grounded in its captured exemplar; (5) generate-inventory — after every skill is written, assemble the routing INVENTORY.md and repo-profile.json over the generated plus the reused skills. It grounds every generated skill in real captured exemplars and never invents framework patterns.",
+        "model": "sonnet",
+        "effort": "max",
+        "tools": [
+          "Read",
+          "Write",
+          "Edit",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "04220a9ee7c0968bc10f1a5034503ecd109c38bb6989bc3892294b593b216293"
+    },
+    "module-documentation": {
+      "frontmatter": {
+        "name": "module-documentation",
+        "description": "Repo-agnostic module/area documentation subagent for ultracode. Spawned by the orchestrator as the final pipeline step — an optional one, run only when the user asks for documentation, after all implement phases and their code reviews pass. It: (1) reads the research, plan, and ALL per-phase implement reports to learn what changed; (2) maps each changed source file to an area using the INVENTORY Module/Area Map; (3) creates or updates area reference files under `.claude/skills/module-hub/references/{area}.md`; (4) grounds every documented name in real source — never generates from memory; (5) applies the meta-author standard (15 Laws, Chain-of-Thought) and Archetype C; (6) self-reviews each written file for accuracy, exhaustiveness, and top-to-bottom readability. It edits ONLY files under the references directory and writes one output report; it does not touch project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Edit",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "1383b4b9592cc17f42d2a582e21fd42aa0cc22742bbf3393137d0ad46480730f"
+    },
+    "plan": {
+      "frontmatter": {
+        "name": "plan",
+        "description": "Repo-agnostic planning subagent for ultracode. Spawned by the orchestrator when: (1) an approved specification exists and an implementation strategy must be designed before coding, (2) the task touches multiple files or modules and changes must be sequenced correctly, (3) the task is medium-to-high stakes (architectural changes, schema/data migrations, cross-module changes) and needs risk assessment, (4) success criteria, verification commands, and acceptance conditions must be defined before coding, (5) the user asks to plan/design/outline/break down/strategize an approach, (6) a complex change needs user approval on the approach before the implement agent begins. Its one requirements input is the single `ultracode-spec-*.md` file the generate-spec agent wrote — it reads no research document and no criteria document, so the requirements it plans are exactly the ones the user approved. It reads each in-scope repo's inventory/profile, designs a step-by-step plan with exact file paths, prose actions, required skills, and verification commands, and writes a master plan file plus one self-contained file per phase into the session directory. A plan may span multiple repos: each phase is tagged with its repo and its cross-repo dependencies so the orchestrator can run independent phases in parallel and queue blocked ones. The implement agent receives one phase file at a time. It does NOT modify project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "573a860d2f100b3be41d66f8cbee6d639a599a105bd561820cb791085b0737fe"
+    },
+    "prompt-generation": {
+      "frontmatter": {
+        "name": "prompt-generation",
+        "description": "Repo-agnostic prompt-authoring subagent for ultracode. Spawned when: (1) creating or editing an AI/LLM system prompt, (2) creating or editing a SKILL.md skill file, (3) creating or editing a subagent markdown file, (4) reviewing prompt quality or debugging ambiguous-instruction failures, (5) the user asks to write or improve any instruction prompt. It applies the meta-author standard (15 Laws, Chain-of-Thought, self-review) and writes or edits files directly.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Edit",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob",
+          "Skill"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "eee23387f31d58dcee64c9aa425a1e6f4cb07451f3134c748cb0e8b279e40d34"
+    },
+    "write-test": {
+      "frontmatter": {
+        "name": "write-test",
+        "description": "Repo-agnostic test-writing subagent for ultracode. Spawned by the orchestrator only when the user has asked for tests — never on the orchestrator's own initiative, and never between coding phases — so: (1) every coding phase is implemented and reviewed and the user accepted the closing-gate offer to write tests, (2) the user explicitly asks to write or fix tests, (3) code-reviewer findings tied to the test-related rules in the INVENTORY Review Rule Set need to be fixed. It reads the implement report to identify changed files, reads the execution-path-analysis (EPA) report to learn which paths need coverage, loads the test skills named by the orchestrator, and writes tests that strictly follow them. It writes ONLY test code — never implementation code.",
+        "model": "sonnet",
+        "effort": "low",
+        "tools": [
+          "Read",
+          "Edit",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob",
+          "Skill"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "9d705249da54829c3ed91620e5598cd5e027212f46a494a323ef6c79f72b48d3"
+    }
+  },
+  "skills": {
+    "meta-author": {
+      "frontmatter": {
+        "name": "meta-author",
+        "description": "Authoring standard for any instruction file — SKILL.md skills, subagent markdown files, and LLM system prompts. ACTIVATE when creating or editing a skill, an agent definition, or an AI prompt. Encodes the 15 Writing Laws, Chain-of-Thought structure, and a mandatory self-review checklist so the output is executable by any model on the first pass without re-reading or guessing."
+      },
+      "body_sha256": "0f772a424b1646dae88b15d97837db64da12372f161788e73cfaac1b8e5302ff"
+    },
+    "orchestrate": {
+      "frontmatter": {
+        "name": "orchestrate",
+        "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
+      },
+      "body_sha256": "b51bfac7d6d90699c6bde056905b87a20a75a780c21440ce4eea795ce7fb6fa5"
+    }
+  }
+}

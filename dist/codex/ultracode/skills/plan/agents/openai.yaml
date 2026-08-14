@@ -1,0 +1,5 @@
+interface:
+  display_name: "Plan"
+  short_description: "Run the Plan Ultracode stage explicitly."
+policy:
+  allow_implicit_invocation: false

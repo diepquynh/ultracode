@@ -1,0 +1,5 @@
+interface:
+  display_name: "Generate Spec"
+  short_description: "Run the Generate Spec Ultracode stage explicitly."
+policy:
+  allow_implicit_invocation: false

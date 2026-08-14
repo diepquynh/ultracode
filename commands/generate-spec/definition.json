@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "command",
+  "name": "generate-spec",
+  "description": "Spawn ultracode:generate-spec directly — turn an explore criteria document into the single EARS specification file the plan agent reads.",
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "[criteria doc path] [| extra requirements or constraints]"
+  }
+}

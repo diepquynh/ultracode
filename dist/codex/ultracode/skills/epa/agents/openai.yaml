@@ -1,0 +1,5 @@
+interface:
+  display_name: "EPA"
+  short_description: "Run the EPA Ultracode stage explicitly."
+policy:
+  allow_implicit_invocation: false

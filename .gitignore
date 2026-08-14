@@ -1,6 +1,7 @@
 # OS / editor
 .DS_Store
 *.swp
+__pycache__/
 .idea/
 .vscode/
 
@@ -10,3 +11,4 @@
 
 # Orchestrator / init-kit working session scratch (per-run subdirs)
 /.claude/ultracode/session/
+/.codex/ultracode/session/

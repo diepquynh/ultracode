@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "command",
+  "name": "epa",
+  "description": "Spawn ultracode:execution-path-analyzer directly — enumerate every execution path through the changed code so tests can cover one path each.",
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "[implement report path]"
+  }
+}
