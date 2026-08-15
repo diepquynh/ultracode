@@ -20,4 +20,4 @@ Code and Codex distributions, and run the definition tests before publishing.
 Set an explicit `version` in `definitions/plugin-metadata.json` and bump it on every release (pushing commits
 alone does not trigger updates for version-pinned installs). Regenerate both distributions. Validate the
 Claude distribution with `claude plugin validate dist/claude/ultracode`. Also run
-`python3 -m unittest discover -s tests -v` to verify both generated harness formats.
+`node --test tests/test_definitions.test.js` to verify both generated harness formats.

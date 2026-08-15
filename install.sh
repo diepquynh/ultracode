@@ -28,9 +28,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-command -v python3 >/dev/null 2>&1 || {
-  echo "Python 3 is required by Ultracode's runtime hooks." >&2
-  echo "Install Python 3 first: https://www.python.org/downloads/" >&2
+command -v node >/dev/null 2>&1 || {
+  echo "Node is required by Ultracode's runtime hooks." >&2
+  echo "Install Node 20 or newer first: https://nodejs.org/" >&2
   exit 1
 }
 command -v git >/dev/null 2>&1 || { echo "git is required." >&2; exit 1; }
@@ -61,7 +61,7 @@ else
   git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
-GENERATOR="$INSTALL_DIR/scripts/generate_definitions.py"
+GENERATOR="$INSTALL_DIR/scripts/generate_definitions.js"
 [ -f "$GENERATOR" ] || { echo "Missing generator: $GENERATOR" >&2; exit 1; }
 
 for HARNESS in $TARGETS; do
@@ -69,7 +69,7 @@ for HARNESS in $TARGETS; do
   # Generated from source on every install, so no distribution is ever committed or shipped stale.
   # Wiped first: the generator overwrites but never prunes files a newer revision dropped.
   rm -rf "$PLUGIN_ROOT"
-  python3 "$GENERATOR" --target "$HARNESS" --source-root "$INSTALL_DIR" --output-dir "$PLUGIN_ROOT" \
+  node "$GENERATOR" --target "$HARNESS" --source-root "$INSTALL_DIR" --output-dir "$PLUGIN_ROOT" \
     || { echo "Failed to generate the $HARNESS plugin from $INSTALL_DIR." >&2; exit 1; }
 
   if [ "$HARNESS" = claude ]; then

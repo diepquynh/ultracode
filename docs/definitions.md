@@ -67,7 +67,7 @@ tokens in output.
 Generate the Claude Code plugin distribution with:
 
 ```bash
-python3 scripts/generate_definitions.py --target claude
+node scripts/generate_definitions.js --target claude
 ```
 
 This writes `agents/<name>.md`, `skills/<name>/SKILL.md`, `commands/<name>.md`, both Claude manifests, hooks,
@@ -77,7 +77,7 @@ root authoring sources and regenerate.
 Generate the Codex plugin distribution with:
 
 ```bash
-python3 scripts/generate_definitions.py --target codex
+node scripts/generate_definitions.js --target codex
 ```
 
 When `--output-dir` is omitted, the generator writes to `dist/<target>/ultracode` beneath `--source-root`.
@@ -95,7 +95,7 @@ Codex role TOML supports developer instructions, model/reasoning settings, and
 sandbox mode, but not Claude's per-agent timeout, fork-context, or granular tool allowlist. The generator keeps
 timeout/context in source comments, derives `sandbox_mode` from write capabilities, and prepends an explicit
 tool-vocabulary policy to the preserved prompt. Codex role files intentionally omit `model`: role-level model
-settings outrank spawn arguments, so `hooks/model-router.py` supplies the profile-selected model instead.
+settings outrank spawn arguments, so `hooks/model-router.js` supplies the profile-selected model instead.
 
 The generator writes `hooks/model-routing.json` per target from the neutral model mapping and agent defaults.
 Runtime repo profiles normally select `fast`, `balanced`, or `advanced`. Use `"default"` to select the agent's
@@ -107,23 +107,23 @@ intentional fallback from a missing route, which the hook denies once a profile 
 Check a previously generated Claude output without modifying it:
 
 ```bash
-python3 scripts/generate_definitions.py --target claude --check
+node scripts/generate_definitions.js --target claude --check
 ```
 
 Check a previously generated Codex plugin output and validate its manifest:
 
 ```bash
-python3 scripts/generate_definitions.py --target codex --check
-python3 /path/to/plugin-creator/scripts/validate_plugin.py dist/codex/ultracode
+node scripts/generate_definitions.js --target codex --check
+node /path/to/plugin-creator/scripts/validate_plugin.js dist/codex/ultracode
 ```
 
 Run all structural, equivalence, deterministic-generation, tool-mapping, and TOML checks with:
 
 ```bash
-python3 -m unittest discover -s tests -v
+node --test tests/test_definitions.test.js
 ```
 
 The Claude equivalence baseline stores frontmatter values and prompt hashes rather than duplicate prompt
-copies. Tests generate both targets twice, compare the trees byte-for-byte, parse every Codex agent with
-Python's `tomllib`, validate each source against JSON Schema when `jsonschema` is installed, and ensure all
-current declared and orchestration capabilities appear in the mapping.
+copies. Tests generate both targets twice, compare the trees byte-for-byte, parse every Codex agent TOML
+file, validate each source against JSON Schema when `jsonschema` is installed, and ensure all current
+declared and orchestration capabilities appear in the mapping.

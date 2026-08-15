@@ -1,6 +1,6 @@
 # Installation
 
-The installer requires Git, Python 3 for Ultracode's runtime hooks, and the CLI for each selected harness.
+The installer requires Git, Node 20+ for Ultracode's runtime hooks, and the CLI for each selected harness.
 
 ## Quick local install
 
@@ -35,7 +35,7 @@ until then.
 Generate the distribution first — `dist/` is not committed — then add its root as a marketplace:
 
 ```bash
-python3 scripts/generate_definitions.py --target claude
+node scripts/generate_definitions.js --target claude
 claude plugin marketplace add ./dist/claude/ultracode
 claude plugin install ultracode@ultracode
 ```
@@ -50,7 +50,7 @@ claude plugin update ultracode@ultracode
 For active development, regenerate and bypass installation for one session:
 
 ```bash
-python3 scripts/generate_definitions.py --target claude
+node scripts/generate_definitions.js --target claude
 claude --plugin-dir /absolute/path/to/ultracode/dist/claude/ultracode
 ```
 
@@ -60,7 +60,7 @@ Published marketplaces use the same `claude plugin marketplace add <owner/repo-o
 ## Codex manual install
 
 Codex installs plugins from marketplaces and has no Claude-style `--plugin-dir` option. Generate the
-distribution with `python3 scripts/generate_definitions.py --target codex`, then stage `dist/codex/ultracode`
+distribution with `node scripts/generate_definitions.js --target codex`, then stage `dist/codex/ultracode`
 beneath a local marketplace, with this manifest at `<marketplace>/.agents/plugins/marketplace.json`:
 
 ```json

@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/hooks/model-router.py\""
+            "command": "node \"${PLUGIN_ROOT}/hooks/model-router.js\""
           }
         ]
       }

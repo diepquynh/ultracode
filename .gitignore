@@ -1,7 +1,6 @@
 # OS / editor
 .DS_Store
 *.swp
-__pycache__/
 .idea/
 .vscode/
 
