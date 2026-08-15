@@ -23,15 +23,16 @@ The plugin is intentionally split into two layers:
 └───────────────────────────────────────────────────────┘
 ```
 
-Harness-ready plugins are generated separately under `dist/claude/ultracode/` and
-`dist/codex/ultracode/`. Target-specific hook configs, shared hook scripts, references, assets, and neutral
-command definitions remain at the root and are translated into the applicable distribution.
+Harness-ready plugins are build output, generated under `dist/claude/ultracode/` and `dist/codex/ultracode/`
+rather than committed — `install.sh` regenerates them from the checkout on every install. Target-specific hook
+configs, shared hook scripts, references, assets, and neutral command definitions remain at the root and are
+translated into the applicable distribution.
 
 The pipeline **agents never hardcode a build tool, skill name, or review rule.** At run time they read the
 active harness's inventory and profile — `.claude/ultracode/` for Claude Code or `.codex/ultracode/` for
 Codex — and route from there. Generated project skills likewise use `.claude/skills/` or `.agents/skills/`.
 Agent, plugin-skill, and command authoring is harness-neutral: each definition directory contains
-`definition.json` and `prompt.md`. Both checked-in plugin distributions are generated from those sources. See
+`definition.json` and `prompt.md`. Both plugin distributions are generated from those sources. See
 [Definition authoring](definitions.md) for the layout and Codex target.
 
 ## Route by inventory, not by description
@@ -163,15 +164,17 @@ your decision before it spawns the generate agents.
   server is assumed. If a code-graph MCP exists, agents prefer it; otherwise they fall back to Grep/Glob.
 - **Seeded from real setups.** The pipeline agents, `orchestrate`, `meta-author`, and the stack references
   were generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
-- **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block the orchestrator
-  follows when spawning each subagent, so a repo tunes cost vs. capability without touching the plugin.
+- **Model tiers, per repo and per phase.** `repo-profile.json` carries a `models` block that decides which
+  model each subagent spawn runs on, so a repo tunes cost vs. capability without touching the plugin.
   `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own skill generation always runs
   on the active harness's advanced model, set by the init-kit entry point when it spawns the generate-skill
-  agents — that's separate from this block.)
-  - **The block is enforced, not advised.** `hooks/model-router.py` runs as a `PreToolUse` hook on agent spawns,
-    resolves the route from *that spawn's* repo, translates neutral tiers for the active harness, and rewrites
-    the call's `model` argument via `updatedInput`. Once a profile exists, malformed or missing routes deny the
-    spawn. Set a route to `"default"` to select the generated agent default or `"inherit"` to intentionally
+  agents — that's separate from this block. The `initializer` is the one agent the hook never denies for a
+  missing route: it keeps the model init-kit chose, so re-initializing an already-initialized repo works.)
+  - **The hook owns the decision end to end.** `hooks/model-router.py` runs as a `PreToolUse` hook on agent
+    spawns, resolves the route from *that spawn's* repo, translates neutral tiers for the active harness, and
+    sets the call's `model` argument via `updatedInput`. The orchestrator and the explicit commands pass no
+    `model` argument at all, so there is no second place to keep in sync. Once a profile exists, malformed or
+    missing routes deny the spawn. Set a route to `"default"` to select the generated agent default or `"inherit"` to intentionally
     leave the spawn model untouched. The hook re-reads the profile per spawn, so mid-session edits apply next.
   - **Generated defaults are the floor.** Claude agents retain their frontmatter defaults. Codex role TOML
     omits `model`, because a role-level Codex model outranks the spawn argument; the hook supplies its generated
@@ -179,8 +182,8 @@ your decision before it spawns the generate agents.
   - **Effort cannot be routed this way.** `effort` is a subagent-definition field only — the Agent tool takes no
     per-invocation `effort`, and there is no `CLAUDE_CODE_SUBAGENT_EFFORT`. Every agent's `effort: high` in
     front matter therefore holds regardless of tier, and it overrides the session effort level.
-  - `models.byAgent` fixes a neutral tier per stage — `explore`, `plan`, and the authoring stages use
-    `advanced`; `code-reviewer` and `execution-path-analyzer` use `balanced`.
+  - `models.byAgent` fixes a neutral tier per stage — `explore`, `generate-spec`, `plan`, and the authoring
+    stages use `advanced`; `code-reviewer` and `execution-path-analyzer` use `balanced`.
   - `models.byPhaseComplexity` switches `implement` and `write-test` by plan complexity — default
     `low`/`medium` → `fast`, `high` → `balanced`.
   - **Not everyone runs Claude Code on Anthropic-hosted models** — it can point at a gateway or proxy, Amazon

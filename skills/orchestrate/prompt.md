@@ -22,10 +22,6 @@ harness's built-in `Explore` and `Plan` agents, which are not ultracode agents a
 pipeline. If a prefixed name does not resolve, the ultracode plugin is not loaded; say so rather than falling
 back to a built-in.
 
-**One exception — `repo-profile.json` keys are unprefixed.** The profile's `models.byAgent` and
-`models.byPhaseComplexity` are keyed by the **bare** agent name (`explore`, `implement`, …). Strip the
-`ultracode:` prefix when looking a model up, and re-add it when spawning.
-
 ## Step 0 — Build the repo registry (MANDATORY, before anything else)
 
 A session targets one or more **repos** (repositories). Establish the set of in-scope repos, then load each
@@ -43,15 +39,14 @@ later rule collapses to the single-repo flow.
      `{repo-root}/{{runtime_dir}}/repo-profile.json` now. These are **that repo's** source of truth for its
      **Skills Inventory** (which skill covers which component/file type), its **Skill Application Mapping**
      (file type → skills to load), its **Module/Area Map**, its **Commands** (build/test/testOne/format/lint),
-     its **Review Rule Set** (IDs + severity + which are auto-fixable), and its **Model Routing** (the profile's
-     `models` block — which model to spawn each subagent with; see **Model selection**). Route that repo's work
+     and its **Review Rule Set** (IDs + severity + which are auto-fixable). Route that repo's work
      by these tables **by name** — never by skill descriptions, never with another repo's tables.
 3. **Assign each repo a short repo key** — a lowercase slug, e.g. `backend`, `web`, `api`. Use it to tag tasks,
    session subdirs, and spawn prompts.
 
 Store, **per repo key**: its absolute root, its resolved command strings (build, test, testOne, format, lint),
-its auto-fixable rule-ID set, and its model routing (`models.byAgent` + `models.byPhaseComplexity`). These hold
-for the rest of the session. Never apply one repo's commands, skills, rules, or models to another repo's files.
+and its auto-fixable rule-ID set. These hold for the rest of the session. Never apply one repo's commands,
+skills, or rules to another repo's files.
 
 ## Session isolation
 
@@ -290,51 +285,6 @@ For every inline invocation and every fix, include a `Required skills:` line who
 INVENTORY **Skill Application Mapping** for the file types being changed. The `ultracode:plan` agent writes a
 `## Required Skills` section per phase (also derived from the INVENTORY).
 
-## Model selection (per repo, per phase)
-
-Spawn every subagent with the model **that spawn's repo** assigns in its `repo-profile.json` `models` block —
-this is how a repo tunes cost vs. capability per stage, and per phase for the two phase-driven agents.
-
-**Profile keys carry no `ultracode:` prefix.** Look each route up by the **bare** agent name, then spawn with
-the prefixed `subagent_type`. Normal route values are the neutral tiers `fast`, `balanced`, and `advanced`;
-the model-router hook translates the tier to the active harness's target model. Resolve the route like this:
-
-- **Static-model agents** — `ultracode:explore`, `ultracode:generate-spec`, `ultracode:plan`,
-  `ultracode:code-reviewer`, `ultracode:execution-path-analyzer`, `ultracode:module-documentation`,
-  `ultracode:prompt-generation`: use `models.byAgent["{bare agent}"]` — e.g. spawn `ultracode:explore` on
-  `models.byAgent["explore"]`, and `ultracode:generate-spec` on `models.byAgent["generate-spec"]`.
-  `ultracode:generate-spec` and `ultracode:plan` are always **cross-repo** — one agent covers every in-scope
-  repo — so both take their model from the **primary repo's** profile (the one holding `$SESSION_DIR`).
-- **Phase-driven agents** — `ultracode:implement` and `ultracode:write-test`: use
-  `models.byPhaseComplexity["{bare agent}"]["{tier}"]` — e.g. `models.byPhaseComplexity["implement"]["high"]` —
-  where `{tier}` is the phase's **Complexity** from the approved plan's Phase Index (also on each phase file
-  header and in the plan agent's return), lowercased to the profile key — `Low`→`low`, `Medium`→`medium`,
-  `High`→`high`. A low-stakes **inline** task with no plan counts as `low`. When you re-spawn
-  `ultracode:implement` or `ultracode:write-test` to fix code-review findings, reuse the **same tier** as the
-  phase being fixed (or `low` for an inline task) so the fix runs on the phase's model.
-- **Fallback.** `"default"` explicitly selects the agent definition's neutral default tier. `"inherit"`
-  explicitly leaves the spawn model untouched. Omit the `model` argument for either sentinel; the hook applies
-  `default` and deliberately does nothing for `inherit`. If the entire profile is absent, spawn without a model
-  so initialization can proceed with generated defaults. Once a profile exists, a missing route is an error;
-  tell the user to set a tier, `"default"`, or `"inherit"` instead of guessing.
-
-Pass a concrete custom model name through as the spawn's `model` argument when the profile uses one. For a
-neutral tier, pass the tier; the synchronous hook replaces it before the spawn executes. The
-`ultracode:initializer` is not covered here — the `/init-kit` command spawns it and sets its model, not you.
-
-**The profile wins even if you get this wrong.** The plugin's `PreToolUse` hook (`hooks/model-router.py`)
-intercepts every `ultracode:*` spawn, resolves the same tables itself, and rewrites the spawn's `model`
-argument. So the profile is authoritative, not advisory. Three consequences you must account for:
-
-- **Missing policy does not silently downgrade.** A malformed profile or absent required route denies the
-  spawn. The only intentional escape hatches are the explicit `"default"` and `"inherit"` values.
-- **Never claim which model ran.** If the user edited the profile mid-session, your stored routing is stale and
-  the hook silently used the newer value. Say which model you *requested*, or say nothing.
-- **`ultracode:implement` and `ultracode:write-test` spawns MUST carry `Phase file: {absolute path}`** as its own
-  prompt line whenever a plan exists. That line is how the hook reads the phase's **Complexity** header to pick
-  the tier. Omit it and the hook falls back to the phase number in any `…-phase-{N}…` path in the prompt, and
-  failing that to `low` — which would quietly run a High phase on the cheapest model.
-
 ## Step 1 — Classify the request
 
 | Category | Recognize by | Pipeline |
@@ -381,9 +331,7 @@ staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}`, the phase/plan file path, prior
 reports, the resolved command strings from that repo's repo-profile, and (for `ultracode:implement` /
 `ultracode:write-test`) the `Required skills:` line plus a `Phase file: {absolute path}` line whenever a plan
-exists — the model router hook reads the phase's Complexity tier from it. Spawn each agent on the model resolved
-per **Model selection** — `ultracode:implement` and `ultracode:write-test` on this phase's **Complexity** tier
-(`models.byPhaseComplexity`), every other agent on its `models.byAgent` model. The one exception to
+exists — the model-router hook reads the phase's Complexity tier from it (Hard rule 13). The one exception to
 "include prior reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
 
 ### The closing gate — optional tests, optional docs
@@ -471,7 +419,7 @@ omission reads as a bug.
 
 Both stages spawn with the same self-contained prompt contract as every other agent — `Repo root:`,
 `Session dir: {SESSION_DIR}/{repo-key}`, the prior report paths, that repo's resolved commands, and (for
-`ultracode:write-test`) the `Required skills:` line and the covered phase's **Complexity** tier for its model.
+`ultracode:write-test`) the `Required skills:` line and the covered phase's `Phase file:` path.
 Do **not** format, test, or document after an individual deliverable's phases: `format` runs once when the repo's
 last phase passes review, and each closing stage runs at most once per repo.
 
@@ -568,12 +516,14 @@ the user and ask how to proceed. Do not auto-run a 4th.
     cross-repo dependency exists, queue (Rule M5).
 12. **Single repo, unchanged.** With one in-scope repo, behave exactly as the single-repo flow — no
     parallelism, and the repo key is cosmetic.
-13. **Spawn on the profile's model.** Resolve each subagent's model from its repo's `repo-profile.json`
-    `models` block (**Model selection**): static agents from `models.byAgent`, and
-    `ultracode:implement`/`ultracode:write-test` from `models.byPhaseComplexity` on the phase's **Complexity**
-    tier (`low` for inline no-plan tasks). Profile keys are the **bare** agent names — strip the `ultracode:`
-    prefix to look a model up. Use `"default"` or `"inherit"` only as explicitly configured; a missing route
-    in an existing profile is an error. Never borrow another repo's models.
+13. **Never pick a model.** The plugin's `PreToolUse` hook (`hooks/model-router.py`) reads each spawn's
+    `Repo root:` line, resolves that repo's `repo-profile.json` `models` block itself, and rewrites the spawn's
+    `model` argument. So omit the `model` argument, never name a model in a spawn, and never tell the user
+    which model ran — only which agent you spawned. One line is load-bearing for the hook:
+    `ultracode:implement` and `ultracode:write-test` spawns MUST carry `Phase file: {absolute path}` whenever a
+    plan exists, because that is how the hook reads the phase's **Complexity** header. Omit it and the hook
+    falls back to the phase number in any `…-phase-{N}…` path in the prompt, then to `low` — quietly running a
+    High phase on the cheapest model.
 14. **Always spawn the prefixed name.** Every `subagent_type` you pass is `ultracode:{agent}` (**Agent
     naming**). Never spawn bare `explore` or `plan` — those are the harness's built-in agents, not ultracode's,
     and they ignore this pipeline.

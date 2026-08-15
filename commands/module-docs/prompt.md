@@ -12,7 +12,7 @@ This is the pipeline's last stage, and an **optional** one — the orchestrator 
 once, after **every** phase has passed review — not after each deliverable. Pass every implement report so it
 documents the finished feature rather than an intermediate state.
 
-## Step 1 — Collect the reports, session, and model
+## Step 1 — Collect the reports and session
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -40,14 +40,12 @@ directly: an unmatched glob aborts the command under zsh.
 Run this repo's `format` command (from the profile's `commands.format`) once before spawning, so the documented
 source matches its final formatting.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from
-`models.byAgent["module-documentation"]` (bare key). Absent → omit the `model` argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:module-documentation
-model: {models.byAgent["module-documentation"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Implement reports: {comma-separated paths, every phase}.

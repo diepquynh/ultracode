@@ -1,5 +1,0 @@
-interface:
-  display_name: "Code Review"
-  short_description: "Run the Code Review Ultracode stage explicitly."
-policy:
-  allow_implicit_invocation: false

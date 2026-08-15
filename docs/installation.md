@@ -21,6 +21,10 @@ From a checkout, use `bash install.sh` for both or pass `claude`/`codex` for one
 checkout under `${XDG_DATA_HOME:-$HOME/.local/share}/ultracode`; override it with `ULTRACODE_INSTALL_DIR`.
 Pass `--dry-run` when running the local script to preview the workflow.
 
+The installer generates `dist/<harness>/ultracode` from that checkout's neutral sources on every run, after
+pulling. The distributions are build output rather than committed files, so an install always matches the
+revision it just fetched and no plugin is ever shipped stale.
+
 After a Claude Code install, restart Claude Code. After a Codex install, start a new session, open `/hooks`,
 and trust Ultracode's hooks; start one more session so the `SessionStart` hook runs. Codex intentionally does
 not trust plugin hooks automatically, so initialization reminders and profile model enforcement remain inactive
@@ -28,23 +32,25 @@ until then.
 
 ## Claude Code manual install
 
-The generated Claude marketplace root is `dist/claude/ultracode`:
+Generate the distribution first — `dist/` is not committed — then add its root as a marketplace:
 
 ```bash
+python3 scripts/generate_definitions.py --target claude
 claude plugin marketplace add ./dist/claude/ultracode
 claude plugin install ultracode@ultracode
 ```
 
-Local marketplaces do not auto-update. After regenerating, run:
+Local marketplaces do not auto-update. After pulling and regenerating, run:
 
 ```bash
 claude plugin marketplace update ultracode
 claude plugin update ultracode@ultracode
 ```
 
-For active development, bypass installation for one session:
+For active development, regenerate and bypass installation for one session:
 
 ```bash
+python3 scripts/generate_definitions.py --target claude
 claude --plugin-dir /absolute/path/to/ultracode/dist/claude/ultracode
 ```
 
@@ -53,9 +59,9 @@ Published marketplaces use the same `claude plugin marketplace add <owner/repo-o
 
 ## Codex manual install
 
-Codex installs plugins from marketplaces and has no Claude-style `--plugin-dir` option. Stage
-`dist/codex/ultracode` beneath a local marketplace, with this manifest at
-`<marketplace>/.agents/plugins/marketplace.json`:
+Codex installs plugins from marketplaces and has no Claude-style `--plugin-dir` option. Generate the
+distribution with `python3 scripts/generate_definitions.py --target codex`, then stage `dist/codex/ultracode`
+beneath a local marketplace, with this manifest at `<marketplace>/.agents/plugins/marketplace.json`:
 
 ```json
 {

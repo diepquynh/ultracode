@@ -64,7 +64,7 @@ tokens in output.
 
 ## Generate
 
-Generate the checked-in Claude Code plugin distribution with:
+Generate the Claude Code plugin distribution with:
 
 ```bash
 python3 scripts/generate_definitions.py --target claude
@@ -74,14 +74,16 @@ This writes `agents/<name>.md`, `skills/<name>/SKILL.md`, `commands/<name>.md`, 
 references, assets, and the license beneath the plugin root. They are generated files; make changes in the
 root authoring sources and regenerate.
 
-Generate the checked-in Codex plugin distribution with:
+Generate the Codex plugin distribution with:
 
 ```bash
 python3 scripts/generate_definitions.py --target codex
 ```
 
 When `--output-dir` is omitted, the generator writes to `dist/<target>/ultracode` beneath `--source-root`.
-Pass `--output-dir <path>` to generate a plugin somewhere else.
+Pass `--output-dir <path>` to generate a plugin somewhere else. `dist/` is build output: it is gitignored, never
+committed, and `install.sh` regenerates it from the checkout on every install, so no distribution can ship
+stale. Generate it yourself before a manual install or a validation run.
 
 This writes Codex agent role files to `agents/<name>.toml` and Codex skills to
 `skills/<name>/SKILL.md` beneath the Codex plugin root. Because plugin-bundled custom prompts are unsupported
@@ -102,13 +104,13 @@ intentional fallback from a missing route, which the hook denies once a profile 
 
 ## Validate
 
-Check the committed Claude output without modifying it:
+Check a previously generated Claude output without modifying it:
 
 ```bash
 python3 scripts/generate_definitions.py --target claude --check
 ```
 
-Check the committed Codex plugin output and validate its manifest:
+Check a previously generated Codex plugin output and validate its manifest:
 
 ```bash
 python3 scripts/generate_definitions.py --target codex --check

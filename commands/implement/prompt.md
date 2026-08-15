@@ -7,7 +7,7 @@ verifies each step with the profile's build command.
 
 Arguments (may be empty): `{{arguments}}`
 
-## Step 1 — Resolve the phase, session, skills, and model
+## Step 1 — Resolve the phase, session, and skills
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -39,17 +39,17 @@ Collect every earlier phase's `ultracode-implement-*-phase-*.md` as prior phase 
 
 Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json` and `INVENTORY.md`:
 
-- **Model:** `models.byPhaseComplexity["implement"]["{tier}"]`, where `{tier}` is the chosen phase's
-  **Complexity** lowercased (`Low`→`low`), or `low` for inline mode. Profile keys are **bare**. Absent → omit
-  the `model` argument.
 - **Required skills:** for a phase file, its `## Required Skills` section. For inline mode, derive them from the
   INVENTORY **Skill Application Mapping** for the file types being changed. Always include `convention`.
+- **Build command:** `commands.build` from the profile, verbatim.
 
 ## Step 2 — Spawn
 
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile, reading the phase's
+**Complexity** from the `Phase file:` line below. Pass that line whenever a phase file exists.
+
 ```
 {{agent_selector}}: ultracode:implement
-model: {models.byPhaseComplexity["implement"][tier], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Phase file: {phase file path}          # omit this line in inline mode

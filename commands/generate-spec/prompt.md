@@ -8,7 +8,7 @@ a split set, never an index.
 
 Arguments (may be empty): `{{arguments}}`
 
-## Step 1 — Resolve repo, session, inputs, and model
+## Step 1 — Resolve repo, session, and inputs
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -34,14 +34,12 @@ directly: an unmatched glob aborts the command under zsh.
   in the prompt — never skip the spec stage.
 - **No session dir at all** → create one exactly as `{{command_prefix}}explore` Step 1 does.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from `models.byAgent["generate-spec"]`
-(bare key). Absent → omit the `model` argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:generate-spec
-model: {models.byAgent["generate-spec"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Criteria document: {criteria doc path, or the inline criteria text}.

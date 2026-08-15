@@ -5,6 +5,9 @@ __pycache__/
 .idea/
 .vscode/
 
+# Harness plugin distributions — generated from the neutral sources by install.sh
+/dist/
+
 # Local experiments — never ship generated per-repo output with the plugin
 /sandbox/
 /tmp/

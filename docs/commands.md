@@ -42,18 +42,22 @@ Within a test run, the plan's `Test policy: Skip` tag marks the phases not worth
 boilerplate, no execution path to trace. Running `/epa` by hand overrides that tag: the command notes the phase
 was planned as boilerplate-only and analyzes it anyway.
 
-Each command resolves its own model the same way the orchestrator does: from the repo's `repo-profile.json`
-`models` block, by the **bare** agent name (`models.byAgent["explore"]`). `/implement` and `/write-test`
-resolve theirs from `models.byPhaseComplexity` on the phase's Complexity tier instead. Routes normally use
-the neutral tiers `fast`, `balanced`, or `advanced`; `"default"` explicitly selects the generated agent
-default and `"inherit"` intentionally leaves the spawn model untouched.
+No command picks a model, and neither does the orchestrator. The plugin's `PreToolUse` hook
+(`hooks/model-router.py`) intercepts every `ultracode:*` spawn, resolves the route from the `models` block of
+that spawn's own `repo-profile.json`, and sets the `model` argument itself — by the **bare** agent name
+(`models.byAgent["explore"]`), or, for `/implement` and `/write-test`, from `models.byPhaseComplexity` on the
+phase's Complexity tier, which the hook reads out of the `Phase file:` path those commands pass. Routes
+normally use the neutral tiers `fast`, `balanced`, or `advanced`; `"default"` explicitly selects the generated
+agent default and `"inherit"` intentionally leaves the spawn model untouched.
 
-That resolution is also enforced independently of the command text. The plugin's `PreToolUse` hook
-(`hooks/model-router.py`) intercepts every `ultracode:*` spawn, reads the same tables from the spawn's own repo,
-and rewrites the `model` argument — so a command that resolves the model wrongly, or a stale in-context copy of
-a profile you edited mid-session, still lands on the model the profile currently names. The hook re-reads
-`repo-profile.json` from disk on every spawn, so edits take effect on the next one with no restart. Once a
-profile exists, a missing or malformed route is denied rather than treated as an accidental fallback.
+Because the hook re-reads `repo-profile.json` from disk on every spawn, edits take effect on the next one with
+no restart, and a stale in-context copy of a profile cannot misroute a stage. Once a profile exists, a missing
+or malformed route is denied rather than treated as an accidental fallback.
+
+`/init-kit` is the exception, because it runs before there is a profile to route by: it sets a model per
+initializer mode itself (advanced for skill generation, balanced for the rest). The hook leaves those spawns
+alone rather than denying them for a missing route, so re-initializing a repo that already has a profile
+behaves like a first run. Add an `initializer` entry to `models.byAgent` only to override that per-mode choice.
 
 ## What the commands don't do
 

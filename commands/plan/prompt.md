@@ -8,7 +8,7 @@ harness's built-in Plan agent, which ignores this pipeline.
 
 Arguments (may be empty): `{{arguments}}`
 
-## Step 1 — Resolve the spec, session, and model
+## Step 1 — Resolve the spec and session
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -34,14 +34,12 @@ an unmatched glob aborts the command under zsh.
   criteria document, a research document, or the raw request: the plan agent's one requirements source is the
   approved spec.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from `models.byAgent["plan"]` (bare key).
-Absent → omit the `model` argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:plan
-model: {models.byAgent["plan"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Specification: {spec file path}.

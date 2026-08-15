@@ -10,7 +10,8 @@ unknown stacks by discovering components empirically.
 
 ## Editing agents, plugin skills, and commands
 
-Do not edit generated files under `dist/` directly. Follow
+Do not edit generated files under `dist/` directly — that tree is build output, regenerated on every install
+and never committed, so edits there are lost. Follow
 [Definition authoring](definitions.md): update the definition's JSON and prompt source, generate the Claude
 Code and Codex distributions, and run the definition tests before publishing.
 

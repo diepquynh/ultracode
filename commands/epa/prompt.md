@@ -17,7 +17,7 @@ Running this command **is** the request for tests, so no gate applies: it overri
 report's phase is tagged `Skip`, say so once ("phase {N} was planned as boilerplate-only: {the header's
 rationale} — analyzing anyway because you asked") and proceed. Never refuse on the tag.
 
-## Step 1 — Resolve the implement report, session, and model
+## Step 1 — Resolve the implement report and session
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -40,14 +40,12 @@ directly: an unmatched glob aborts the command under zsh.
 - **No implement report** → stop and tell the user to run `{{command_prefix}}implement` first. The agent's required input is a
   report with a `## Changed Files` section; without one it has no files to trace.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from
-`models.byAgent["execution-path-analyzer"]` (bare key). Absent → omit the `model` argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:execution-path-analyzer
-model: {models.byAgent["execution-path-analyzer"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Implement report: {implement report path}.

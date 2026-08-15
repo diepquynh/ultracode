@@ -1,5 +1,0 @@
-interface:
-  display_name: "Init Kit"
-  short_description: "Run the Init Kit Ultracode stage explicitly."
-policy:
-  allow_implicit_invocation: false

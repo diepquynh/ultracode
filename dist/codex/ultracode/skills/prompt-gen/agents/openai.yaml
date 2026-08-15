@@ -1,5 +1,0 @@
-interface:
-  display_name: "Prompt Gen"
-  short_description: "Run the Prompt Gen Ultracode stage explicitly."
-policy:
-  allow_implicit_invocation: false

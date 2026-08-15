@@ -10,7 +10,7 @@ Task: `{{arguments}}`
 
 If the arguments are empty, ask what to write or edit and stop.
 
-## Step 1 — Resolve the target, session, and model
+## Step 1 — Resolve the target and session
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -28,15 +28,13 @@ already created it. `mkdir -p` on an existing dir is a no-op.
 Resolve the **target**: an explicit path in `{{arguments}}`, the file the task names, or `New` when the agent is
 creating one. If the target exists, note its path so the agent edits rather than rewrites blindly.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from
-`models.byAgent["prompt-generation"]` (bare key). Absent → omit the `model` argument. This repo may have no
-profile at all (prompt authoring does not need an inventory) — then just omit the argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile, and prompt
+authoring works in a repo that has no profile at all.
 
 ```
 {{agent_selector}}: ultracode:prompt-generation
-model: {models.byAgent["prompt-generation"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Target: {absolute target path, or 'New'}.

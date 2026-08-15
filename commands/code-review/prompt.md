@@ -7,7 +7,7 @@ against this repo's Review Rule Set, and returns findings as one JSON object. It
 
 Arguments (may be empty): `{{arguments}}`
 
-## Step 1 — Resolve context, scope, and model
+## Step 1 — Resolve context and scope
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -35,14 +35,12 @@ directly: an unmatched glob aborts the command under zsh.
   otherwise omit the line.
 - For a `test` review, pass the newest EPA report so the reviewer can check path coverage.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json`; take the model from `models.byAgent["code-reviewer"]`
-(bare key). Absent → omit the `model` argument.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:code-reviewer
-model: {models.byAgent["code-reviewer"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Review context: {implementation | test | full}.
@@ -61,8 +59,8 @@ Parse the returned JSON. If it passed, say so and name the next stage. Otherwise
    skip re-review.
 3. For the remaining HIGH/MEDIUM findings, spawn the fix agent — `ultracode:implement` for an implementation
    review, `ultracode:write-test` for a test review — with **only** those findings, the `Required skills:` line,
-   and the ledger path. Spawn it on the phase's own Complexity tier from
-   `models.byPhaseComplexity` (`low` for an inline task).
+   the ledger path, and the phase's `Phase file:` path when a plan exists, so the hook routes the fix on the
+   phase's own model.
 4. Re-spawn `ultracode:code-reviewer` with the same context and repeat.
 
 **Cap at 3 iterations.** Do not exit with unresolved HIGH/MEDIUM findings and do not auto-run a 4th pass — report

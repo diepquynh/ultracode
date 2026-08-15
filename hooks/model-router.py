@@ -139,23 +139,28 @@ def main() -> int:
     repo = Path(repo_value) if repo_value and Path(repo_value).is_dir() else Path(hook_input.get("cwd", os.getcwd()))
     profile_path = repo / routing["runtime_dir"] / "repo-profile.json"
 
-    if agent == "initializer" and not profile_path.is_file():
-        route: Any = tool_input.get("model", "default")
-    elif not profile_path.is_file():
-        route = "default"
+    if not profile_path.is_file():
+        route: Any = tool_input.get("model", "default") if agent == "initializer" else "default"
     else:
         try:
             profile = json.loads(profile_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            profile = None
+        if not isinstance(profile, dict):
             deny(f"ultracode: {profile_path} is invalid; refusing an unenforced spawn.")
             return 0
         present, route = profile_route(profile, agent, prompt)
         if not present:
-            deny(
-                f"ultracode: {profile_path} has no model route for {agent}; "
-                'set a tier, "default", or "inherit" explicitly.'
-            )
-            return 0
+            if agent != "initializer":
+                deny(
+                    f"ultracode: {profile_path} has no model route for {agent}; "
+                    'set a tier, "default", or "inherit" explicitly.'
+                )
+                return 0
+            # The initializer is spawned by the init-kit command, which sets its model per mode, and the
+            # seeded profile deliberately carries no initializer route. Denying here would make every
+            # re-initialization of an already-initialized repo fail. A route set by hand still wins.
+            route = tool_input.get("model", "default")
 
     action, model = resolve_model(route, routing, agent)
     if action == "inherit":

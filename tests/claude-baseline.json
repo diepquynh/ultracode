@@ -110,7 +110,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "04220a9ee7c0968bc10f1a5034503ecd109c38bb6989bc3892294b593b216293"
+      "body_sha256": "24047cb8fdaa98a74d76154da809fc1846bef413e2bb58fd4ccfd0d8e0ef0b31"
     },
     "module-documentation": {
       "frontmatter": {
@@ -146,7 +146,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "573a860d2f100b3be41d66f8cbee6d639a599a105bd561820cb791085b0737fe"
+      "body_sha256": "0d4e9235f2f3fcb4094f6459e4682804f7584f77be6c1ad186b1c79425b329fd"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -202,7 +202,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "b51bfac7d6d90699c6bde056905b87a20a75a780c21440ce4eea795ce7fb6fa5"
+      "body_sha256": "b562c0c05dcb77e26474001ce9dd8f411879816e7285732d5af7300de334ac78"
     }
   }
 }

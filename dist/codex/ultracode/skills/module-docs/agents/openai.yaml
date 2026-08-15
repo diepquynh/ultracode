@@ -1,5 +1,0 @@
-interface:
-  display_name: "Module Docs"
-  short_description: "Run the Module Docs Ultracode stage explicitly."
-policy:
-  allow_implicit_invocation: false

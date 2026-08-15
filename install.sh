@@ -23,6 +23,7 @@ esac
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Would install Ultracode for $TARGETS from $REPO_URL into $INSTALL_DIR."
+  echo "Would generate dist/<harness>/ultracode from the checkout's neutral sources."
   echo "Would configure the local marketplace and install the Ultracode plugin."
   exit 0
 fi
@@ -60,9 +61,16 @@ else
   git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
+GENERATOR="$INSTALL_DIR/scripts/generate_definitions.py"
+[ -f "$GENERATOR" ] || { echo "Missing generator: $GENERATOR" >&2; exit 1; }
+
 for HARNESS in $TARGETS; do
   PLUGIN_ROOT="$INSTALL_DIR/dist/$HARNESS/ultracode"
-  [ -d "$PLUGIN_ROOT" ] || { echo "Missing generated plugin: $PLUGIN_ROOT" >&2; exit 1; }
+  # Generated from source on every install, so no distribution is ever committed or shipped stale.
+  # Wiped first: the generator overwrites but never prunes files a newer revision dropped.
+  rm -rf "$PLUGIN_ROOT"
+  python3 "$GENERATOR" --target "$HARNESS" --source-root "$INSTALL_DIR" --output-dir "$PLUGIN_ROOT" \
+    || { echo "Failed to generate the $HARNESS plugin from $INSTALL_DIR." >&2; exit 1; }
 
   if [ "$HARNESS" = claude ]; then
     marketplaces="$(claude plugin marketplace list --json)"

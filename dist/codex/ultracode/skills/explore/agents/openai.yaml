@@ -1,5 +1,0 @@
-interface:
-  display_name: "Explore"
-  short_description: "Run the Explore Ultracode stage explicitly."
-policy:
-  allow_implicit_invocation: false

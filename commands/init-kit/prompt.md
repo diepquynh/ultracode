@@ -30,8 +30,10 @@ one. Only skills you choose to (re)generate are fanned out in the generate step;
 below — the per-invocation argument outranks the agent default. Spawn `detect`, `scout`, `propose`, and
 `generate-inventory` on the balanced harness model; spawn every `generate-skill` agent on the advanced harness
 model (`{{advanced_model}}`) — skill authoring is the highest-value, quality-sensitive step, so it gets the
-strongest model. The model router hook does not touch these spawns: the initializer is deliberately absent from
-`models.byAgent`, and it runs before the profile it would be routed by exists.
+strongest model. The model router hook leaves these spawns on the model you set: the initializer is
+deliberately absent from `models.byAgent`, and the hook keeps an initializer's own model rather than denying it
+the way it denies a missing pipeline route — so re-initializing an already-initialized repo works exactly like
+a first run.
 
 **Passing data between stages.** Unlike a headless workflow, you (the main loop) can read files, so every
 hand-off flows through the session dir: each agent writes its output there and returns the path; you read that
@@ -204,17 +206,19 @@ and the profile skills[] array (mark each profile skills[] entry source: generat
 skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
 Seed commands + Review Rule Set from the proposal (read the stack reference at the proposal's referencePath).
 Seed the repo-profile.json models block with the harness-neutral model routing from the output contract so the
-orchestrator can switch subagent models per repo and per phase: models.byAgent (explore and plan = advanced;
-code-reviewer/execution-path-analyzer = balanced; module-documentation/prompt-generation = advanced) and
-models.byPhaseComplexity (implement and write-test each low = fast, medium = fast, high = balanced).
+model-router hook can switch subagent models per repo and per phase: models.byAgent (explore, generate-spec and
+plan = advanced; code-reviewer/execution-path-analyzer = balanced; module-documentation/prompt-generation =
+advanced) and models.byPhaseComplexity (implement and write-test each low = fast, medium = fast, high =
+balanced).
 Self-review for consistency, then write the generation report. Return the report path and the full list of
 files written."
 ```
 
-The `models` block this step seeds into `repo-profile.json` routes which model the **orchestrator** later
-spawns each pipeline subagent with — `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity`
-for `implement`/`write-test` by the plan phase's Complexity tier (default low/medium → fast, high → balanced).
-That is separate from the per-mode models you set on the spawns above (which are the initializer's own).
+The `models` block this step seeds into `repo-profile.json` is what the **model-router hook** later applies to
+every pipeline subagent spawn — `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for
+`implement`/`write-test` by the plan phase's Complexity tier (default low/medium → fast, high → balanced). The
+orchestrator and the explicit commands pass no `model` argument; the hook resolves it. That is separate from the
+per-mode models you set on the spawns above (which are the initializer's own).
 
 ## Step 5 — Report + reload
 

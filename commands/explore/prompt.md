@@ -13,7 +13,7 @@ Topic: `{{arguments}}`
 If the arguments are empty, ask the user what to research and stop. If they name a repo root explicitly, use
 that path as `Repo root:` instead of the detected one.
 
-## Step 1 — Resolve repo, session, and model
+## Step 1 — Resolve repo and session
 
 The session dir is **derived from the harness session ID**, so every command in this session — and every agent
 they spawn — resolves the same path without being told it:
@@ -35,15 +35,12 @@ working directory. Do not add a random suffix — that would split this session'
 If `inventory=MISSING`, stop and tell the user to run `{{command_prefix}}init-kit` in this repo first — the agent routes
 everything through that inventory.
 
-Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json` and take the model from `models.byAgent["explore"]`
-(profile keys are **bare** — no `ultracode:` prefix). If the `models` block or that key is absent, spawn
-**without** a `model` argument and let the agent's own `model` front matter stand.
-
 ## Step 2 — Spawn
+
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
 
 ```
 {{agent_selector}}: ultracode:explore
-model: {models.byAgent["explore"], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Request: {the topic from {{arguments}}}.

@@ -7,7 +7,7 @@ marked NEW, written strictly per this repo's test skills. It writes only test co
 
 Arguments (may be empty): `{{arguments}}`
 
-## Step 1 — Resolve the reports, skills, and model
+## Step 1 — Resolve the reports and skills
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -34,19 +34,18 @@ directly: an unmatched glob aborts the command under zsh.
 
 Read `$REPO_ROOT/{{runtime_dir}}/repo-profile.json` and `INVENTORY.md`:
 
-- **Model:** `models.byPhaseComplexity["write-test"]["{tier}"]`, where `{tier}` is the phase's **Complexity**
-  lowercased, or `low` when there is no plan. Profile keys are **bare**. Absent → omit the `model` argument and
-  let the agent's `model` front matter stand.
 - **Phase file:** the `ultracode-plan-*-phase-{N}-*.md` matching the implement report's phase number, when a
-  plan exists. Pass it in the prompt — the model router hook reads the Complexity tier from that file.
+  plan exists. Pass it in the prompt — the model-router hook reads the Complexity tier from that file.
 - **Required skills:** the test skills the INVENTORY **Skill Application Mapping** names for the changed file
   types, plus `convention`.
+- **Test commands:** `commands.test` and `commands.testOne` from the profile, verbatim.
 
 ## Step 2 — Spawn
 
+Omit the `model` argument — the plugin's model-router hook sets it from this repo's profile.
+
 ```
 {{agent_selector}}: ultracode:write-test
-model: {models.byPhaseComplexity["write-test"][tier], or omit}
 prompt: "Repo root: {REPO_ROOT}.
 Session dir: {SESSION_DIR}.
 Phase file: {phase file path}          # omit this line when there is no plan
