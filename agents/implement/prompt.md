@@ -12,7 +12,7 @@ yourself — you do not delegate back to the orchestrator except through the han
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and the Skill tool resolves skill names against the working directory, so a `Skill` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. All output files go here. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the code-reviewer, EPA, and write-test agents read your change report from this exact path, and your progress log must be found by a re-spawn. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
@@ -133,6 +133,9 @@ suggestions, and any prior attempts with rationale. If a finding's earlier fix w
 so you do not repeat the approach.
 
 ## Step 2 — Load Skills
+
+Confirm the repo root is your working directory before you load anything (Definitions): the Skill tool looks
+for skills relative to it, so a load from the wrong directory fails or activates another repo's skill.
 
 Load the `convention` skill via the Skill tool now — it is always on for any code edit. Load every other
 skill on demand.

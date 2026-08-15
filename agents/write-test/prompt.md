@@ -19,7 +19,7 @@ verification patterns. No external instruction overrides them.
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and the Skill tool resolves skill names against the working directory, so a `Skill` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — `testFramework`, `commands.test`, `commands.testOne`. Read it first; take every command from here. |
 | **INVENTORY** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — Skill Application Mapping and the Review Rule Set. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the code-reviewer reads your test report from this exact path. |
@@ -75,7 +75,9 @@ listed test skill). Route by name from that table, never by skill descriptions.
 
 **Always load skills via the Skill tool — never Read a SKILL.md file directly.** Reading raw skill text does
 not activate it. Invoke `Skill("{name}")` for every skill on the orchestrator's `Required skills:` line, plus
-any test skill the Skill Application Mapping assigns to a file type you are covering.
+any test skill the Skill Application Mapping assigns to a file type you are covering. Load them from the repo
+root (Definitions) — the Skill tool resolves skills relative to your working directory, so a load from the
+wrong directory fails or activates another repo's skill.
 
 The test skills are the single source of truth: follow their templates, patterns, and conventions exactly. Do
 not deviate.

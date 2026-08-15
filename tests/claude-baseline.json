@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "06eba18ae134a79a13ea85bb9669e1c9e76ba687319a83f84b4b731ccaad2e57"
+      "body_sha256": "07a7acce90e0cec25aefc40c04683c32efc15712abab996524d06554154af470"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,12 +33,12 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "d5f8ebfc7a074e67c1b54744ffc8b26505fa78bbf34de77067784f6ab18ad87a"
+      "body_sha256": "452545ca610e565897de0e861abdd2dcc208dfc77143d474de2a211e89ca0bb4"
     },
     "explore": {
       "frontmatter": {
         "name": "explore",
-        "description": "Repo-agnostic research subagent for ultracode. Spawned by the orchestrator when: (1) a request is ambiguous and context must be gathered before planning, (2) an unfamiliar area of the codebase must be understood, (3) multiple approaches exist and trade-offs must be weighed, (4) existing patterns must be learned before changing code, (5) the user asks to research/investigate/understand/analyze something. It reads the repo inventory and module-hub, explores the code, traces data flows, and writes two documents for the generate-spec agent: a structured research document, and a criteria document that breaks the request into atomic testable criteria. The generate-spec agent turns both into the single specification file that the plan agent then plans from. It does NOT modify project source.",
+        "description": "Repo-agnostic research subagent for ultracode. Spawned by the orchestrator when: (1) a request is ambiguous and context must be gathered before planning, (2) an unfamiliar area of the codebase must be understood, (3) multiple approaches exist and trade-offs must be weighed, (4) existing patterns must be learned before changing code, (5) the user asks to research/investigate/understand/analyze something, (6) the request depends on an external technology the repo does not already use (a managed service, SDK, library, protocol, or third-party API) whose current behavior must be looked up before anything is designed. It reads the repo inventory and module-hub, explores the code, traces data flows, searches the web for every external technology the codebase does not cover — treating retrieved vendor documentation as first-level truth over model knowledge — and writes two documents for the generate-spec agent: a structured research document, and a criteria document that breaks the request into atomic testable criteria. The generate-spec agent turns both into the single specification file that the plan agent then plans from. It does NOT modify project source.",
         "model": "opus",
         "effort": "high",
         "tools": [
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "719d57963365746d0c7accd88c1b6159c08ff91c51e34cceef0eb26b4a173f22"
+      "body_sha256": "eecc1347554cc67a1478ac2237b5dae15b202f0bc8f392bd8af3b3d2f7f44616"
     },
     "generate-spec": {
       "frontmatter": {
@@ -71,7 +71,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "5a87ab2b03ec899a0dc5bf06b5b8c61fd50a2ea562a5ae7522940a7f106f250e"
+      "body_sha256": "17aca11157a9fffbf313c0bea5d6ce629180a9ac26a3aa815145e62320ed313d"
     },
     "implement": {
       "frontmatter": {
@@ -91,7 +91,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "67e1287e917b59f462c081ddb349de92fe5770b7724e7ec4a4e92299c9da5187"
+      "body_sha256": "fec85cdf47d9d9902ba848caf91b236d83079ba267b785d8028e6e7070029656"
     },
     "initializer": {
       "frontmatter": {
@@ -110,7 +110,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "24047cb8fdaa98a74d76154da809fc1846bef413e2bb58fd4ccfd0d8e0ef0b31"
+      "body_sha256": "8ecf2541b6d8bea4dc249643d8fc43823a05deb334755fadf145e58c648fba25"
     },
     "module-documentation": {
       "frontmatter": {
@@ -129,7 +129,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "1383b4b9592cc17f42d2a582e21fd42aa0cc22742bbf3393137d0ad46480730f"
+      "body_sha256": "5544414389df929af188dc94976f2c92196d5956e162abc808eed9a7020fc357"
     },
     "plan": {
       "frontmatter": {
@@ -146,7 +146,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0d4e9235f2f3fcb4094f6459e4682804f7584f77be6c1ad186b1c79425b329fd"
+      "body_sha256": "fd5fd412869d20ab32664cae3b1979da73239283e7e822092aa01e2a5c982201"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -166,7 +166,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "eee23387f31d58dcee64c9aa425a1e6f4cb07451f3134c748cb0e8b279e40d34"
+      "body_sha256": "30c7c6544aaf7e1e574b22e1c9f082de71d586f0c0ec0f53a9cb33c9709e6269"
     },
     "write-test": {
       "frontmatter": {
@@ -186,7 +186,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "9d705249da54829c3ed91620e5598cd5e027212f46a494a323ef6c79f72b48d3"
+      "body_sha256": "9697d67f65268331fd28175d6ed5886b41d9f47b2482a66fcd0fd257837c4b5f"
     }
   },
   "skills": {
@@ -202,7 +202,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "b562c0c05dcb77e26474001ce9dd8f411879816e7285732d5af7300de334ac78"
+      "body_sha256": "761ff866efb2a56f06700589b833c16de092735cd484e4e943edc33732cf13d8"
     }
   }
 }

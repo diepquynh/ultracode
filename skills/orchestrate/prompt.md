@@ -87,9 +87,12 @@ mkdir -p "$SESSION_DIR/{repo-key}"
 
 Every subagent prompt carries two lines that scope the agent to its repo:
 
-- `Repo root: {absolute repo root}` — the agent resolves every `{{state_dir}}/...` path (inventory, profile, skills)
-  and every source path against this root, and runs build/test/format/git there. This is how a subagent reads
-  **that repo's** inventory and skills, so the pipeline runs on that repo.
+- `Repo root: {absolute repo root}` — the agent **changes its working directory to this root before its first
+  tool call** and stays there, then resolves every `{{state_dir}}/...` path (inventory, profile, skills) and every
+  source path against it, and runs build/test/format/git there. This is how a subagent reads **that repo's**
+  inventory and skills, so the pipeline runs on that repo. The working-directory move is not optional: the
+  harness may start an agent above the repo or inside a different one, and the Skill tool resolves skill names
+  relative to the working directory, so an agent left elsewhere cannot load this repo's skills at all.
 - `Session dir: {SESSION_DIR}/{repo-key}` — where that agent writes its reports.
 
 For a single-repo session use one repo key and one subdir; the flow is otherwise unchanged. A cross-repo
@@ -189,12 +192,11 @@ let a plan diverge from its spec — the spec is the contract every later stage 
 
 When the registry has more than one repo, you may run agents **in parallel across repos**, but you must
 **preserve every dependency**. To spawn agents concurrently, emit multiple Agent tool calls in a **single
-message**; to serialize, end your turn after spawning one and only spawn the next when the harness re-invokes
-you with that agent's result. "Wait for … to return" in this skill is a **sequencing constraint** — do not
-spawn dependent work until those agents have returned — **not** a license to poll, sleep, or hold the turn
-with Bash (`true`, `:`, `sleep`, `wait`, loops) or any other tool. After any spawn, end the turn with **no**
-wait/keepalive tool calls; the harness notification system re-invokes you when subagents complete (Hard
-rule 19). Other harnesses may train Bash-wait habits — those habits are **prohibited here**. Each
+message** — every spawn runs in the foreground, so those calls return their results together (Hard rule 19);
+to serialize, spawn one, read its result, and only then spawn the next. "Wait for … to return" in this skill
+is a **sequencing constraint** — do not spawn dependent work until those agents have returned — **not** a
+license to poll, sleep, or hold the turn with Bash (`true`, `:`, `sleep`, `wait`, loops) or any other tool.
+Other harnesses may train Bash-wait habits — those habits are **prohibited here**. Each
 schedulable unit is a `(repo key, stage-or-phase)` node — e.g. `backend:explore`, `backend:phase-2`,
 `web:phase-1`.
 
@@ -266,19 +268,22 @@ verbatim, prefix included. Each writes a report into the session dir.
 
 | Agent (`subagent_type`) | Spawn when | Output |
 | --- | --- | --- |
-| `ultracode:explore` | Request is ambiguous/unfamiliar; gather context before the spec stage. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
+| `ultracode:explore` | Request is ambiguous/unfamiliar; gather context before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API) — that agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
 | `ultracode:generate-spec` | Any request that will be planned (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
 | `ultracode:plan` | Medium/high-stakes; needs a sequenced, phased strategy. Exactly one per request, given only the spec file (Rule D4). | master plan + per-phase files |
 | `ultracode:implement` | Code must be written/modified/deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
-| `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
-| `ultracode:write-test` | After that phase's EPA, in the same requested test stage (Rules T2–T4); write tests. Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
+| `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
+| `ultracode:write-test` | After every EPA is back, in the same requested test stage (Rules T2–T4); write tests. **One phase at a time** — never two in a message (Rule T4). Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
 | `ultracode:code-reviewer` | Uncommitted code changes must be reviewed. | JSON (inline) |
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
 **Repo scoping:** every spawn carries `Repo root: {absolute root}` and `Session dir: {SESSION_DIR}/{repo-key}`.
-The agent resolves every `{{state_dir}}/...` path and source path against that root and reads **that repo's**
-inventory, skills, and profile — so route each spawn to the repo whose files it will touch.
+The agent makes that root its working directory before its first tool call, then resolves every
+`{{state_dir}}/...` path and source path against it and reads **that repo's** inventory, skills, and profile — so
+route each spawn to the repo whose files it will touch. Never spawn an agent without a `Repo root:` line and
+expect it to find the right tree: skills resolve against the working directory, so an agent that never moves
+there loads no skills.
 
 **Skill loading:** `ultracode:implement` and `ultracode:write-test` load skills on demand via the Skill tool.
 For every inline invocation and every fix, include a `Required skills:` line whose contents you derive from the
@@ -292,7 +297,7 @@ INVENTORY **Skill Application Mapping** for the file types being changed. The `u
 | RESEARCH | investigate, explore, understand, explain | `ultracode:explore` |
 | SPEC | write specs, SDD, requirements breakdown, acceptance criteria | `ultracode:explore` → `ultracode:generate-spec` |
 | PLAN | design, architecture, breakdown, strategy | `ultracode:explore` → `ultracode:generate-spec` → `ultracode:plan` |
-| IMPLEMENT | write, add, fix, modify, refactor, delete | `ultracode:explore` (opt) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop → `format` → closing gate: optional tests, optional docs (Rules T1–T7) |
+| IMPLEMENT | write, add, fix, modify, refactor, delete | `ultracode:explore` (opt; **required** when the request adds a technology the repo does not use) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop → `format` → closing gate: optional tests, optional docs (Rules T1–T7) |
 | VERIFY | test, validate, check it works | `ultracode:implement` (run the profile's test command) |
 | UNIT TEST | write/fix tests | `ultracode:explore`/`ultracode:plan` (opt) → `ultracode:execution-path-analyzer` → `ultracode:write-test` → `ultracode:code-reviewer`. This is an explicit test request — run it with no closing gate (Rule T3) |
 | PROMPT | write/edit AI prompt, SKILL.md, agent file | `ultracode:prompt-generation` → `ultracode:code-reviewer` (if code changed) |
@@ -328,11 +333,12 @@ implementation files (read the implement report's file list). Test files are sta
 phase, after that phase's test review passes — so a run where the user declines tests simply has no second
 staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` when staging is in effect.
 
-Every subagent prompt is self-contained: include `Repo root: {absolute root}`, the phase/plan file path, prior
+Every subagent prompt is self-contained: include `Repo root: {absolute root}` (the agent works from that
+directory — Hard rule 3), the phase/plan file path, prior
 reports, the resolved command strings from that repo's repo-profile, and (for `ultracode:implement` /
 `ultracode:write-test`) the `Required skills:` line plus a `Phase file: {absolute path}` line whenever a plan
-exists — the model-router hook reads the phase's Complexity tier from it (Hard rule 13). The one exception to
-"include prior reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
+exists (Hard rule 13). The one exception to "include prior reports" is `ultracode:plan`: it gets the spec file
+path **only** (Rule D4).
 
 ### The closing gate — optional tests, optional docs
 
@@ -346,7 +352,8 @@ every coding phase for the repo passed review
 run that repo's `format` command                        (once, automatic — not gated)
    ▼
 ── CLOSING GATE (Rule T2) — one AskUserQuestion call, two questions ──
-   tests? ─ Yes → per Required phase (Rule T4): ultracode:execution-path-analyzer
+   tests? ─ Yes → ultracode:execution-path-analyzer × every Required phase, in ONE message (Rule T4)
+                  then per Required phase, in phase order, one at a time:
                                               → ultracode:write-test
                                               → ultracode:code-reviewer (tests; scope: unstaged) → [review loop]
                                               → stage test files (git -C {repo-root} add)
@@ -384,10 +391,16 @@ phase is done (Rule T1), and pass `ultracode:module-documentation` every impleme
 longer decides *whether* tests run — the user does. It decides *which* phases the requested run covers. The
 `ultracode:plan` agent tags every phase `Required` or `Skip` (its rule P12), carried in the master plan's Phase
 Index, in the phase file header, and in the plan agent's return. Read every phase's value, then run the test
-stage **in phase order** over:
+stage over:
 
-- **`Required`** → cover it: `ultracode:execution-path-analyzer`, then `ultracode:write-test`, then the test
-  code-review loop, then stage its test files.
+- **`Required`** → cover it. **Analysis fans out; writing does not.** Spawn
+  `ultracode:execution-path-analyzer` for **every** `Required` phase at once — all of those spawns in a single
+  message (Hard rule 19), so their reports come back together. Then work the phases **one at a time, in phase
+  order**: `ultracode:write-test` for one phase, its test code-review loop, stage its test files, and only then
+  the next phase. Never spawn two `ultracode:write-test` agents in the same message. EPA agents only read
+  source and write their own report, so they cannot collide; write-test agents edit a shared suite — fixtures,
+  helpers, and suite files two phases both touch — and concurrent runs overwrite each other's edits and
+  duplicate helpers.
 - **`Skip`** → do not cover it. Report it as uncovered with the plan's one-sentence rationale.
 - **No Test policy** (a plan written before the field existed, or a value you cannot read) → treat as
   **`Required`**.
@@ -453,10 +466,10 @@ are unsure whether an answer is a requirement change or an implementation detail
 change and route it through `ultracode:generate-spec` — a stale spec silently corrupts every stage after it,
 while an extra re-spawn costs one round-trip.
 
-When several agents run in parallel (Rules M1, M3, D4), end the turn after spawning with **no** further
-tool calls for waiting, keepalive, or completion checks (`Bash(true)`, `sleep`, `wait`, loops, or any
-equivalent — Hard rule 19). When the harness notification system pings you with their results, read
-**every** returned report before deciding what runs next. A `HANDOFF:` or `STUCK:` from one branch is
+When several agents run in parallel (Rules M1, M3, D4), spawn them together in one message and add **no**
+further tool calls for waiting, keepalive, or completion checks (`Bash(true)`, `sleep`, `wait`, loops, or any
+equivalent — Hard rule 19). Their results come back from the spawn calls themselves; read **every** returned
+report before deciding what runs next. A `HANDOFF:` or `STUCK:` from one branch is
 handled for that branch only; independent branches keep running. After a repo's phase passes review,
 re-check the dependency graph — a queued phase whose blocker just cleared is now **ready** and may start.
 
@@ -499,7 +512,9 @@ the user and ask how to proceed. Do not auto-run a 4th.
    `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Route by its tables, by name — never by skill descriptions,
    never with another repo's tables.
 3. **Self-contained prompts.** Subagents cannot see this conversation; include every needed path and fact,
-   plus `Repo root:` and `Session dir:`.
+   plus `Repo root:` and `Session dir:`. Every agent works **from** its `Repo root:` — it moves its working
+   directory there before its first tool call, because the Skill tool resolves skills relative to the working
+   directory and an agent left where the harness started it loads none of that repo's skills.
 4. **Read every report** before deciding the next step.
 5. **Ask open questions** with the AskUserQuestion tool; never answer on their behalf.
 6. **The spec and the plan need approval.** The spec needs approval before the plan agent runs (Rule D3); the
@@ -516,14 +531,10 @@ the user and ask how to proceed. Do not auto-run a 4th.
     cross-repo dependency exists, queue (Rule M5).
 12. **Single repo, unchanged.** With one in-scope repo, behave exactly as the single-repo flow — no
     parallelism, and the repo key is cosmetic.
-13. **Never pick a model.** The plugin's `PreToolUse` hook (`hooks/model-router.py`) reads each spawn's
-    `Repo root:` line, resolves that repo's `repo-profile.json` `models` block itself, and rewrites the spawn's
-    `model` argument. So omit the `model` argument, never name a model in a spawn, and never tell the user
-    which model ran — only which agent you spawned. One line is load-bearing for the hook:
-    `ultracode:implement` and `ultracode:write-test` spawns MUST carry `Phase file: {absolute path}` whenever a
-    plan exists, because that is how the hook reads the phase's **Complexity** header. Omit it and the hook
-    falls back to the phase number in any `…-phase-{N}…` path in the prompt, then to `low` — quietly running a
-    High phase on the cheapest model.
+13. **Every phase spawn names its phase file.** `ultracode:implement` and `ultracode:write-test` spawns MUST
+    carry `Phase file: {absolute path}` whenever a plan exists, so the agent works from the phase's own
+    header, scope, and steps rather than from your summary of them. A phase spawn without that line is
+    malformed — re-spawn it with the path rather than letting the agent infer the phase.
 14. **Always spawn the prefixed name.** Every `subagent_type` you pass is `ultracode:{agent}` (**Agent
     naming**). Never spawn bare `explore` or `plan` — those are the harness's built-in agents, not ultracode's,
     and they ignore this pipeline.
@@ -543,22 +554,23 @@ the user and ask how to proceed. Do not auto-run a 4th.
     **every** phase touching that repo has passed review — that is automatic. `ultracode:module-documentation`
     is **optional**: spawn it only when the user asks at the closing gate or outright (**Rules T2, T3**), and
     then once, with every implement report (**Rule D8**). Never after an individual deliverable's phases.
-19. **Never poll or wait for subagent completion.** This harness is **not** other agent harnesses. Trained
-    habits of busy-waiting with Bash (or any tool) while subagents run are **wrong here and prohibited**.
-    After you spawn one or more subagents via the Agent tool, **end your turn immediately** — emit **no**
-    further tool calls that turn whose purpose is waiting, holding the turn open, or checking completion.
-    Resume **only** when the harness notification system delivers results; that system is the **only**
-    allowed completion signal. **Banned anti-patterns** (all of them, every time): `Bash` with `true`, `:`,
-    `sleep N`, `wait`, busy-loops, `while`/`until` completion checks; any "keepalive" / "hold the turn open"
-    shell command; `TaskOutput` polling; reading agent output files in a loop; ScheduleWakeup-style
-    self-polling; SendMessage "are you done?" pings; and **any** tool call issued **only** because a
-    subagent is still running and you want something to do while waiting. Phrases like "Wait for every plan
-    agent to return" mean **do not spawn dependent work until those agents have returned** — a sequencing
-    constraint, **not** a license to poll or hold. Active waiting wastes tokens and eats the context window.
+19. **Spawn in the foreground, never in the background.** Every subagent runs in the blocking mode where the
+    spawn call itself returns that agent's result. Never request a background, detached, or
+    notify-me-later spawn — background results are not a signal you may rely on. Concurrency does **not**
+    require backgrounding: several foreground spawns emitted as multiple tool calls in a **single message**
+    run at the same time and all return together. Because the call blocks, there is nothing to wait for and
+    nothing to poll. **Banned anti-patterns** (all of them, every time): `Bash` with `true`, `:`, `sleep N`,
+    `wait`, busy-loops, `while`/`until` completion checks; any "keepalive" / "hold the turn open" shell
+    command; `TaskOutput` polling; reading agent output files in a loop; ScheduleWakeup-style self-polling;
+    SendMessage "are you done?" pings; and **any** tool call issued **only** because a subagent is running
+    and you want something to do meanwhile. Phrases like "Wait for every plan agent to return" mean **do not
+    spawn dependent work until those agents have returned** — a sequencing constraint, not a license to poll.
 20. **Tests are opt-in, and never mid-pipeline.** Never spawn `ultracode:execution-path-analyzer`,
     `ultracode:write-test`, or the test review loop inside the per-phase loop (**Rule T1**). Run them only
     after **every** coding phase for that repo has passed review **and** the user has asked for tests — at the
     closing gate (**Rule T2**) or in their own words (**Rule T3**). Once asked, cover the phases the plan tags
     `Test policy: Required` and report the `Skip` ones as uncovered (**Rule T4**); a missing tag, an unreadable
-    tag, or an inline no-plan task counts as `Required`. Never re-tag a phase yourself. Always report which
-    closing stages did not run, and how to get them (**Rule T7**).
+    tag, or an inline no-plan task counts as `Required`. Analyze in parallel, write serially: every covered
+    phase's `ultracode:execution-path-analyzer` goes in **one** message, then `ultracode:write-test` runs **one
+    phase at a time** with its review loop and staging before the next (**Rule T4**). Never re-tag a phase
+    yourself. Always report which closing stages did not run, and how to get them (**Rule T7**).

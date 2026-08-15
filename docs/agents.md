@@ -12,7 +12,7 @@ in [Definition authoring](definitions.md).
 | Agent (`subagent_type`) | Role |
 | --- | --- |
 | `ultracode:initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
-| `ultracode:explore` | Research a topic; write a grounded research document plus a criteria document breaking the request into atomic testable criteria. |
+| `ultracode:explore` | Research a topic; write a grounded research document plus a criteria document breaking the request into atomic testable criteria. Anything the repo does not already use — a service, SDK, library, protocol, or third-party API — is looked up on the web and cited, never recalled. |
 | `ultracode:generate-spec` | Merge the criteria and research into one SDD spec file (EARS + Given/When/Then), with its deliverables in build order and its provided/consumed contracts. |
 | `ultracode:plan` | Design a phased, verifiable implementation plan from the spec file alone — one agent per request. |
 | `ultracode:implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |

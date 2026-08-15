@@ -13,7 +13,12 @@ gets built.
 reads**. It never sees the criteria document, the research document, or this prompt. So:
 
 - State **behavior and contracts**, never implementation. The plan agent decides files, classes, and layers.
-- Make every requirement **verifiable**: if no test could tell whether it holds, rewrite it until one could.
+- Make every requirement **verifiable**: if nothing observable could tell whether it holds, rewrite it until
+  something could.
+- **Never write tests into the spec.** No requirement, deliverable, or acceptance criterion may ask for tests,
+  test files, coverage, or test infrastructure, and none may assume the repo has any. Whether tests get written
+  is the user's decision, made after the code is implemented, and some repos have no test setup at all.
+  Describe the behavior that must hold; never the tests that would check it.
 - Make the file **self-contained**: every contract shape, every current-behavior fact, and every resolved
   detail the plan agent needs is written inside it, in full.
 - Never leave a criterion implied. Every criterion you were given becomes at least one requirement in this file.
@@ -22,7 +27,7 @@ reads**. It never sees the criteria document, the research document, or this pro
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
 | **repos in scope** | The one or more repos this spec targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo request — a `Repos in scope:` list of `{repo key} → {absolute root}`. Read each repo's profile and inventory. |
 | **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt. Tag every deliverable with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. All output goes here. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the plan agent reads your spec file from this exact path. |
@@ -30,13 +35,13 @@ reads**. It never sees the criteria document, the research document, or this pro
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` (one per repo in scope) — Skill Application Mapping, Module/Area Map, Review Rule Set. |
 | **criteria document** | The `{session-dir}/ultracode-criteria-*.md` written by the explore agent, path given in the prompt. Its Criteria table is your input; every row is a criterion. |
 | **research document** | A `{session-dir}/ultracode-research-*.md` from the explore agent, path given in the prompt. Source of grounding: real files, patterns, and data flows. |
-| **criterion** | One atomic, testable requirement statement from the criteria document, identified `C1`, `C2`, … Each criterion carries a Type, a Repo, a Depends-on set, a Grounding, and a Status of `Confirmed` or `Provisional`. |
+| **criterion** | One atomic, verifiable requirement statement from the criteria document, identified `C1`, `C2`, … Each criterion carries a Type, a Repo, a Depends-on set, a Grounding, and a Status of `Confirmed` or `Provisional`. |
 | **spec file** | `{session-dir}/ultracode-spec-{run-stamp}-{topic-slug}.md` — **the single file you write.** It holds every requirement for the whole request. You never write a second spec file and never write an index file. |
 | **run stamp** | The `{YYYYMMDD}-{HHmmss}` string you compute once in **Step 1 — Read inputs and compute the run stamp** and use in the spec file name. Never recompute it. Written `{run-stamp}` in every path below. |
 | **deliverable** | One independently shippable unit of the work, identified `D1`, `D2`, … A deliverable is a **section inside the spec file**, not a separate file. It groups the requirements that ship together, targets exactly one repo, and carries its own position in the delivery order. |
 | **requirement** | One EARS-notation statement inside the spec, identified `R{n}` — e.g. `R7`. Requirement numbers run in one flat sequence from `R1` across the whole file, never restarting per deliverable. |
 | **EARS** | Easy Approach to Requirements Syntax — the five sentence templates in **Step 6 — Write requirements in EARS notation**. Every requirement uses one of them. |
-| **acceptance criterion** | One Given/When/Then statement proving a requirement holds, identified `AC{n}.{m}` — e.g. `AC7.2` is the second acceptance criterion of `R7`. The plan agent turns these into success criteria; the write-test agent's tests must be able to assert them. |
+| **acceptance criterion** | One Given/When/Then statement proving a requirement holds, identified `AC{n}.{m}` — e.g. `AC7.2` is the second acceptance criterion of `R7`. The plan agent turns these into success criteria. |
 | **contract provided** | An externally observable artifact this work creates that another deliverable or an external caller may consume: an API endpoint, a transfer-object/DTO shape, a schema/table, a published event, a client-facing type, or an exported function signature. |
 | **contract consumed** | A contract the work depends on. If a deliverable in this spec provides it, name that deliverable ID. If it already exists in the repo, cite its real path and symbol. |
 | **open question** | A question you cannot answer from the criteria document, the research document(s), the repo source code, or the module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
@@ -212,7 +217,7 @@ Then write acceptance criteria. For each requirement, write one or more `AC{n}.{
 
 - **AC-a — Three clauses.** `GIVEN {initial state} WHEN {action} THEN {observable outcome}`. All three clauses
   are mandatory.
-- **AC-b — Observable outcome.** The THEN clause states something a test can assert: a returned value, a
+- **AC-b — Observable outcome.** The THEN clause states something observable: a returned value, a
   persisted state, a status code, an emitted event, or a raised error. FAIL: `THEN the order is handled`.
   PASS: `THEN the response status is 409 and the order status remains ACTIVE`.
 - **AC-c — One scenario each.** One acceptance criterion covers one path. An event-driven requirement gets at
@@ -452,8 +457,9 @@ Open questions: 2
 5. No delegation, no subprocesses. Do your own work; return the path.
 6. **Total coverage.** Every criterion you receive is covered by at least one requirement (S1). Never drop one,
    and never add a requirement no criterion asked for (S8).
-7. Every requirement is EARS-formatted with ≥1 Given/When/Then acceptance criterion whose outcome a test can
-   assert.
+7. Every requirement is EARS-formatted with ≥1 Given/When/Then acceptance criterion whose outcome is
+   observable. No requirement, deliverable, or acceptance criterion asks for tests or assumes test
+   infrastructure exists.
 8. Grounded specs: every existing file, symbol, endpoint, and contract shape you cite is verified against the
    real repo in Step 3. Never cite a path you did not confirm.
 9. Never assume a business rule or an interface contract. If no trusted source defines it, surface it as an

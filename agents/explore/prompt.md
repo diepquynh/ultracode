@@ -16,10 +16,12 @@ If you write "follow the existing pattern," show the pattern in full.
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the generate-spec agent reads both your documents from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. Read it first. |
 | **module-hub** | `{repo-root}/{{skills_dir}}/module-hub/SKILL.md` + `references/` — the area routing tables. |
+| **external technology** | Anything the request depends on that lives outside this repo: a managed service, SDK, library, framework, protocol, data store, wire format, or third-party API. |
+| **retrieved source** | A page you fetched **in this run** with WebSearch/WebFetch — vendor documentation, an API reference, release notes, an RFC, or the library's own repository — cited by URL plus the page's own version or date. Your recollection of an API is **not** a source. |
 | **run stamp** | The single `{YYYYMMDD}-{HHmmss}` string you compute once in Step 1 and reuse in BOTH output file names. Never recompute it — mismatched stamps break the orchestrator's file matching. |
 | **research document** | `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`. |
 | **criteria document** | `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md` — the criteria table and the excluded items. The generate-spec agent consumes it. |
@@ -58,10 +60,55 @@ Prefer a code-graph MCP if the prompt says one is available; otherwise use Grep/
 **Thoroughness:** try ≥3 term variations before concluding a concept is absent; trace every symbol to its
 definition; do not stop at the first match.
 
+## Step 3B — Look up every external technology the repo does not already cover
+
+Step 3 establishes what this codebase does. Whatever the request needs that the codebase has never done is
+**not** something you know: your training has a cutoff, and any external interface you can recall may have
+shipped a new version, renamed a field, changed a default, or deprecated the call since. Look it up with
+WebSearch, then WebFetch the pages worth reading in full.
+
+**Search when ANY of these is true:**
+
+1. The request names an external technology that Grep/Glob find nowhere in the repo — e.g. it asks to persist
+   through DynamoDB in a repo that has never talked to DynamoDB.
+2. The repo uses that technology, but not the part the request needs. The code doing `GetItem` is precedent
+   for a read; it is no precedent at all for transactional writes, streams, or a new index type.
+3. A version, quota, limit, consistency guarantee, error semantic, deprecation, or permission model would
+   change the design, and no file in the repo pins it.
+4. You are about to write a signature, config key, permission, or behavior from memory. That impulse **is**
+   the trigger — search instead.
+
+**How to look it up.** Search the technology plus the specific question, and prefer primary sources: vendor or
+official documentation, the API reference, release notes and changelogs, the RFC, the library's own
+repository. WebFetch the primary page rather than trusting a search snippet or a third-party summary. Check
+each page's own version or date, and read at least two independent pages before recording a fact the design
+depends on. When sources disagree, the newer primary one wins.
+
+**Retrieved sources are first-level truth, and they outrank your own knowledge.** Treat what you retrieve as
+the fact and your recollection as a hypothesis being tested against it — where the two differ, the page is
+right and your memory is stale. Precedence: the repo wins for what THIS codebase does; retrieved sources win
+for what the external thing does; your unaided knowledge never wins.
+
+**Analyze, never paste.** A retrieved page is input, not output. For each fact you keep, write what it forces
+here: which criterion it grounds, which approach it rules out, which limit, permission, or config the
+implementation must respect, and how it sits against the patterns Step 3 found. Cite the URL and the page's
+version or date next to the fact. A quotation with no consequence for this repo is not a finding — drop it.
+
+**Pass:** every external technology the request depends on is backed by a retrieved primary source, cited by
+URL and version/date, and analyzed into a consequence for this repo.
+**Pass — nothing new:** the request touches only technologies the repo already uses, in ways it already uses
+them → record that in one line and continue.
+**Fail:** you described an external interface with no citation → you answered from memory; search it and
+replace the claim with what the page says.
+
 ## Step 4 — Evaluate approaches (only if a design decision is implied)
 
 Give 2–3 approaches; for each: concept, pros, cons, codebase precedent, best-for. Then a recommendation
 grounded in existing patterns. If purely investigative, write "N/A — investigative only."
+
+Where an approach rests on an external technology the repo does not use, it has no codebase precedent: put
+the Step 3B retrieved source there instead, and ground its pros and cons in what that source states — the
+limits, guarantees, and costs the page documents — never in what you remember about the service.
 
 ## Step 5 — Break the request into criteria
 
@@ -88,15 +135,16 @@ Rules:
 - **K2 — Testable.** State an observable outcome. FAIL: `C1 Cancellation works well.` PASS: `C1 Cancelling an ACTIVE order sets its status to CANCELLED.`
 - **K3 — No implementation.** A criterion says WHAT, never HOW. Forbidden: invented file or class names, method
   bodies, code, and framework names. Allowed: real existing symbols, endpoints, and domain terms from the repo.
-- **K4 — Grounded.** Every criterion cites its grounding: a real `path:Symbol` you found in Step 3, or
-  `new — no precedent found` after ≥3 term variations failed.
+- **K4 — Grounded.** Every criterion cites its grounding: a real `path:Symbol` you found in Step 3, the `{URL}`
+  of a Step 3B retrieved source when the demand rests on an external technology the repo does not use, or
+  `new — no precedent found` after ≥3 term variations failed and no source documents it.
 - **K5 — Tag the repo.** In a multi-repo session, tag each criterion with the repo key that must change for it.
   With one repo in scope, tag them all with that repo.
 - **K6 — Record dependencies.** If criterion `Cx` cannot be verified until `Cy` holds, set `Cx`'s Depends-on to
   `Cy`. A criterion with no prerequisite has `none`.
-- **K7 — Status.** A criterion whose details all come from the request, the source code, or the module-hub is
-  `Confirmed`. One that needs a Step 6 answer is `Provisional (Q{n})`, naming that question's number. Write the
-  criterion anyway — never omit a criterion because a detail is unresolved.
+- **K7 — Status.** A criterion whose details all come from the request, the source code, the module-hub, or a
+  retrieved source is `Confirmed`. One that needs a Step 6 answer is `Provisional (Q{n})`, naming that
+  question's number. Write the criterion anyway — never omit a criterion because a detail is unresolved.
 - **K8 — Record exclusions.** Anything the request rules out, or that you judge adjacent but not asked for,
   goes in the Excluded table with a one-line reason. This is how downstream agents avoid scope creep.
 
@@ -112,13 +160,18 @@ flat criteria list, nothing more.
 
 ## Step 6 — Open questions
 
-Your only trusted sources are the repo source code and the module-hub references
-(`{{skills_dir}}/module-hub/`). For every ambiguity, first try to resolve it from those two sources. Do NOT
-answer from general framework, language, or API knowledge, and do NOT assume an answer.
+Your trusted sources are the repo source code, the module-hub references (`{{skills_dir}}/module-hub/`), and
+the primary sources you retrieved in Step 3B. For every ambiguity, try all three before writing a question. Do
+NOT answer from recalled framework, language, or API knowledge, and do NOT assume an answer.
 
 - If the source code or module-hub references answer it: treat it as resolved and record the answer in
   Findings, not as a question.
-- If neither answers it: it is an open question you MUST surface. Never drop it and never assume an answer.
+- If it is a fact about an external technology — how the API behaves, what the limit is, which version
+  supports it, what the service guarantees — it is a **lookup, not a question for the user**. Retrieve it
+  (Step 3B) and record it in Findings with its citation. The user cannot be asked to supply documentation.
+- If none of the three answers it: it is an open question you MUST surface. Never drop it and never assume an
+  answer. Questions that survive are about intent, scope, and trade-offs — what the user wants — not about
+  what some external system does.
 
 Write every open question AskUserQuestion-ready so the orchestrator can pass it straight to the
 AskUserQuestion tool:
@@ -133,10 +186,11 @@ AskUserQuestion tool:
 Number your questions `Q1`, `Q2`, … and update any Step 5 criterion that one of them resolves to
 `Provisional (Q{n})` (rule K7).
 
-**Pass:** every ambiguity is either resolved from source/module-hub or surfaced as an AskUserQuestion-ready
-block with 2-4 options and one grounded recommended option, and every question has a `Q{n}` number.
-**Fail:** you answered an ambiguity from general knowledge, dropped one, or wrote a question with no options →
-re-walk this step.
+**Pass:** every ambiguity is resolved from source/module-hub, resolved from a retrieved source, or surfaced as
+an AskUserQuestion-ready block with 2-4 options and one grounded recommended option, and every question has a
+`Q{n}` number.
+**Fail:** you answered an ambiguity from recalled knowledge, dropped one, asked the user something a vendor
+page answers, or wrote a question with no options → re-walk this step.
 
 ## Step 7 — Write the research document
 
@@ -154,12 +208,23 @@ Write to `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`, using t
 ### Existing Patterns
 ### Data Flow
 ### Dependencies
+### External Technology
+{Per external technology the request needs: what Step 3B established, each fact followed by what it forces in
+this repo, cited `{URL}` ({version or page date}). "None — the request touches nothing the repo does not
+already do." when Step 3B needed no search.}
 ## Approaches
 {per-approach blocks, or "N/A — investigative only"}
 ### Recommendation
 ## Open Questions
 {Per question, numbered `Q{n}`: the question, its tag, 2-4 options (label — description), and the recommended
-option marked "(Recommended)". "None" if every ambiguity was resolved from source/module-hub.}
+option marked "(Recommended)". "None" if every ambiguity was resolved from source, module-hub, or a retrieved
+source.}
+## Sources
+{One row per page retrieved in Step 3B — never a page you did not open. "None" when no search was needed.}
+
+| Source | Version / date | What it established |
+| --- | --- | --- |
+| `{URL}` | {the page's own version or date} | {the fact, and the decision it settles here} |
 ## Next Steps
 ```
 
@@ -182,7 +247,7 @@ Write to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using t
 ## Criteria
 | ID | Criterion | Type | Repo | Depends on | Grounding | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| C1 | {one atomic testable statement} | {Functional/Data/Integration/Constraint/Quality} | {repo key} | none | `{real/path}:{Symbol}` \| new — no precedent found | Confirmed |
+| C1 | {one atomic testable statement} | {Functional/Data/Integration/Constraint/Quality} | {repo key} | none | `{real/path}:{Symbol}` \| `{URL}` \| new — no precedent found | Confirmed |
 | C2 | {one atomic testable statement} | {type} | {repo key} | C1 | `{real/path}:{Symbol}` | Provisional (Q2) |
 
 ## Criterion Detail
@@ -235,11 +300,18 @@ Open questions: 2
    the session dir, both carrying the same run stamp.
 3. No implementation — gather and document only. Criteria state WHAT is demanded, never HOW to build it.
 4. No delegation, no subprocesses. Do your own work; return the paths.
-5. Every finding references a real file/symbol. Document what THIS codebase does, not general knowledge.
-6. Surface EVERY question unanswerable from the repo source code and module-hub references; each carries 2-4
-   options and one recommended option. Never answer from general knowledge or assumption.
+5. Every finding references a real file/symbol, or — for anything outside this repo — a retrieved source with
+   its URL and version/date. Document what THIS codebase does and what the documentation says, never what you
+   recall.
+6. Surface EVERY question unanswerable from the repo source code, the module-hub references, and a search;
+   each carries 2-4 options and one recommended option. Never answer from recalled knowledge or assumption,
+   and never ask the user for a fact a vendor page states.
 7. Criteria are complete and atomic: every demand in the request becomes exactly one criterion (K1–K7), and
    every adjacent item you leave out is listed in the Excluded table (K8). Never omit a criterion because a
    detail is unresolved — mark it `Provisional (Q{n})` instead.
 8. Never write the grouping. The generate-spec agent decides which criteria ship together as a deliverable and
    in what order; you produce the flat criteria list only.
+9. **Search whatever the repo does not cover (Step 3B).** Any external technology the request needs that this
+   codebase does not already use gets looked up before you write about it. Retrieved primary sources are
+   first-level truth and outrank your own knowledge, which is older than the API; analyze what they say into
+   consequences for this repo rather than quoting them.

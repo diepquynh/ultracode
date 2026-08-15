@@ -29,7 +29,7 @@ multi-step reasoning. It interprets instructions literally and struggles with im
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run all build and git commands with it as the working directory. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run all build and git commands with it as the working directory. |
 | **repos in scope** | The one or more repos this plan targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo plan — a `Repos in scope:` list of `{repo key} → {absolute root}`. The spec file's own `Repos in scope:` header lists the same set. Read each repo's profile and inventory. |
 | **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt and matching the spec's Delivery Order table. Tag every phase with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. All output goes here. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — the implement agent reads your phase files from this exact path. |
@@ -206,7 +206,10 @@ missing something necessary, raise it as a Step 4 clarifying question — never 
 - **P5 — Verification = the phase's repo's build command.** Each step and each phase verifies with the `build`
   command from **that phase's repo's** `{repo-root}/{{runtime_dir}}/repo-profile.json` (substituting any
   module placeholder). Never hardcode a build tool, never use another repo's command. Verification is
-  compile/build only — testing is a separate pipeline (execution-path-analyzer + write-test), not part of the plan.
+  compile/build only: never put the profile's `test` or `testOne` command in a step or a phase's verification,
+  and never write a step, a phase, or a deliverable that adds or updates tests, fixtures, or test
+  infrastructure. Whether tests are written at all is the user's decision, taken after every phase is
+  implemented, and the repo you are planning for may have no test setup — a plan that assumes one breaks it.
 - **P6 — Per-step skills.** For each code step, name the skill(s) to load, derived from **that phase's repo's**
   INVENTORY **Skill Application Mapping** (file type → skills). Use exact skill names from that table; do not
   invent names or route by skill descriptions. The always-on convention skill is auto-loaded — do not list it.
@@ -286,6 +289,8 @@ marked delivered by at least one step (P11).
 **Fail — a ledger row is unmarked:** add the step that delivers it before continuing.
 **Fail — a phase has no Test policy, or a `Skip` with no rationale naming what each step contains:** apply P12
 to that phase and write both before continuing.
+**Fail — a step writes tests, or a verification runs the `test`/`testOne` command:** rewrite it as
+implementation plus build verification (P5). The `Test policy` tag is the only place tests are named.
 
 ## Step 6 — Document risks
 
@@ -378,9 +383,6 @@ phase is skipped.}
 ## Verification Strategy
 - **Per-step / per-phase:** the phase's repo's `build` command after each step and each phase.
 - **Final:** each repo's `build` command after all of that repo's phases.
-- **Testing:** handled separately by the execution-path-analyzer + write-test pipeline, which the orchestrator
-  runs only if the user asks for tests, after every phase is implemented, over the phases tagged
-  `Test policy: Required` (P12). No test steps here.
 
 ## Step Count Summary
 - Total phases: {N}

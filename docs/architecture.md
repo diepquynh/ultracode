@@ -84,6 +84,8 @@ a forked-context pipeline; if you extend ultracode, derive the path rather than 
    code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
    ── after all phases: format, then the CLOSING GATE — both stages below are optional ──
    tests?  ─▶ execution-path-analyzer ─▶ EPA report  (one path per test: P1, P2 … NEW/EXISTING)
+                                         all covered phases at once — read-only, so they cannot collide
+             ── then one covered phase at a time: they share the test suite ──
              write-test               ─▶ test report
              code-reviewer (tests)    ⇄  write-test  (⇄ review ledger, loops until clean)
    docs?   ─▶ module-documentation    ─▶ area references  (reads every prior report)

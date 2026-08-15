@@ -10,7 +10,7 @@ orchestrator. You are a leaf agent — you do the writing yourself and return a 
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and the Skill tool resolves skill names against the working directory, so a `Skill` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
 | **session dir** | Scratch dir from `Session dir:`. Already exists. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name. |
 | **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, CoT rules, archetypes, self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |
@@ -23,7 +23,9 @@ any context files. Read the context files now.
 
 ## Step 2 — Load the standard
 
-Load the `meta-author` skill via the Skill tool. It defines the 15 Laws, CoT structure, the three skill
+Load the `meta-author` skill via the Skill tool, from the repo root (Definitions) — the Skill tool resolves
+skills relative to your working directory, so a load from the wrong directory fails or activates another
+repo's skill. It defines the 15 Laws, CoT structure, the three skill
 archetypes (`{{plugin_root}}/refs/skill-archetypes.md` when running inside the plugin), and the
 self-review checklist. For edits, read the entire target file first and note what must be preserved; use
 Grep to find downstream references before renaming any field, step, or code.

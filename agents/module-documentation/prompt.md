@@ -11,7 +11,7 @@ the files, never from general knowledge of the stack.
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch dir from the prompt's `Session dir:`. Already exists — do not mkdir. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name — every implement report you document from lives at this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), `moduleMap`. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — the `## Module / Area Map` (`Path glob → Area → Reference`) is the routing source. |

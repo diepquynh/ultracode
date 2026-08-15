@@ -12,7 +12,7 @@ skills (`$explore`) because distributable Codex custom prompts are not a plugin 
 | Command | Agent it spawns | Reads | Writes |
 | --- | --- | --- | --- |
 | `/init-kit` | `ultracode:initializer` (5 modes, fanned out) | the repo | harness skill directory, `INVENTORY.md`, `repo-profile.json` |
-| `/explore` | `ultracode:explore` | the repo + its inventory | research doc + criteria doc |
+| `/explore` | `ultracode:explore` | the repo + its inventory, plus vendor docs for anything the repo does not use | research doc + criteria doc |
 | `/generate-spec` | `ultracode:generate-spec` | criteria + research docs | exactly one `ultracode-spec-*.md` |
 | `/plan` | `ultracode:plan` | the spec file, and nothing else | master plan + per-phase files |
 | `/implement` | `ultracode:implement` | one phase file (or inline instructions) | source changes + change report |
