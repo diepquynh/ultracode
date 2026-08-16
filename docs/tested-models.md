@@ -39,6 +39,11 @@ to whatever your Claude Code backend serves, so treat these as starting points f
   on UI tasks and on debugging problems like missing dependencies.
 - **DeepSeek V4 Flash 0731** — fastest and cheapest of everything above. Its pre-0731 release hallucinated a lot
   even on simple tasks; 0731 fixed that.
+- **GPT-5.6 Luna** - near-cheapest model, very good as an implementer. For $20 ChatGPT Plus subscription, you
+  get basically unlimited GPT-5.6 Luna tokens per week. Untested for frontend development.
+- **MiniMax M3** - for this guy to even do work, you have to be very specific with your instructions, which is
+  what Ultracode comes in handy. Too short and it will essentially not do anything at all, but when it does, it
+  also follows the instructions very well and good codes. Untested for frontend development.
 
 ## Code reviewing
 
