@@ -39,6 +39,10 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/pipeline-gate.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/security-block.js\""
           }
         ]
       },

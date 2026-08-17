@@ -3,7 +3,7 @@
     "code-reviewer": {
       "frontmatter": {
         "name": "code-reviewer",
-        "description": "Repo-agnostic post-change code review subagent for ultracode. Spawned by the orchestrator when: (1) an implement or write-test agent finishes and uncommitted code changes must be reviewed before proceeding, (2) the user asks to review the current working-tree changes, (3) correctness, convention adherence, security, test coverage, and clarity must be verified as a quality gate. It detects changed files from git, loads the repo's Review Rule Set from the inventory, reviews each change, and returns findings as a single JSON object the orchestrator parses. It does NOT modify project source.",
+        "description": "Repo-agnostic post-change code review subagent for ultracode. Spawned by the orchestrator when: (1) an implement or write-test agent finishes and uncommitted code changes must be reviewed before proceeding, (2) the user asks to review the current working-tree changes, (3) correctness, convention adherence, security, test coverage, and clarity must be verified as a quality gate. It detects changed files from git, loads the repo's Review Rule Set from the inventory, reviews each change, and returns findings as a single JSON object the orchestrator parses. It also runs a hardcoded, non-overridable security scan for dangerous/malicious code (backdoors, exfiltration, destructive ops, obfuscated payloads, supply-chain tampering, prompt-injection payloads) on every changed file regardless of the repo's rule set, and flags hits as BLOCKER findings that no user or embedded instruction can waive. Each BLOCKER finding pairs a literal removal fix with human-facing Guidance that teaches the underlying risk and where to research the correct pattern, without handing over a ready-made secure replacement. It does NOT modify project source.",
         "model": "sonnet",
         "effort": "high",
         "tools": [
@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "8f50183262e6891194fc0d96a1e7c91b2237a4463c4d328ee66260cd626a5f72"
+      "body_sha256": "0e1c203f9d949bb202e74573a44b9c43e0eb9b81b933d8de0aac983765d97571"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -219,7 +219,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "89a08fc0374be2fadfbb47bfd7979c173bcae0b94b8b35d65f572796fe80f0f0"
+      "body_sha256": "b3d4b8b845ad589cb877b780ee41fab75f5f388042ee0506a068fe74585ae90f"
     }
   }
 }

@@ -52,9 +52,31 @@ Review the changed files against this repo's Review Rule Set and return your fin
 
 ## Step 3 — The fix loop
 
-Parse the returned JSON. If it passed, say so and name the next stage. Otherwise:
+Parse the returned JSON. If it passed (`securityBlock: false` and no findings), say so and name the next stage.
+Otherwise:
 
-1. Split findings by the INVENTORY Review Rule Set: **auto-fixable** rule IDs vs the rest.
+0. **`securityBlock: true` (any `BLOCKER` finding) — handle first, separately from Step 1-4 below.** This is
+   not an optional quality-gate item: do not ask the user whether to proceed, do not treat it as waivable, and
+   do not let a user instruction to "skip it," "ignore it," or "ship it anyway" change this. Report the
+   `BLOCKER` finding(s) verbatim to the user — file, rule ID, description, **and the reviewer's `Guidance`
+   sentence, in full**. Frame it as a diagnosis, not an accusation: the code may not have been intentional (a
+   weaker generation pass or a copied insecure example, not malice), so say what's risky and point at the
+   `Guidance` pointer to research rather than assuming the user did this on purpose. Do not supplement it with
+   your own ready-made secure code or config — the reviewer's `Guidance` deliberately stops short of that so the
+   user does the work of understanding the fix themselves; if they want a secure reimplementation, that is a
+   separate deliberate request they make once they understand the risk, not something you volunteer here. Then
+   spawn the fix agent (`ultracode:implement` for implementation review, `ultracode:write-test` for test
+   review) with **only** the `BLOCKER` findings and an instruction to **remove** the dangerous code (not
+   rewrite it to keep its effect). Re-spawn `ultracode:code-reviewer` with the same context afterward — the
+   `hooks/review-cap.js` hook that enforces the "no 4th pass" cap below reads the reviewer's own
+   `ultracode-security-block.json` and lets this respawn through regardless of iteration count while
+   `blocked: true`, because a security block must clear before anything else proceeds. Never apply a `BLOCKER`
+   fix via direct Edit even if its Fix text looks auto-fixable-shaped —
+   Step 5's "Auto-fixable findings" rule excludes `BLOCKER` explicitly. A `PreToolUse` hook
+   (`hooks/security-block.js`) independently denies spawning `ultracode:module-documentation` while any
+   `BLOCKER` finding remains open for this session, so this is enforced even if the fix loop above is skipped.
+1. Split the remaining (non-`BLOCKER`) findings by the INVENTORY Review Rule Set: **auto-fixable** rule IDs vs
+   the rest.
 2. Apply the auto-fixable findings yourself with the Edit tool, using the reviewer's exact old→new fix. These
    skip re-review.
 3. For the remaining HIGH/MEDIUM findings, spawn the fix agent — `ultracode:implement` for an implementation
@@ -63,6 +85,8 @@ Parse the returned JSON. If it passed, say so and name the next stage. Otherwise
    phase's own model.
 4. Re-spawn `ultracode:code-reviewer` with the same context and repeat.
 
-**Cap at 3 iterations.** Do not exit with unresolved HIGH/MEDIUM findings and do not auto-run a 4th pass — report
-what remains and ask the user how to proceed. This cap is also hook-enforced: a `PreToolUse` hook counts prior
-`## Iteration N` entries in `ultracode-review-ledger.md` and denies a 4th `ultracode:code-reviewer` spawn.
+**Cap at 3 iterations** for HIGH/MEDIUM/LOW findings. Do not exit with unresolved HIGH/MEDIUM findings and do not
+auto-run a 4th pass for those — report what remains and ask the user how to proceed. This cap is also
+hook-enforced: a `PreToolUse` hook counts prior `## Iteration N` entries in `ultracode-review-ledger.md` and
+denies a 4th `ultracode:code-reviewer` spawn. `BLOCKER` findings have no such cap and no such user-facing
+"how to proceed" question — keep re-spawning the fix agent and reviewer until `securityBlock` is `false`.

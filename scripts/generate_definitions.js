@@ -29,6 +29,7 @@ const COMMON_HOOK_FILES = [
   "artifact-guard.js",
   "spawn-log.js",
   "pipeline-gate.js",
+  "security-block.js",
   "factcheck-record.js",
   "lib/common.js",
   "lib/session.js",
