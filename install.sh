@@ -24,6 +24,7 @@ esac
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Would install Ultracode for $TARGETS from $REPO_URL into $INSTALL_DIR."
   echo "Would generate dist/<harness>/ultracode from the checkout's neutral sources."
+  echo "Would install the bundled ultracode_gate MCP server's Node dependencies (npm ci)."
   echo "Would configure the local marketplace and install the Ultracode plugin."
   exit 0
 fi
@@ -31,6 +32,11 @@ fi
 command -v node >/dev/null 2>&1 || {
   echo "Node is required by Ultracode's runtime hooks." >&2
   echo "Install Node 20 or newer first: https://nodejs.org/" >&2
+  exit 1
+}
+command -v npm >/dev/null 2>&1 || {
+  echo "npm is required to install the bundled ultracode_gate MCP server's dependencies." >&2
+  echo "It normally ships with Node: https://nodejs.org/" >&2
   exit 1
 }
 command -v git >/dev/null 2>&1 || { echo "git is required." >&2; exit 1; }
@@ -71,6 +77,12 @@ for HARNESS in $TARGETS; do
   rm -rf "$PLUGIN_ROOT"
   node "$GENERATOR" --target "$HARNESS" --source-root "$INSTALL_DIR" --output-dir "$PLUGIN_ROOT" \
     || { echo "Failed to generate the $HARNESS plugin from $INSTALL_DIR." >&2; exit 1; }
+
+  # The bundled ultracode_gate MCP server (mcp/gate-server.js) needs its own node_modules to run.
+  # Some harnesses auto-install a plugin's declared dependencies; do it here explicitly too so the
+  # server works regardless of whether that harness-side auto-install exists or has fired yet.
+  ( cd "$PLUGIN_ROOT" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund ) \
+    || { echo "Failed to install the ultracode_gate MCP server's dependencies in $PLUGIN_ROOT." >&2; exit 1; }
 
   if [ "$HARNESS" = claude ]; then
     marketplaces="$(claude plugin marketplace list --json)"

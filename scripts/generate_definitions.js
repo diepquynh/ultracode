@@ -11,8 +11,28 @@ const path = require("node:path");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const SOURCE_PARENTS = ["agents", "skills", "commands"];
-const COMMON_PLUGIN_INPUTS = ["refs", "assets", "LICENSE"];
-const COMMON_HOOK_FILES = ["model-router.js", "session-start.sh"];
+const COMMON_PLUGIN_INPUTS = [
+  "refs",
+  "assets",
+  "LICENSE",
+  "mcp",
+  "package.json",
+  "package-lock.json",
+];
+const COMMON_HOOK_FILES = [
+  "model-router.js",
+  "session-start.sh",
+  "session-resume.js",
+  "review-cap.js",
+  "session-guard.js",
+  "bash-guard.js",
+  "artifact-guard.js",
+  "spawn-log.js",
+  "pipeline-gate.js",
+  "factcheck-record.js",
+  "lib/common.js",
+  "lib/session.js",
+];
 
 const HARNESS_TEMPLATE_KEYS = new Set([
   "state_dir",
@@ -697,7 +717,17 @@ function codexCommandMetadata(definition) {
   );
 }
 
-function pluginMetadataFiles(target, metadata) {
+function gateMcpServers(target, harnessLayout) {
+  const pluginRootEnv = harnessLayout.layouts[target].plugin_root_env;
+  return {
+    "ultracode-gate": {
+      command: "node",
+      args: [`\${${pluginRootEnv}}/mcp/gate-server.js`],
+    },
+  };
+}
+
+function pluginMetadataFiles(target, metadata, harnessLayout) {
   const common = {
     name: metadata.name,
     version: metadata.version,
@@ -715,6 +745,7 @@ function pluginMetadataFiles(target, metadata) {
       author: metadata.author,
       license: metadata.license,
       keywords: metadata.keywords,
+      mcpServers: gateMcpServers(target, harnessLayout),
     };
     const marketplace = {
       name: metadata.name,
@@ -742,6 +773,7 @@ function pluginMetadataFiles(target, metadata) {
       ...common,
       skills: "./skills/",
       interface: interfaceObj,
+      mcpServers: gateMcpServers(target, harnessLayout),
     }),
   };
 }
@@ -936,7 +968,7 @@ function generate(target, sourceRoot, outputRoot, check) {
 
   const pluginFiles = new Map();
   for (const [rel, content] of Object.entries(
-    pluginMetadataFiles(target, pluginMetadata),
+    pluginMetadataFiles(target, pluginMetadata, harnessLayout),
   )) {
     pluginFiles.set(rel, content);
   }

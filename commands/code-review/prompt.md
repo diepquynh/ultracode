@@ -64,4 +64,5 @@ Parse the returned JSON. If it passed, say so and name the next stage. Otherwise
 4. Re-spawn `ultracode:code-reviewer` with the same context and repeat.
 
 **Cap at 3 iterations.** Do not exit with unresolved HIGH/MEDIUM findings and do not auto-run a 4th pass — report
-what remains and ask the user how to proceed.
+what remains and ask the user how to proceed. This cap is also hook-enforced: a `PreToolUse` hook counts prior
+`## Iteration N` entries in `ultracode-review-ledger.md` and denies a 4th `ultracode:code-reviewer` spawn.

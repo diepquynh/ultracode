@@ -4,6 +4,10 @@
 .idea/
 .vscode/
 
+# Node dependency for the bundled ultracode_gate MCP server (mcp/gate-server.js) —
+# installed locally for testing; the shipped plugin gets its own via package-lock.json
+node_modules/
+
 # Harness plugin distributions — generated from the neutral sources by install.sh
 /dist/
 

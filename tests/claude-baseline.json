@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "07a7acce90e0cec25aefc40c04683c32efc15712abab996524d06554154af470"
+      "body_sha256": "8f50183262e6891194fc0d96a1e7c91b2237a4463c4d328ee66260cd626a5f72"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "452545ca610e565897de0e861abdd2dcc208dfc77143d474de2a211e89ca0bb4"
+      "body_sha256": "61af771c43c033cb50b32a81b4fedc434c1dc8ddb8bc443d612e8d69fb13043e"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "eecc1347554cc67a1478ac2237b5dae15b202f0bc8f392bd8af3b3d2f7f44616"
+      "body_sha256": "51b9b8007c75b4d8ae9d3204a98f565a31ab72b5931c711dcf49b0fb164d0cb1"
     },
     "generate-spec": {
       "frontmatter": {
@@ -71,7 +71,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "17aca11157a9fffbf313c0bea5d6ce629180a9ac26a3aa815145e62320ed313d"
+      "body_sha256": "9586067b1650078172918641389557f7766d30babc9820b30e829eee79cefff7"
     },
     "implement": {
       "frontmatter": {
@@ -91,7 +91,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "fec85cdf47d9d9902ba848caf91b236d83079ba267b785d8028e6e7070029656"
+      "body_sha256": "503d94c6a4452eb84d7d2b9ee952fcc0f703046966d1dc3ebb8c9ea806fb6001"
     },
     "initializer": {
       "frontmatter": {
@@ -110,7 +110,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "8ecf2541b6d8bea4dc249643d8fc43823a05deb334755fadf145e58c648fba25"
+      "body_sha256": "0ce6bbd9ec3b3fdf9ea63620aeee9e00fc9fe74f80bf090d8267412e12766261"
     },
     "module-documentation": {
       "frontmatter": {
@@ -129,7 +129,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "5544414389df929af188dc94976f2c92196d5956e162abc808eed9a7020fc357"
+      "body_sha256": "0f0f6efb06be9126a25b1b383ac519b81d0e5b4ed466e03657ce076a8fc64625"
     },
     "plan": {
       "frontmatter": {
@@ -146,7 +146,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "fd5fd412869d20ab32664cae3b1979da73239283e7e822092aa01e2a5c982201"
+      "body_sha256": "6fe4e50457c609ad45b83a8b8c3f3b185dcea18b803b7993489fa1f454cd786f"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -166,7 +166,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "30c7c6544aaf7e1e574b22e1c9f082de71d586f0c0ec0f53a9cb33c9709e6269"
+      "body_sha256": "3516f9322814af9a3ee33f57ad99b33facda25e9d85015dfcb24aafe5b42756e"
     },
     "write-test": {
       "frontmatter": {
@@ -186,7 +186,24 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "9697d67f65268331fd28175d6ed5886b41d9f47b2482a66fcd0fd257837c4b5f"
+      "body_sha256": "ba13e05b08ec7c6c0deb5f014c165da0360d8f68d48fe621108f503e23e76532"
+    },
+    "fact-check": {
+      "frontmatter": {
+        "name": "fact-check",
+        "description": "Repo-agnostic fact-checking subagent for ultracode. Spawned by the orchestrator after ultracode:generate-spec and after ultracode:plan return, before either is presented for approval: (1) every request that reaches a spec or a plan runs this agent against that artifact, mandatorily, (2) the user explicitly asks to fact-check a spec, plan, or research document. It verifies that every concrete claim the target file makes — a referenced file, function, API, or library capability — is actually true of this repo or is traceable to fetched documentation rather than recalled knowledge, and returns a single {verdict, target, findings} JSON object. A PASS verdict is required before the ultracode_gate MCP tool will record spec or plan approval, regardless of what the orchestrator or the user decides. It does NOT modify project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "daf996e33cfd16ad1489e1df4d3975d816ae4b8b0461f2d3ea81b0e4fae6adc2"
     }
   },
   "skills": {
@@ -202,7 +219,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "761ff866efb2a56f06700589b833c16de092735cd484e4e943edc33732cf13d8"
+      "body_sha256": "89a08fc0374be2fadfbb47bfd7979c173bcae0b94b8b35d65f572796fe80f0f0"
     }
   }
 }

@@ -11,7 +11,7 @@ orchestrator. You are a leaf agent — you do the writing yourself and return a 
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and the Skill tool resolves skill names against the working directory, so a `Skill` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
-| **session dir** | Scratch dir from `Session dir:`. Already exists. **If the prompt omits it,** derive it: `{repo-root}/{{runtime_dir}}/session/ultracode-session-{{session_id_expr}}`. You inherit the harness session ID ({{session_id_agent_names}}) from the orchestrator unchanged, so that resolves to the same dir every other agent in this session uses; `mkdir -p` it in that case (a no-op if it exists). Never invent a random or timestamped dir name. |
+| **session dir** | Scratch dir from `Session dir:` — already exists. A `PreToolUse` hook validates this path before you're spawned, so trust it as given. |
 | **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, CoT rules, archetypes, self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |
 | **output report** | `{session-dir}/ultracode-prompt-gen-{YYYYMMDD}-{HHmmss}.md`. |

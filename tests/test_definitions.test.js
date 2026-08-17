@@ -46,6 +46,7 @@ const COMMAND_NAMES = new Set([
   "code-review",
   "epa",
   "explore",
+  "fact-check",
   "generate-spec",
   "implement",
   "init-kit",
@@ -317,7 +318,7 @@ function sourceDefinitions() {
 
 test("every definition was migrated", () => {
   const definitions = sourceDefinitions();
-  assert.equal(definitions.length, 22);
+  assert.equal(definitions.length, 24);
   assert.deepEqual(
     new Set(
       definitions
@@ -388,7 +389,7 @@ test("claude generation matches pre-refactor behavior", () => {
     );
     assert.equal(body, adaptForTarget(sourceBody, "claude"));
   }
-  assert.match(stdout, /generated 22 definitions for claude/);
+  assert.match(stdout, /generated 24 definitions for claude/);
 });
 
 test("generation is deterministic for both targets", () => {
@@ -662,6 +663,37 @@ test("installer generates each plugin root from the checkout", () => {
   );
 });
 
+test("installer installs the bundled MCP server's dependencies into each plugin root", () => {
+  const script = fs.readFileSync(INSTALLER, "utf-8");
+  assert.match(script, /command -v npm/);
+  assert.match(script, /cd "\$PLUGIN_ROOT" && npm ci --omit=dev --ignore-scripts/);
+  // Must run after generation produces $PLUGIN_ROOT's package.json/package-lock.json, and before
+  // either harness's plugin-registration step that would try to run the server.
+  const generateIndex = script.indexOf("node \"$GENERATOR\"");
+  const npmCiIndex = script.indexOf("npm ci --omit=dev");
+  const claudeRegisterIndex = script.indexOf('if [ "$HARNESS" = claude ]');
+  assert.ok(generateIndex > 0 && npmCiIndex > generateIndex);
+  assert.ok(claudeRegisterIndex > 0 && claudeRegisterIndex > npmCiIndex);
+});
+
+test("real npm ci against the generated plugin root installs a working ultracode_gate MCP server", () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-mcp-install-"));
+  runGenerator("claude", output);
+  execFileSync("npm", ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
+    cwd: output,
+    encoding: "utf-8",
+  });
+  assert.ok(fs.statSync(path.join(output, "node_modules", "@modelcontextprotocol", "sdk")).isDirectory());
+  assert.ok(fs.statSync(path.join(output, "node_modules", "zod")).isDirectory());
+  // A closed stdin (no client attached) makes the stdio transport shut down cleanly and quickly —
+  // exit 0 with no stderr means the module graph resolved and the server started without error.
+  const result = execFileSync("node", [path.join(output, "mcp", "gate-server.js")], {
+    input: "",
+    encoding: "utf-8",
+  });
+  assert.equal(result, "");
+});
+
 test("installer dry run covers both harnesses", () => {
   for (const target of ["claude", "codex"]) {
     const result = execFileSync(
@@ -685,7 +717,7 @@ test("installer reports missing harness before installing", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-install-"));
   const binDir = path.join(tempDir, "bin");
   fs.mkdirSync(binDir);
-  for (const tool of ["bash", "node", "git"]) {
+  for (const tool of ["bash", "node", "npm", "git"]) {
     const toolPath = execQuiet("which", [tool]);
     assert.ok(toolPath, `${tool} not on PATH`);
     fs.symlinkSync(toolPath.trim(), path.join(binDir, tool));
@@ -885,6 +917,45 @@ test("model router keeps the initializer model when reinitializing", () => {
   routeInitializerTest("codex");
 });
 
+function routeFactCheckExemptionTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-fcroute-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const profilePath = path.join(repo, runtimeDir, "repo-profile.json");
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true });
+  // A profile that predates the fact-check agent: no "fact-check" key at all.
+  fs.writeFileSync(
+    profilePath,
+    JSON.stringify({ models: { byAgent: { explore: "advanced" }, byPhaseComplexity: {} } }),
+    "utf-8",
+  );
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const hookInput = {
+    cwd: repo,
+    tool_input: {
+      subagent_type: "ultracode:fact-check",
+      prompt: `Repo root: ${repo}`,
+      model: "chosen-by-caller",
+    },
+  };
+  const stdout = runHook(
+    path.join(pluginRoot, "hooks", "model-router.js"),
+    hookInput,
+    { PLUGIN_ROOT: pluginRoot },
+  );
+  // Exempt like the initializer: no route present -> keep the caller's model, never deny.
+  if (stdout) {
+    const output = JSON.parse(stdout).hookSpecificOutput;
+    assert.notEqual(output.permissionDecision, "deny");
+    assert.equal(output.updatedInput.model, "chosen-by-caller");
+  }
+}
+
+test("model router exempts fact-check from requiring an explicit route", () => {
+  routeFactCheckExemptionTest("claude");
+  routeFactCheckExemptionTest("codex");
+});
+
 test("model router denies a malformed profile", () => {
   for (const content of ["not json", "[]"]) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-bad-profile-"));
@@ -911,6 +982,340 @@ test("model router denies a malformed profile", () => {
   }
 });
 
+function reviewCapTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-reviewcap-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+  const hookInput = {
+    cwd: repo,
+    session_id: "testsess",
+    tool_input: { subagent_type: "ultracode:code-reviewer", prompt },
+  };
+  const run = () =>
+    runHook(path.join(pluginRoot, "hooks", "review-cap.js"), hookInput, {
+      PLUGIN_ROOT: pluginRoot,
+    });
+
+  assert.equal(run(), ""); // no ledger yet — first pass allowed
+
+  const ledgerPath = path.join(sessionDir, "ultracode-review-ledger.md");
+  fs.writeFileSync(
+    ledgerPath,
+    "## Iteration 1 (context: implementation)\n\n## Iteration 2 (context: implementation)\n",
+    "utf-8",
+  );
+  assert.equal(run(), ""); // 2 prior iterations — still allowed
+
+  fs.appendFileSync(ledgerPath, "\n## Iteration 3 (context: implementation)\n", "utf-8");
+  const denied = JSON.parse(run()).hookSpecificOutput;
+  assert.equal(denied.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /review loop cap reached \(3\/3\)/);
+}
+
+test("review-cap denies a 4th code-review iteration", () => {
+  reviewCapTest("claude");
+  reviewCapTest("codex");
+});
+
+function sessionGuardTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-sessguard-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const expectedDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  const hookPath = path.join(pluginRoot, "hooks", "session-guard.js");
+  const run = (prompt) =>
+    runHook(
+      hookPath,
+      { cwd: repo, session_id: "testsess", tool_input: { subagent_type: "ultracode:explore", prompt } },
+      { PLUGIN_ROOT: pluginRoot },
+    );
+
+  assert.equal(run(`Repo root: ${repo}.\nSession dir: ${expectedDir}.`), "");
+  assert.equal(run(`Repo root: ${repo}.\nSession dir: ${path.join(expectedDir, "backend")}.`), "");
+
+  const missing = JSON.parse(run(`Repo root: ${repo}.`)).hookSpecificOutput;
+  assert.equal(missing.permissionDecision, "deny");
+  assert.match(missing.permissionDecisionReason, /no Session dir:/);
+
+  const wrong = JSON.parse(
+    run(`Repo root: ${repo}.\nSession dir: ${path.join(repo, runtimeDir, "session", "ultracode-session-RANDOM")}.`),
+  ).hookSpecificOutput;
+  assert.equal(wrong.permissionDecision, "deny");
+  assert.match(wrong.permissionDecisionReason, new RegExp(expectedDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+}
+
+test("session-guard denies a missing or invented Session dir:", () => {
+  sessionGuardTest("claude");
+  sessionGuardTest("codex");
+});
+
+function bashGuardTest(target) {
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const hookPath = path.join(pluginRoot, "hooks", "bash-guard.js");
+  const run = (command, agentType) =>
+    runHook(hookPath, {
+      tool_input: { command },
+      ...(agentType ? { agent_type: agentType } : {}),
+    });
+
+  for (const command of ["sleep 5", "true", ":", "wait", "while true; do sleep 1; done"]) {
+    const denied = JSON.parse(run(command)).hookSpecificOutput;
+    assert.equal(denied.permissionDecision, "deny", command);
+    assert.match(denied.permissionDecisionReason, /Hard rule 19/);
+  }
+
+  assert.equal(run("npm test"), "");
+  assert.equal(run("sleep 5", "ultracode:implement"), "");
+}
+
+test("bash-guard denies orchestrator wait/sleep but exempts subagents", () => {
+  bashGuardTest("claude");
+  bashGuardTest("codex");
+});
+
+function artifactGuardTest(target) {
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const hookPath = path.join(pluginRoot, "hooks", "artifact-guard.js");
+  const run = (filePath, agentType) =>
+    runHook(hookPath, {
+      tool_input: { file_path: filePath },
+      ...(agentType ? { agent_type: agentType } : {}),
+    });
+
+  for (const name of [
+    "ultracode-spec-2026-01-01-topic.md",
+    "ultracode-plan-2026-01-01-topic.md",
+    "plan.md",
+    "phase-2-service-layer.md",
+  ]) {
+    const denied = JSON.parse(run(`/repo/.claude/ultracode/session/x/${name}`)).hookSpecificOutput;
+    assert.equal(denied.permissionDecision, "deny", name);
+    assert.match(denied.permissionDecisionReason, /Rules D3\/D10\/D17/);
+  }
+
+  assert.equal(run("/repo/src/App.ts"), "");
+  assert.equal(
+    run("/repo/.claude/ultracode/session/x/ultracode-spec-2026-01-01-topic.md", "ultracode:generate-spec"),
+    "",
+  );
+}
+
+test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts subagents", () => {
+  artifactGuardTest("claude");
+  artifactGuardTest("codex");
+});
+
+function pipelineGateTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-gate-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const hookPath = path.join(pluginRoot, "hooks", "pipeline-gate.js");
+  const run = (agent, extraPromptLines = "") =>
+    runHook(
+      hookPath,
+      {
+        cwd: repo,
+        session_id: "testsess",
+        tool_input: {
+          subagent_type: `ultracode:${agent}`,
+          prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.${extraPromptLines}`,
+        },
+      },
+      { PLUGIN_ROOT: pluginRoot },
+    );
+
+  const planDenied = JSON.parse(run("plan")).hookSpecificOutput;
+  assert.equal(planDenied.permissionDecision, "deny");
+  assert.match(planDenied.permissionDecisionReason, /spec has not been recorded as approved/);
+
+  fs.writeFileSync(
+    path.join(sessionDir, "gates.json"),
+    JSON.stringify({ spec: { decision: "approved" } }),
+    "utf-8",
+  );
+  assert.equal(run("plan"), "");
+
+  // An inline no-plan implement spawn (no Phase file:) is exempt from the plan gate.
+  assert.equal(run("implement"), "");
+
+  const phaseLine = `\nPhase file: ${path.join(sessionDir, "phase-1.md")}.`;
+  const implementDenied = JSON.parse(run("implement", phaseLine)).hookSpecificOutput;
+  assert.equal(implementDenied.permissionDecision, "deny");
+  assert.match(implementDenied.permissionDecisionReason, /plan has not been recorded as approved/);
+
+  fs.writeFileSync(
+    path.join(sessionDir, "gates.json"),
+    JSON.stringify({ spec: { decision: "approved" }, plan: { decision: "approved" } }),
+    "utf-8",
+  );
+  assert.equal(run("implement", phaseLine), "");
+}
+
+test("pipeline-gate denies plan/implement spawns without a recorded approval", () => {
+  pipelineGateTest("claude");
+  pipelineGateTest("codex");
+});
+
+test("both plugin distributions bundle the ultracode_gate MCP server", () => {
+  for (const [target, root, envVar] of [
+    ["claude", CLAUDE_PLUGIN_ROOT, "CLAUDE_PLUGIN_ROOT"],
+    ["codex", CODEX_PLUGIN_ROOT, "PLUGIN_ROOT"],
+  ]) {
+    assert.ok(fs.statSync(path.join(root, "mcp", "gate-server.js")).isFile());
+    assert.ok(fs.statSync(path.join(root, "package.json")).isFile());
+    assert.ok(fs.statSync(path.join(root, "package-lock.json")).isFile());
+    const manifestPath =
+      target === "claude"
+        ? path.join(root, ".claude-plugin", "plugin.json")
+        : path.join(root, ".codex-plugin", "plugin.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    assert.deepEqual(manifest.mcpServers, {
+      "ultracode-gate": {
+        command: "node",
+        args: [`\${${envVar}}/mcp/gate-server.js`],
+      },
+    });
+  }
+});
+
+function factcheckRecordTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-fcrecord-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+  const record = (verdict, findings = []) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "factcheck-record.js"),
+      {
+        cwd: repo,
+        session_id: "testsess",
+        tool_input: { subagent_type: "ultracode:fact-check", prompt },
+        tool_response: JSON.stringify({ verdict, target: "spec", findings }),
+      },
+      { PLUGIN_ROOT: pluginRoot },
+    );
+
+  record("FAIL", [{ severity: "HIGH", location: "x", claim: "y", issue: "z" }]);
+  record("PASS");
+
+  const factcheck = JSON.parse(fs.readFileSync(path.join(sessionDir, "factcheck.json"), "utf-8"));
+  assert.equal(factcheck.spec.verdict, "PASS");
+  assert.equal(factcheck.spec.rounds, 2);
+  assert.deepEqual(factcheck.spec.findings, []);
+
+  // A non-fact-check spawn must not be recorded.
+  runHook(
+    path.join(pluginRoot, "hooks", "factcheck-record.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      tool_input: { subagent_type: "ultracode:implement", prompt },
+      tool_response: JSON.stringify({ verdict: "PASS", target: "plan" }),
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+  const unchanged = JSON.parse(fs.readFileSync(path.join(sessionDir, "factcheck.json"), "utf-8"));
+  assert.ok(!unchanged.plan);
+}
+
+test("factcheck-record captures fact-check verdicts and increments rounds", () => {
+  factcheckRecordTest("claude");
+  factcheckRecordTest("codex");
+});
+
+function progressTrackerTest(target) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-progress-${target}-`));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase file: ${path.join(sessionDir, "phase-2.md")}.`;
+
+  runHook(
+    path.join(pluginRoot, "hooks", "spawn-log.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      tool_input: { subagent_type: "ultracode:implement", prompt },
+      tool_response: "STUCK: cannot resolve merge conflict",
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+
+  const progress = JSON.parse(fs.readFileSync(path.join(sessionDir, "progress.json"), "utf-8"));
+  assert.equal(progress.schemaVersion, 1);
+  assert.equal(progress.records.length, 1);
+  assert.equal(progress.records[0].agent, "implement");
+  assert.equal(progress.records[0].phase, "phase-2");
+  assert.equal(progress.records[0].status, "stuck");
+
+  const resumeOutput = runHook(path.join(pluginRoot, "hooks", "session-resume.js"), {
+    cwd: repo,
+    session_id: "testsess",
+  });
+  assert.match(resumeOutput, /implement phase-2 \[stuck\]/);
+}
+
+test("spawn-log records structured progress.json read back by session-resume", () => {
+  progressTrackerTest("claude");
+  progressTrackerTest("codex");
+});
+
+test("mcp/lib/memory dedupes by (area, lesson), moves the newest to the end, and caps entries", () => {
+  const { appendLesson, DEFAULT_MAX_ENTRIES } = require(
+    path.join(ROOT, "mcp", "lib", "memory.js"),
+  );
+  let text = appendLesson("", { area: "auth", lesson: "L1", source: "a" });
+  text = appendLesson(text, { area: "build", lesson: "L2", source: "a" });
+  text = appendLesson(text, { area: "auth", lesson: "L1", source: "b" });
+  const lines = text.split("\n").filter((l) => l.startsWith("- "));
+  assert.deepEqual(lines, [
+    "- [build] L2 — source: a",
+    "- [auth] L1 — source: b",
+  ]);
+
+  let capped = "";
+  for (let i = 0; i < DEFAULT_MAX_ENTRIES + 10; i++) {
+    capped = appendLesson(capped, { area: "a", lesson: `lesson-${i}`, source: "s" });
+  }
+  const cappedLines = capped.split("\n").filter((l) => l.startsWith("- "));
+  assert.equal(cappedLines.length, DEFAULT_MAX_ENTRIES);
+  assert.match(cappedLines[0], /lesson-10/);
+});
+
+test("mcp/lib/gate refuses approval without a fact-check PASS and allows it once recorded", () => {
+  const { recordGateDecision } = require(path.join(ROOT, "mcp", "lib", "gate.js"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-gate-lib-"));
+
+  const denied = recordGateDecision(tempDir, "spec", "approved");
+  assert.equal(denied.ok, false);
+  assert.match(denied.message, /has not returned a PASS/);
+
+  const rejected = recordGateDecision(tempDir, "plan", "rejected", "needs rework");
+  assert.equal(rejected.ok, true);
+
+  fs.writeFileSync(path.join(tempDir, "factcheck.json"), JSON.stringify({ spec: { verdict: "PASS" } }));
+  const approved = recordGateDecision(tempDir, "spec", "approved");
+  assert.equal(approved.ok, true);
+
+  const gates = JSON.parse(fs.readFileSync(path.join(tempDir, "gates.json"), "utf-8"));
+  assert.equal(gates.spec.decision, "approved");
+  assert.equal(gates.plan.decision, "rejected");
+  assert.equal(gates.plan.notes, "needs rework");
+});
+
 test("both plugin distributions include target hooks", () => {
   for (const [target, root] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
@@ -922,18 +1327,31 @@ test("both plugin distributions include target hooks", () => {
       .filter((name) => fs.statSync(path.join(hookDir, name)).isFile())
       .sort();
     assert.deepEqual(files, [
+      "artifact-guard.js",
+      "bash-guard.js",
+      "factcheck-record.js",
       "hooks.json",
       "model-router.js",
       "model-routing.json",
+      "pipeline-gate.js",
+      "review-cap.js",
+      "session-guard.js",
+      "session-resume.js",
       "session-start.sh",
+      "spawn-log.js",
     ]);
+    assert.ok(fs.statSync(path.join(hookDir, "lib", "common.js")).isFile());
+    assert.ok(fs.statSync(path.join(hookDir, "lib", "session.js")).isFile());
     const config = JSON.parse(
       fs.readFileSync(path.join(hookDir, "hooks.json"), "utf-8"),
     );
     assert.ok(config.hooks.SessionStart);
     assert.ok(config.hooks.PreToolUse);
+    assert.ok(config.hooks.PostToolUse);
     const sessionCommand = config.hooks.SessionStart[0].hooks[0].command;
     assert.ok(sessionCommand.startsWith("bash "));
+    const compactCommand = config.hooks.SessionStart[1].hooks[0].command;
+    assert.match(compactCommand, /session-resume\.js/);
     const routing = JSON.parse(
       fs.readFileSync(path.join(hookDir, "model-routing.json"), "utf-8"),
     );

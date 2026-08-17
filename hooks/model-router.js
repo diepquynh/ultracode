@@ -199,9 +199,11 @@ async function main() {
     repoValue && isDirectory(repoValue) ? path.resolve(repoValue) : path.resolve(cwd);
   const profilePath = path.join(repo, routing.runtime_dir, "repo-profile.json");
 
+  const isExemptFromRoute = agent === "initializer" || agent === "fact-check";
+
   let route;
   if (!isFile(profilePath)) {
-    route = agent === "initializer" ? toolInput.model || "default" : "default";
+    route = isExemptFromRoute ? toolInput.model || "default" : "default";
   } else {
     let profile;
     try {
@@ -215,7 +217,7 @@ async function main() {
     }
     const [present, computedRoute] = profileRoute(profile, agent, prompt);
     if (!present) {
-      if (agent !== "initializer") {
+      if (!isExemptFromRoute) {
         deny(
           `ultracode: ${profilePath} has no model route for ${agent}; ` +
             'set a tier, "default", or "inherit" explicitly.',
@@ -225,6 +227,9 @@ async function main() {
       // The initializer is spawned by the init-kit command, which sets its model per mode, and the
       // seeded profile deliberately carries no initializer route. Denying here would make every
       // re-initialization of an already-initialized repo fail. A route set by hand still wins.
+      // fact-check is exempted the same way: it is now a mandatory gate on every spec/plan, so an
+      // existing repo-profile.json written before this agent existed must not start hard-failing
+      // every approval until the user (or a re-run of /init-kit) adds an explicit route.
       route = toolInput.model || "default";
     } else {
       route = computedRoute;
