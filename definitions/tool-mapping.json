@@ -7,9 +7,9 @@
       "source_terms": ["Read"]
     },
     "edit": {
-      "claude": "Edit",
+      "claude": "Update",
       "codex": "apply_patch",
-      "source_terms": ["Edit"]
+      "source_terms": ["Update"]
     },
     "write": {
       "claude": "Write",
