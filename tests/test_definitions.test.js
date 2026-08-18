@@ -570,7 +570,7 @@ test("codex agents are valid TOML", () => {
 
 test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
-    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-build-0.1" },
+    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6" },
     balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6" },
     advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6" },
   });
@@ -723,8 +723,6 @@ test("installer generates each plugin root from the checkout", () => {
     script,
     /node "\$GENERATOR" --target "\$HARNESS" --source-root "\$INSTALL_DIR" --output-dir "\$PLUGIN_ROOT"/,
   );
-  assert.match(script, /ensure_grok_fast_model "\$grok_fast"/);
-  assert.match(script, /quoted_hdr="\[model\.\\"\$\{model\}\\"\]"/);
 });
 
 test("installer installs the bundled MCP server's dependencies into each plugin root", () => {
@@ -779,11 +777,7 @@ test("installer dry run covers every harness", () => {
     assert.ok(result.includes(`for ${target}`), result);
     assert.ok(result.includes("Would generate dist/<harness>/ultracode"));
     assert.ok(result.includes("local marketplace"));
-    if (target === "grok") {
-      assert.ok(result.includes("Would register the Grok fast-tier model"));
-    } else {
-      assert.ok(!result.includes("Would register the Grok fast-tier model"));
-    }
+    assert.ok(!result.includes("Would register the Grok fast-tier model"));
   }
   const all = execFileSync(
     "bash",
@@ -791,61 +785,7 @@ test("installer dry run covers every harness", () => {
     { cwd: ROOT, encoding: "utf-8" },
   );
   assert.ok(all.includes("for claude grok codex"));
-  assert.ok(all.includes("Would register the Grok fast-tier model"));
-});
-
-function installerGrokHelpers() {
-  const script = fs.readFileSync(INSTALLER, "utf-8");
-  const start = script.indexOf("ensure_grok_fast_model()");
-  const readStart = script.indexOf("read_grok_fast_model()");
-  const end = script.indexOf("\n}\n", readStart);
-  assert.ok(start > 0 && readStart > start && end > readStart, "missing grok config helpers");
-  return script.slice(start, end + 3);
-}
-
-function runEnsureGrokFastModel(home, model) {
-  execFileSync(
-    "bash",
-    ["-c", `${installerGrokHelpers()}\nensure_grok_fast_model "$1"`, "ensure_grok_fast_model", model],
-    { encoding: "utf-8", env: { ...process.env, GROK_HOME: home } },
-  );
-}
-
-test("installer registers a quoted grok-build-0.1 table in Grok config", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-grok-cfg-"));
-  const config = path.join(home, "config.toml");
-  const model = MODEL_MAPPING.tiers.fast.grok;
-  assert.equal(model, "grok-build-0.1");
-
-  const mapped = execFileSync(
-    "bash",
-    [
-      "-c",
-      `${installerGrokHelpers()}\nread_grok_fast_model "$1"`,
-      "read_grok_fast_model",
-      path.join(ROOT, "definitions", "model-mapping.json"),
-    ],
-    { encoding: "utf-8" },
-  );
-  assert.equal(mapped, model);
-
-  runEnsureGrokFastModel(home, model);
-  const first = fs.readFileSync(config, "utf-8");
-  assert.match(first, /\[model\."grok-build-0\.1"\]/);
-  assert.doesNotMatch(first, /^\[model\.grok-build-0\.1\]$/m);
-  assert.match(first, /model = "grok-build-0\.1"/);
-
-  runEnsureGrokFastModel(home, model);
-  const second = fs.readFileSync(config, "utf-8");
-  assert.equal((second.match(/\[model\."grok-build-0\.1"\]/g) || []).length, 1);
-
-  const brokenHome = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-grok-unquoted-"));
-  const broken = path.join(brokenHome, "config.toml");
-  fs.writeFileSync(broken, '[model.grok-build-0.1]\nmodel = "grok-build-0.1"\n', "utf-8");
-  runEnsureGrokFastModel(brokenHome, model);
-  const quoted = fs.readFileSync(broken, "utf-8");
-  assert.match(quoted, /\[model\."grok-build-0\.1"\]/);
-  assert.doesNotMatch(quoted, /^\[model\.grok-build-0\.1\]$/m);
+  assert.ok(!all.includes("Would register the Grok fast-tier model"));
 });
 
 test("installer reports missing harness before installing", () => {

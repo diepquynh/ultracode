@@ -2,8 +2,8 @@
 
 Field notes, not benchmarks — this is what the pipeline actually felt like per role, per model. Names resolve
 to whatever your Claude Code, Grok Build, or Codex backend serves, so treat these as starting points for your
-own `models` block in `repo-profile.json`. Generated Grok defaults are `grok-build-0.1` (fast) and `grok-4.6`
-(balanced and advanced).
+own `models` block in `repo-profile.json`. Generated Grok defaults are `grok-4.6` for fast, balanced, and
+advanced.
 
 ## Orchestrator
 

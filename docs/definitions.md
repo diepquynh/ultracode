@@ -22,8 +22,8 @@ configuration records its argument hint. `prompt.md` contains only the large pro
 preserved by generation.
 
 The schema is `definitions/definition.schema.json`. Neutral model tiers resolve through
-`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-build-0.1`, and both `balanced` and
-`advanced` map to Sonnet-or-Opus/Terra-or-Sol/`grok-4.6` (Grok's balanced and advanced tiers currently resolve
+`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.6`, and both `balanced` and
+`advanced` map to Sonnet-or-Opus/Terra-or-Sol/`grok-4.6` (every Grok tier currently resolves
 to the same model). Canonical capabilities and their
 Claude Code/Grok Build/Codex translations are explicit in `definitions/tool-mapping.json`. Add a mapping
 before using a new capability in a definition. Codex and Grok Build have no `Skill` tool, so that mapping
