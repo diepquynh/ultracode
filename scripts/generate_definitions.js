@@ -723,7 +723,7 @@ function grokCapabilityNotes(promptRaw, mapping) {
   return ["# Grok Notes", "", ...notes].join("\n");
 }
 
-function grokFrontmatter(definition, mapping, modelMapping) {
+function grokFrontmatter(definition, mapping) {
   const data = definition.data;
   const lines = [
     "---",
@@ -734,15 +734,14 @@ function grokFrontmatter(definition, mapping, modelMapping) {
     const translatedTools = data.config.tools
       .map((toolId) => mapping.capabilities[toolId].grok)
       .filter((tool) => tool && !tool.includes(" "));
-    const model = modelMapping.tiers[data.config.model_tier].grok;
     const writeTools = new Set(["edit", "write"]);
     const permissionMode = data.config.tools.some((t) => writeTools.has(t))
       ? "default"
       : "plan";
+    // No model: spawn/hook (or inherit-parent) stays authoritative, like Codex.
     lines.push(
       "prompt_mode: full",
       `permission_mode: ${permissionMode}`,
-      `model: ${model}`,
       `tools: ${translatedTools.join(", ")}`,
     );
   }
@@ -756,7 +755,7 @@ function renderGrok(definition, mapping, modelMapping, harnessLayout) {
   const source =
     definition.data.kind === "command"
       ? renderClaudeCommand(definition)
-      : grokFrontmatter(definition, mapping, modelMapping) + body;
+      : grokFrontmatter(definition, mapping) + body;
   return renderHarnessTemplate(source, "grok", harnessLayout, modelMapping, mapping);
 }
 

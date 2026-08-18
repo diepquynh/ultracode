@@ -86,7 +86,8 @@ node scripts/generate_definitions.js --target grok
 This writes Claude-shaped `agents/<name>.md`, `skills/<name>/SKILL.md`, and `commands/<name>.md`, plus
 `.grok-plugin/plugin.json`, `.grok-plugin/marketplace.json`, `.mcp.json` for the bundled gate server, and
 Grok-adapted hooks under `hooks/`. Agent front matter uses Grok's `prompt_mode` / `permission_mode` /
-`tools` fields. Grok has no `Skill` / structured-question / plan-mode tools, so those capabilities emit
+`tools` fields and omits `model` so the model-router hook (or inherit-parent) stays authoritative.
+Grok has no `Skill` / structured-question / plan-mode tools, so those capabilities emit
 discovery or conversation notes the same way Codex does.
 
 Generate the Codex plugin distribution with:

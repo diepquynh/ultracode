@@ -30,6 +30,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "Would generate dist/<harness>/ultracode from the checkout's neutral sources."
   echo "Would install the bundled ultracode_gate MCP server's Node dependencies (npm ci)."
   echo "Would configure the local marketplace and install the Ultracode plugin."
+  case " $TARGETS " in
+    *" grok "*) echo "Would register the Grok fast-tier model in \$GROK_HOME/config.toml if missing." ;;
+  esac
   exit 0
 fi
 
@@ -84,6 +87,68 @@ fi
 GENERATOR="$INSTALL_DIR/scripts/generate_definitions.js"
 [ -f "$GENERATOR" ] || { echo "Missing generator: $GENERATOR" >&2; exit 1; }
 
+# Grok Build's prefetched catalog is grok-4.6 / grok-4.5. Ultracode's fast tier
+# is grok-build-0.1, a real xAI model that spawn_subagent rejects until it is
+# registered here. The table key must be quoted: unquoted [model.grok-build-0.1]
+# is nested TOML (model.grok-build-0 / 1) and Grok lists "grok-build-0".
+ensure_grok_fast_model() {
+  local model="$1"
+  local home="${GROK_HOME:-$HOME/.grok}"
+  local config="$home/config.toml"
+  local quoted_hdr="[model.\"${model}\"]"
+  local unquoted_hdr="[model.${model}]"
+  local line tmp
+
+  [ -n "$model" ] || { echo "ensure_grok_fast_model: missing model id" >&2; return 1; }
+  mkdir -p "$home"
+  if [ -f "$config" ]; then
+    if grep -Fq "$quoted_hdr" "$config" || grep -Fq "[model.'${model}']" "$config"; then
+      echo "Grok config already registers ${model} (${config})."
+      return 0
+    fi
+    if grep -Fxq "$unquoted_hdr" "$config"; then
+      tmp="$(mktemp "${config}.XXXXXX")"
+      while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$line" = "$unquoted_hdr" ]; then
+          printf '%s\n' "$quoted_hdr"
+        else
+          printf '%s\n' "$line"
+        fi
+      done < "$config" > "$tmp"
+      mv "$tmp" "$config"
+      echo "Quoted the ${model} table key in ${config} (unquoted TOML nests on dots)."
+      return 0
+    fi
+  fi
+
+  {
+    [ -s "$config" ] && printf '\n'
+    cat <<EOF
+# Added by Ultracode install.sh so Grok Build accepts the fast-tier slug.
+# Quoted key is required: a bare [model.${model}] is nested TOML, not that id.
+${quoted_hdr}
+model = "${model}"
+name = "Grok Build 0.1"
+description = "SpaceXAI's fast coding model for agentic software engineering"
+api_backend = "responses"
+context_window = 256000
+agent_type = "grok-build-plan"
+EOF
+  } >> "$config"
+  echo "Registered ${model} in ${config} so Ultracode's fast-tier route can resolve."
+}
+
+read_grok_fast_model() {
+  local mapping="$1"
+  node -e '
+    const fs = require("node:fs");
+    const mapping = JSON.parse(fs.readFileSync(process.argv[1], "utf-8"));
+    const model = mapping && mapping.tiers && mapping.tiers.fast && mapping.tiers.fast.grok;
+    if (typeof model !== "string" || !model.trim()) process.exit(1);
+    process.stdout.write(model);
+  ' "$mapping"
+}
+
 for HARNESS in $TARGETS; do
   PLUGIN_ROOT="$INSTALL_DIR/dist/$HARNESS/ultracode"
   # Generated from source on every install, so no distribution is ever committed or shipped stale.
@@ -122,6 +187,9 @@ for HARNESS in $TARGETS; do
       grok plugin uninstall ultracode --confirm
     fi
     grok plugin install "$PLUGIN_ROOT" --trust
+    grok_fast="$(read_grok_fast_model "$INSTALL_DIR/definitions/model-mapping.json")" \
+      || grok_fast="grok-build-0.1"
+    ensure_grok_fast_model "$grok_fast"
     echo "Installed Ultracode. Start a new Grok session, then run /init-kit."
     echo "If plugin hooks stay silent, run /hooks-trust or launch with --trust."
     echo "Grok also auto-loads Claude Code plugins. If Ultracode is already installed"

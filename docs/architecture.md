@@ -187,10 +187,11 @@ skill set. A user-approval gate sits between scouting and generation.
     itself never passes a `model` argument. Once a profile exists, malformed or missing routes deny the spawn.
     `"default"` = generated agent default; `"inherit"` = leave the spawn model untouched. The hook re-reads the
     profile per spawn, so mid-session edits apply next call.
-  - Claude/Grok agents keep their frontmatter defaults. Codex role TOML omits `model` since a role-level Codex
-    model outranks the spawn argument — the hook fills its generated default when the profile is absent or
-    says `"default"`. Grok hook stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both
-    that and Claude/Codex snake_case.
+  - Claude agents keep their frontmatter defaults. Codex role TOML and Grok agent front matter omit `model`
+    so a role-level value cannot outrank the spawn argument — the hook fills its generated default when the
+    profile is absent or says `"default"`, and a Grok spawn with no model inherits the parent. Grok hook
+    stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both that and Claude/Codex
+    snake_case.
   - `effort` can't be routed this way — it's a subagent-definition field only (no per-invocation `effort` on
     the Agent tool, no env var for it), so `effort: high` in front matter always holds regardless of tier.
   - `models.byAgent`: `explore`, `generate-spec`, `plan`, and the authoring stages → `advanced`;

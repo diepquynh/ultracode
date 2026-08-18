@@ -29,7 +29,9 @@ pulling. The distributions are build output rather than committed files, so an i
 revision it just fetched and no plugin is ever shipped stale.
 
 After a Claude Code install, restart Claude Code. After a Grok install, start a new session and run
-`/init-kit`. Grok trusts plugins under `~/.grok/plugins/` automatically; a project-local copy in
+`/init-kit`. The Grok target also registers `grok-build-0.1` (Ultracode's fast tier) in
+`$GROK_HOME/config.toml` if it is missing — the CLI catalog does not prefetch that slug, and the
+table key must be quoted. Grok trusts plugins under `~/.grok/plugins/` automatically; a project-local copy in
 `.grok/plugins/` needs `/hooks-trust` or `--trust` first. After a Codex install, start a new session, open
 `/hooks`, and trust Ultracode's hooks; start one more session so the `SessionStart` hook runs. Codex
 intentionally does not trust plugin hooks automatically, so initialization reminders and profile model
