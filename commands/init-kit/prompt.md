@@ -18,6 +18,18 @@ detect (1) → scout (N, parallel) → propose (1)
             (re)generate-skill (N, parallel) → generate-inventory (1)
 ```
 
+**Cross-harness shortcut.** Before it scans anything, `detect` checks whether another harness
+(`.claude`/`.codex`/`.grok`/`.agent`/`.agents`) already has a COMPLETE bootstrap for this exact repo. If it
+finds one or more, it skips straight past scout/propose/generate and instead returns a list of candidates for
+YOU to present to the user (see Step 1). Adopting a candidate runs a single `adopt` spawn instead of the
+scout → propose → generate chain:
+
+```
+detect (1, finds candidates) → YOU present candidates, wait for pick → adopt (1)
+```
+
+If the user declines every candidate (or none exist), the normal five-mode pipeline above runs.
+
 **Re-using existing skills.** The repo may already carry skills under `{{skills_dir}}/` (a prior init-kit run
 or hand-authored by the team). `detect` discovers them; `propose` marks each `status: existing` and defaults
 it to **reuse** (kept on disk, registered in the inventory, never regenerated), and folds any bespoke existing
@@ -77,12 +89,40 @@ prompt: "Mode: detect.
 Repo root: {absolute repo root}.
 User focus: {{arguments}}
 Session dir: {ULTRACODE_SESSION}.
-Detect the stack, choose the matching reference from your refs library, and write the scout plan (the list
-of slices to scout in parallel + the candidate component types). Also discover every skill already present
-under {absolute repo root}/{{skills_dir}}/ and record it in the scout plan's Existing Skills table (name, kind
-guess, path, description) so propose can re-use it. Return the scout-plan path, the stack, the chosen reference
-path, the structured slice list (descriptor, paths, slug), and the count of existing skills discovered."
+Before scanning anything, check whether another harness already has a complete bootstrap for this repo
+(Step D0) and report any cross-harness candidates instead of scanning. Otherwise, detect the stack, choose the
+matching reference from your refs library, and write the scout plan (the list of slices to scout in parallel +
+the candidate component types). Also discover every skill already present under {absolute repo
+root}/{{skills_dir}}/ and record it in the scout plan's Existing Skills table (name, kind guess, path,
+description) so propose can re-use it. Return the scout-plan path, the stack, the chosen reference path, the
+structured slice list (descriptor, paths, slug), and the count of existing skills discovered."
 ```
+
+**If detect returns `CROSS-HARNESS-CANDIDATES: {n}`** (n ≥ 1) instead of a scout plan, it found another
+harness's complete bootstrap and wrote `{ULTRACODE_SESSION}/ultracode-cross-harness-candidates.json` instead of
+scanning. {{tool_read}} that file and handle it before touching Steps 2–4:
+
+- **Present every candidate** to the user: harness, stack, skill count, and `generatedAt`. When `n > 1`, ask
+  the user to pick exactly one (or decline all and run a full scan instead). When `n == 1`, still show it and
+  ask the user to confirm adopting it or to run a full scan instead — do not adopt silently. **STOP and wait
+  for the user's decision.**
+  - **If the user picks a candidate:** spawn ONE `ultracode:initializer` agent:
+    ```
+    {{agent_selector}}: ultracode:initializer
+    model: {{balanced_model}}
+    prompt: "Mode: adopt.
+    Source harness: {chosen candidate.harness}.
+    Source state dir: {chosen candidate.stateDir}.
+    Repo root: {absolute repo root}.
+    Session dir: {ULTRACODE_SESSION}.
+    Copy the source harness's repo-profile.json, INVENTORY.md, and every skill into this harness's own
+    {{runtime_dir}}/{{skills_dir}}, translating harness-specific paths and resetting the models block to the
+    seeded defaults. Return the report path, the source harness, and the list of skill names copied."
+    ```
+    Then skip Steps 2–4 entirely and go straight to Step 5 — `adopt` writes the same
+    `ultracode-generate-report.md` the normal pipeline's Step 5 already reads.
+  - **If the user declines every candidate:** re-spawn `Mode: detect` with the same inputs PLUS `Skip
+    cross-harness check: yes`, then continue below with the scout plan it returns.
 
 {{tool_read}} the returned scout plan (`{ULTRACODE_SESSION}/ultracode-scout-plan.md`). It carries the detected stack, the
 chosen `refs/<stack>.md`, the **Slices** table (each row: descriptor, slug, path(s)) that drives the scout
@@ -206,8 +246,8 @@ and the profile skills[] array (mark each profile skills[] entry source: generat
 skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
 Seed commands + Review Rule Set from the proposal (read the stack reference at the proposal's referencePath).
 Seed the repo-profile.json models block with the harness-neutral model routing from the output contract so the
-model-router hook can switch subagent models per repo and per phase: models.byAgent (explore, generate-spec and
-plan = advanced; code-reviewer/execution-path-analyzer = balanced; module-documentation/prompt-generation =
+model-router hook can switch subagent models per repo and per phase: models.byAgent (explore, generate-spec,
+plan and fact-check = advanced; code-reviewer/execution-path-analyzer = balanced; module-documentation/prompt-generation =
 advanced) and models.byPhaseComplexity (implement and write-test each low = fast, medium = fast, high =
 balanced).
 Self-review for consistency, then write the generation report. Return the report path and the full list of
@@ -222,10 +262,12 @@ per-mode models you set on the spawns above (which are the initializer's own).
 
 ## Step 5 — Report + reload
 
-{{tool_read}} the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`). Tell the user:
-1. Which files were written (per-skill SKILL.md files, INVENTORY.md, repo-profile.json), which existing skills
-   were reused (kept as-is and registered without regeneration), and any approved skill the report lists as
-   skipped.
+{{tool_read}} the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`) — the same file
+whether it came from `generate-inventory` (normal pipeline) or `adopt` (cross-harness shortcut). Tell the user:
+1. Which files were written. For the normal pipeline: per-skill SKILL.md files, INVENTORY.md,
+   repo-profile.json, which existing skills were reused (kept as-is and registered without regeneration), and
+   any approved skill the report lists as skipped. For the cross-harness shortcut: which harness it was
+   adopted from and which skills were copied.
 2. That newly generated skills register on the next session — advise {{reload_action}} so
    `{{skills_dir}}/*` are discovered. (The INVENTORY.md routing works immediately because
    agents read it as a file.)

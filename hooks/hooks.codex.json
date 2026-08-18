@@ -52,6 +52,10 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/bash-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/bash-scope-guard.js\""
           }
         ]
       },
@@ -61,6 +65,10 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/artifact-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/scope-guard.js\""
           }
         ]
       }

@@ -1141,6 +1141,145 @@ test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts
   artifactGuardTest("grok");
 });
 
+function scopeGuardFixture(target, prefix) {
+  const pluginRoot = pluginRootFor(target);
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const skillsDir = HARNESS_LAYOUT.layouts[target].skills_dir;
+  const sessionId = "testsess";
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-${target}-`));
+  const sessionDir = path.join(repo, runtimeDir, "session", `ultracode-session-${sessionId}`);
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const env = { PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_ROOT: pluginRoot, GROK_PLUGIN_ROOT: pluginRoot };
+  return { pluginRoot, runtimeDir, skillsDir, sessionId, repo, sessionDir, env };
+}
+
+function scopeGuardTest(target) {
+  const { pluginRoot, skillsDir, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-scope",
+  );
+  const hookPath = path.join(pluginRoot, "hooks", "scope-guard.js");
+
+  const run = (filePath, agentType) =>
+    runHook(
+      hookPath,
+      {
+        cwd: repo,
+        session_id: sessionId,
+        tool_input: { file_path: filePath },
+        ...(agentType ? { agent_type: agentType } : {}),
+      },
+      env,
+    );
+  const allow = (filePath, agentType) => assert.equal(run(filePath, agentType), "", `${agentType}: ${filePath}`);
+  const deny = (filePath, agentType, pattern) => {
+    const result = JSON.parse(run(filePath, agentType)).hookSpecificOutput;
+    assert.equal(result.permissionDecision, "deny", `${agentType}: ${filePath}`);
+    assert.match(result.permissionDecisionReason, pattern);
+  };
+
+  // The orchestrator's own Write/Edit calls (no agent_type) are never checked by this hook.
+  allow("/etc/passwd");
+  allow(path.join(repo, "..", "outside.txt"));
+
+  // Universal: every subagent is confined to the repo root.
+  deny("/etc/passwd", "ultracode:prompt-generation", /outside the repo root/);
+  deny(path.join(repo, "..", "outside.txt"), "ultracode:write-test", /outside the repo root/);
+
+  // Session-only agents never touch project source — only their own session dir.
+  for (const agent of [
+    "code-reviewer",
+    "plan",
+    "execution-path-analyzer",
+    "explore",
+    "fact-check",
+    "generate-spec",
+  ]) {
+    allow(path.join(sessionDir, "report.md"), `ultracode:${agent}`);
+    deny(path.join(repo, "src", "App.ts"), `ultracode:${agent}`, /never modifies project source/);
+  }
+
+  // initializer: session dir, skills dir, runtime dir — nothing else.
+  allow(path.join(repo, skillsDir, "convention", "SKILL.md"), "ultracode:initializer");
+  allow(path.join(repo, runtimeDir, "INVENTORY.md"), "ultracode:initializer");
+  deny(path.join(repo, "src", "App.ts"), "ultracode:initializer", /allowed scope/);
+
+  // module-documentation: session dir plus module-hub/references only — not the rest of skills_dir.
+  allow(path.join(repo, skillsDir, "module-hub", "references", "auth.md"), "ultracode:module-documentation");
+  deny(path.join(repo, skillsDir, "convention", "SKILL.md"), "ultracode:module-documentation", /allowed scope/);
+  deny(path.join(repo, "src", "App.ts"), "ultracode:module-documentation", /allowed scope/);
+
+  // implement: anywhere in the repo root, except a path that looks like a test (Constraint 6).
+  allow(path.join(repo, "src", "App.ts"), "ultracode:implement");
+  deny(path.join(repo, "src", "App.test.ts"), "ultracode:implement", /Constraint 6/);
+
+  // write-test and prompt-generation keep full repo-root scope, test-shaped paths included.
+  allow(path.join(repo, "src", "App.test.ts"), "ultracode:write-test");
+  allow(path.join(repo, "src", "prompts", "system.md"), "ultracode:prompt-generation");
+}
+
+test("scope-guard confines each subagent to its documented write scope", () => {
+  scopeGuardTest("claude");
+  scopeGuardTest("codex");
+  scopeGuardTest("grok");
+});
+
+function bashScopeGuardTest(target) {
+  const { pluginRoot, sessionId, repo, sessionDir, env } = scopeGuardFixture(target, "ultracode-bashscope");
+  const hookPath = path.join(pluginRoot, "hooks", "bash-scope-guard.js");
+
+  const run = (command, agentType) =>
+    runHook(
+      hookPath,
+      {
+        cwd: repo,
+        session_id: sessionId,
+        tool_input: { command },
+        ...(agentType ? { agent_type: agentType } : {}),
+      },
+      env,
+    );
+
+  // Ordinary read commands never trip the guard.
+  assert.equal(run("git status", "ultracode:code-reviewer"), "");
+  assert.equal(run("npm test", "ultracode:implement"), "");
+
+  // A session-only agent writing its own report inside its session dir is fine...
+  assert.equal(
+    run(`cat <<'EOF' > ${path.join(sessionDir, "ledger.md")}\nhi\nEOF`, "ultracode:code-reviewer"),
+    "",
+  );
+  // ...but writing project source through Bash instead of Write/Edit is still denied.
+  let denied = JSON.parse(
+    run(`echo bad > ${path.join(repo, "src", "App.ts")}`, "ultracode:code-reviewer"),
+  ).hookSpecificOutput;
+  assert.equal(denied.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /never modifies project source/);
+
+  // implement cannot write a test file through a Bash heredoc either.
+  denied = JSON.parse(
+    run(`cat <<'EOF' > ${path.join(repo, "src", "App.test.ts")}\nhi\nEOF`, "ultracode:implement"),
+  ).hookSpecificOutput;
+  assert.equal(denied.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /Constraint 6/);
+
+  // Any subagent deleting outside the repo root is denied.
+  denied = JSON.parse(
+    run(`rm -rf ${path.join(repo, "..", "sibling")}`, "ultracode:write-test"),
+  ).hookSpecificOutput;
+  assert.equal(denied.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /outside the repo root/);
+
+  // The orchestrator's own Bash calls (no agent_type) are never checked by this hook.
+  assert.equal(run("rm -rf /"), "");
+}
+
+test("bash-scope-guard confines each subagent's shell writes to its documented scope", () => {
+  bashScopeGuardTest("claude");
+  bashScopeGuardTest("codex");
+  bashScopeGuardTest("grok");
+});
+
 function pipelineGateTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-gate-${target}-`));
   const repo = tempDir;
@@ -1429,12 +1568,14 @@ test("every plugin distribution includes target hooks", () => {
     assert.deepEqual(files, [
       "artifact-guard.js",
       "bash-guard.js",
+      "bash-scope-guard.js",
       "factcheck-record.js",
       "hooks.json",
       "model-router.js",
       "model-routing.json",
       "pipeline-gate.js",
       "review-cap.js",
+      "scope-guard.js",
       "security-block.js",
       "session-guard.js",
       "session-resume.js",
@@ -1443,6 +1584,8 @@ test("every plugin distribution includes target hooks", () => {
     ]);
     assert.ok(fs.statSync(path.join(hookDir, "lib", "common.js")).isFile());
     assert.ok(fs.statSync(path.join(hookDir, "lib", "session.js")).isFile());
+    assert.ok(fs.statSync(path.join(hookDir, "lib", "scope-policy.js")).isFile());
+    assert.ok(fs.statSync(path.join(hookDir, "lib", "shell-paths.js")).isFile());
     const config = JSON.parse(
       fs.readFileSync(path.join(hookDir, "hooks.json"), "utf-8"),
     );

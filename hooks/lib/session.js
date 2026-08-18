@@ -26,7 +26,12 @@ function pluginTargetInfo() {
     if (!routing || typeof routing.runtime_dir !== "string" || !routing.runtime_dir) {
       return null;
     }
-    return { target: routing.target, runtimeDir: routing.runtime_dir };
+    return {
+      target: routing.target,
+      runtimeDir: routing.runtime_dir,
+      skillsDir: typeof routing.skills_dir === "string" ? routing.skills_dir : null,
+      agentsDir: typeof routing.agents_dir === "string" ? routing.agents_dir : null,
+    };
   } catch {
     return null;
   }

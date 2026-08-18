@@ -8,6 +8,7 @@
 "use strict";
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 function emit(payload) {
@@ -57,6 +58,23 @@ function isFile(target) {
   } catch {
     return false;
   }
+}
+
+// True if `target` (absolute, resolved) is `root` itself or somewhere under it.
+function isInside(root, target) {
+  const relative = path.relative(root, target);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+// Resolves a candidate path (from a tool call or a shell command token)
+// against `baseDir`, expanding a leading `~` to the real home directory first
+// — `path.resolve` treats `~` as a literal directory name, which would let
+// `~/.ssh` resolve as a harmless-looking relative path under `baseDir`.
+function resolvePathCandidate(baseDir, candidate) {
+  if (candidate === "~" || candidate.startsWith("~/") || candidate.startsWith("~\\")) {
+    return path.resolve(os.homedir(), candidate.slice(2));
+  }
+  return path.resolve(baseDir, candidate);
 }
 
 function sanitizeSessionId(id) {
@@ -200,6 +218,8 @@ module.exports = {
   readTextIfFile,
   isDirectory,
   isFile,
+  isInside,
+  resolvePathCandidate,
   sanitizeSessionId,
   readStdin,
   readHookInput,

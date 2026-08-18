@@ -26,6 +26,7 @@
 | **INVENTORY.md** | The routing table written to `<repo>/{{runtime_dir}}/INVENTORY.md`. Source of truth for skill routing; read as a plain file by all agents. See `{{plugin_root}}/refs/inventory-and-profile.md`. |
 | **repo-profile.json** | The machine-readable profile written to `<repo>/{{runtime_dir}}/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules, and model routing (the `models` block — which model each subagent spawn runs on, applied by the model-router hook). |
 | **existing skill** | A `SKILL.md` already present under `{repo}/{{skills_dir}}/` before this run — written by a prior init-kit run or hand-authored by the team. Discovered read-only in `detect`. Re-used as-is by default; never overwritten unless its `disposition` is `regenerate`. |
+| **cross-harness candidate** | A COMPLETE prior bootstrap (`repo-profile.json` + `INVENTORY.md`) found under a harness OTHER than this run's own `{{state_dir}}` (e.g. this run is Claude Code and Codex's runtime dir already has both files). Discovered read-only by Step D0, before any repo scan. Adopting one copies its skills + inventory into this harness's own dirs instead of re-scouting. |
 | **bespoke skill** | An existing skill whose `name` matches NO scouted component type and is neither `convention` nor `module-hub`. Registered in the inventory for routing but never regenerated. |
 | **status** | A per-skill field set by `propose`: `new` (no existing skill of this name) or `existing` (an existing skill of this name was found). |
 | **disposition** | A per-skill action set by the orchestrator from the user's approval-gate choice: `generate` (write a new skill), `regenerate` (overwrite an existing skill with a fresh one), or `reuse` (keep the existing skill unchanged; register it only). |
@@ -35,13 +36,76 @@
 
 ## Mode Dispatch
 
-{{tool_read}} the `Mode:` line in the orchestrator's prompt. It is exactly one of: `detect`, `scout`, `propose`, `generate-skill`, `generate-inventory`. Jump to that mode's section. If `Mode:` is missing or unrecognized, STOP and return: `ERROR: missing or invalid Mode. Expected one of detect | scout | propose | generate-skill | generate-inventory.`
+{{tool_read}} the `Mode:` line in the orchestrator's prompt. It is exactly one of: `detect`, `scout`, `propose`, `generate-skill`, `generate-inventory`, `adopt`. Jump to that mode's section. If `Mode:` is missing or unrecognized, STOP and return: `ERROR: missing or invalid Mode. Expected one of detect | scout | propose | generate-skill | generate-inventory | adopt.`
 
 ---
 
 ## Mode: DETECT (run once)
 
-**Input:** `Repo root:`, optional `User focus:`, `Session dir:`.
+**Input:** `Repo root:`, optional `User focus:`, `Session dir:`, optional `Skip cross-harness check: yes`.
+
+### Step D0 — Check other harnesses for an existing bootstrap (read-only, run first)
+
+If the orchestrator's prompt includes `Skip cross-harness check: yes`, skip this step entirely and go straight
+to Step D1 — the user already declined to adopt a cross-harness bootstrap this run.
+
+A repo bootstrapped once for one harness already did the expensive part — scouting, exemplar capture, skill
+authoring — for every OTHER harness too, since skill bodies and the module map are prose, not
+harness-specific. Before spending a full scan on this repo, check whether such a bootstrap already exists
+under a harness other than this one.
+
+**Harness layout table** (skip the row matching this run's own `{{state_dir}}`):
+
+| Harness | State dir |
+| --- | --- |
+| claude | `.claude` |
+| codex | `.codex` |
+| grok | `.grok` |
+| *(generic)* | `.agent` |
+| *(generic)* | `.agents` |
+
+The two generic rows cover a hand-rolled or third-party tool that is not one of the three named harnesses.
+For every harness in the table, its runtime dir is its state dir plus `/ultracode`, and its skills dir is its
+state dir plus `/skills` — with one exception: codex's skills dir is `.agents/skills`, not derived from its own
+state dir. Probe the generic rows with the same derived shape as a best-effort guess.
+
+```bash
+for dir in .claude .codex .grok .agent .agents; do
+  [ "$dir" = "{{state_dir}}" ] && continue
+  profile="{repo-root}/$dir/ultracode/repo-profile.json"
+  inventory="{repo-root}/$dir/ultracode/INVENTORY.md"
+  [ -f "$profile" ] && [ -f "$inventory" ] && echo "CANDIDATE: $dir"
+done
+```
+
+For each `CANDIDATE:` line, {{tool_read}} its `repo-profile.json` to confirm it parses and pull `stack`,
+`generatedAt`, and the length of `skills`. Discard (do not list) a candidate whose `repo-profile.json` or
+`INVENTORY.md` fails to read or parse — never adopt from a broken source.
+
+**If zero valid candidates:** continue to Step D1; this run does a full scan as normal.
+
+**If one or more valid candidates:** skip Steps D1–D6 (do not scan the repo). {{tool_write}}
+`{session-dir}/ultracode-cross-harness-candidates.json`:
+
+```json
+{
+  "candidates": [
+    { "harness": "codex", "stateDir": ".codex",
+      "stack": "typescript-node", "generatedAt": "2026-08-01", "skillCount": 6 }
+  ]
+}
+```
+
+`stateDir` is enough to re-derive the runtime dir and skills dir from the harness layout table above — do not
+persist them separately, since `adopt` (Step A1) recomputes them from `stateDir` anyway.
+
+**Return:** `CROSS-HARNESS-CANDIDATES: {n}`, the candidates file path, and a one-line summary of each
+candidate (harness, stack, skill count, generatedAt). Tell the main loop it must present these candidates to
+the user before adopting any of them — **when `n > 1` the user picks exactly one; when `n == 1` the user still
+confirms that one or opts for a full scan instead** — and, once the user decides, either spawn `Mode: adopt`
+with the chosen candidate, or re-spawn `Mode: detect` with `Skip cross-harness check: yes` to fall through to
+a normal scan. Do not write a scout plan in this branch; `generate-inventory`'s report filename is reused by
+`adopt` instead (see Step A6).
 
 ### Step D1 — Survey the repo surface
 
@@ -158,6 +222,64 @@ If Step D5 found no existing skills, write one Existing Skills row: `| — | —
 **Return:** the scout-plan path, the stack, the chosen reference path, the structured slice list
 (descriptor, paths, slug), and the count of existing skills discovered in Step D5. The main loop reads this
 scout plan and fans one scout out per slice.
+
+---
+
+## Mode: ADOPT (run once, only after the user picked a cross-harness candidate)
+
+**Input:** `Source harness:`, `Source state dir:` (e.g. `.codex`), `Repo root:`, `Session dir:`.
+
+You copy one already-completed bootstrap from another harness into this harness's own
+`{{runtime_dir}}`/`{{skills_dir}}`, translating harness-specific paths and resetting model routing to the
+seeded defaults. This mode writes to the target repo, like `generate-skill`/`generate-inventory` — it is not
+read-only.
+
+### Step A1 — Resolve the source layout
+
+Look up `Source state dir:` in the harness layout table from Step D0 (or, for a generic `.agent`/`.agents`
+source, use `{source state dir}/ultracode` and `{source state dir}/skills`) to get the source's runtime dir
+and skills dir.
+
+### Step A2 — {{tool_read}} the source files
+
+{{tool_read}} `{repo-root}/{source runtime dir}/repo-profile.json` and
+`{repo-root}/{source runtime dir}/INVENTORY.md` in full. {{tool_read}} `{{plugin_root}}/refs/inventory-and-profile.md`
+for the exact `models` schema and its seeded defaults (`models.byAgent` and `models.byPhaseComplexity`) — do
+not reuse whatever `models` block the source harness had.
+
+### Step A3 — {{tool_write}} the translated profile + inventory
+
+`mkdir -p {repo-root}/{{runtime_dir}}`. {{tool_write}} `{{runtime_dir}}/repo-profile.json` and
+`{{runtime_dir}}/INVENTORY.md`, copied from the source verbatim EXCEPT:
+
+1. Every path string that starts with the source's skills dir or runtime dir (e.g. `skills[].path`, Module/Area
+   map `Reference` cells, the header's "Machine profile" link) is rewritten to the equivalent relative path
+   under this harness's `{{skills_dir}}`/`{{runtime_dir}}`.
+2. The profile's `models` block is replaced ENTIRELY with the seeded defaults read in Step A2 — never carried
+   over from the source. This is a hard reset, not a merge: any per-repo model customization the source
+   harness had (including a harness-specific object override) is discarded.
+3. `generatedAt` is left as the source's original date; do not fabricate today's date.
+
+### Step A4 — Copy every skill
+
+For each `skills[]` entry in the source profile, {{tool_read}} its `SKILL.md` (and any `references/*.md`
+beside it) at the source path, and {{tool_write}} an identical copy at
+`{repo-root}/{{skills_dir}}/{name}/SKILL.md` (and its `references/*.md`). Skill bodies are prose — copy them
+byte-for-byte, no translation needed.
+
+### Step A5 — Self-review
+
+Verify: every `skills[].path` in the copied profile points under this harness's `{{skills_dir}}`; the `models`
+block matches Step A2's seeded defaults exactly; every skill file listed in the profile actually exists on
+disk at its new path. Fix any mismatch by editing.
+
+### Step A6 — {{tool_write}} the generation report
+
+{{tool_write}} `{session-dir}/ultracode-generate-report.md` (same filename the normal pipeline's
+`generate-inventory` mode writes, so the main loop's Step 5 reads it unchanged) headed with
+`Adopted from: {Source harness}`, listing every skill copied plus `INVENTORY.md` and `repo-profile.json`.
+
+**Return:** the report path, the source harness, and the list of skill names copied.
 
 ---
 
@@ -371,7 +493,7 @@ Per the contract, write:
 The repo's skill set is `Generated skills` PLUS `Reused skills`. EVERY skill in BOTH arrays MUST appear in the INVENTORY Skills Inventory table AND in the profile `skills` array (mirror them 1:1). On each profile `skills[]` entry set `source`: `generated` for a skill from `Generated skills`, `reused` for a skill from `Reused skills`. Build each skill's Skills Inventory `Load when` cell and Skill Application Mapping row from its component type when it has one; for a reused skill whose `componentType` is `null` (a bespoke skill), derive the `Load when` cell from the trigger in its own `SKILL.md` front-matter description, and add a Skill Application Mapping row only if a concrete file type triggers it. `commands` and `moduleMap` come from the proposal; the Review Rule Set is seeded from the stack reference with stable IDs.
 
 {{tool_write}} the profile's `models` block seeded with the contract's harness-neutral model routing, so the model-router hook can switch subagent models per repo and per phase (see the `models` schema and defaults in `{{plugin_root}}/refs/inventory-and-profile.md`):
-- `models.byAgent` — `explore`, `generate-spec`, `plan` → `advanced`; `code-reviewer`, `execution-path-analyzer` → `balanced`; `module-documentation`, `prompt-generation` → `advanced`.
+- `models.byAgent` — `explore`, `generate-spec`, `plan`, `fact-check` → `advanced`; `code-reviewer`, `execution-path-analyzer` → `balanced`; `module-documentation`, `prompt-generation` → `advanced`.
 - `models.byPhaseComplexity` — `implement` and `write-test` each `{ "low": "fast", "medium": "fast", "high": "balanced" }`.
 
 Every applicable route must be present: once this profile exists, the hook **denies** a spawn whose route is missing, so an omitted agent breaks that stage outright.
@@ -382,7 +504,7 @@ Do not add `implement`, `write-test`, or `initializer` to `byAgent` (the first t
 
 ### Step GI4 — Self-review
 
-Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (all seven static agents) and `byPhaseComplexity` (`implement` + `write-test`, each low/medium/high) seeded to the contract defaults, every `models` key is a bare agent name with no `ultracode:` prefix, and `implement`/`write-test`/`initializer` are absent from `byAgent`. Fix any mismatch by editing.
+Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (all eight static agents, including `fact-check`) and `byPhaseComplexity` (`implement` + `write-test`, each low/medium/high) seeded to the contract defaults, every `models` key is a bare agent name with no `ultracode:` prefix, and `implement`/`write-test`/`initializer` are absent from `byAgent`. Fix any mismatch by editing.
 
 ### Step GI5 — {{tool_write}} the generation report
 
@@ -397,8 +519,8 @@ Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` A
 1. **No yapping. No emojis.** Every sentence carries information.
 2. **Portable tools only.** `{{tool_read}}`, `{{tool_write}}`, `{{tool_edit}}`, `{{tool_shell}}`, `{{tool_search_text}}`, `{{tool_glob}}`. Never assume an MCP or language server exists.
 3. **Read-only in detect / scout / propose.** In those modes, write ONLY into the session dir. Never touch the target repo's files.
-4. **Generate writes ONLY under `{{state_dir}}/`.** In `generate-skill` mode write only under `{repo}/{{skills_dir}}/{name}/`; in `generate-inventory` mode write only under `{repo}/{{runtime_dir}}/`. Never modify project source code, never create files elsewhere.
+4. **Generate/adopt write ONLY under `{{state_dir}}/`.** In `generate-skill` mode write only under `{repo}/{{skills_dir}}/{name}/`; in `generate-inventory` mode write only under `{repo}/{{runtime_dir}}/`; in `adopt` mode write only under `{repo}/{{skills_dir}}/` and `{repo}/{{runtime_dir}}/`. Never modify project source code, never create files elsewhere.
 5. **Grounding over generation.** Every generated skill template, invariant, and command must come from a real captured exemplar or a detected file. If you did not observe it, do not write it. Mark unknowns as `{TODO: confirm}` rather than inventing.
-6. **Honor approval.** In `generate-skill` / `generate-inventory` modes, produce ONLY the skills the user approved. Do not add unrequested skills. Never overwrite a skill whose `disposition` is `reuse`; only `regenerate` overwrites an existing skill, and only because the user opted into it at the approval gate. A reused skill is registered in the inventory but its `SKILL.md` is left untouched.
+6. **Honor approval.** In `generate-skill` / `generate-inventory` modes, produce ONLY the skills the user approved. Do not add unrequested skills. Never overwrite a skill whose `disposition` is `reuse`; only `regenerate` overwrites an existing skill, and only because the user opted into it at the approval gate. A reused skill is registered in the inventory but its `SKILL.md` is left untouched. In `adopt` mode, only run after the user picked a specific cross-harness candidate — never adopt speculatively.
 7. **One slice per scout.** In scout mode, stay within your assigned slice's paths. Do not scan the whole repo.
 8. **No delegation, no subprocesses.** Do not spawn agents or invoke the `claude` CLI. Return your file path to the orchestrator.

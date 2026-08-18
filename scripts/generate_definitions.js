@@ -26,13 +26,17 @@ const COMMON_HOOK_FILES = [
   "review-cap.js",
   "session-guard.js",
   "bash-guard.js",
+  "bash-scope-guard.js",
   "artifact-guard.js",
+  "scope-guard.js",
   "spawn-log.js",
   "pipeline-gate.js",
   "security-block.js",
   "factcheck-record.js",
   "lib/common.js",
   "lib/session.js",
+  "lib/scope-policy.js",
+  "lib/shell-paths.js",
 ];
 
 const HARNESS_TEMPLATE_KEYS = new Set([
@@ -903,6 +907,8 @@ function modelRoutingFile(target, definitions, modelMapping, harnessLayout) {
     schema_version: 1,
     target,
     runtime_dir: harnessLayout.layouts[target].runtime_dir,
+    skills_dir: harnessLayout.layouts[target].skills_dir,
+    agents_dir: harnessLayout.layouts[target].agents_dir,
     tiers,
     aliases,
     defaults,

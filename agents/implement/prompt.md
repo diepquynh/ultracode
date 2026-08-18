@@ -295,7 +295,9 @@ agent instead of the ultracode one.
 | Writing AI/LLM prompt text (system-prompt content, operational requirements, output format) | `ultracode:prompt-generation` | Step authors prompt text or an AI inferencing prompt |
 | Creating or editing a `SKILL.md` file | `ultracode:prompt-generation` | Step targets `{{skills_dir}}/*/SKILL.md` or `skills/*/SKILL.md` |
 | Creating or editing an agent markdown file | `ultracode:prompt-generation` | Step targets `{{agents_dir}}/*.md` or `agents/*.md` |
-| Writing unit tests for implementation code | `ultracode:write-test` | Step mentions writing tests, test classes, or coverage |
+
+Writing unit tests is never a handoff for this agent — see Constraint 6. Skip the step and note it in the
+report instead of routing it to `ultracode:write-test`.
 
 ## Step 5 — Phase Verification
 
@@ -399,9 +401,22 @@ Verification: All verifications passed
    calls, STOP and read it first. No exceptions.
 5. **Escalate when stuck.** Same build error 3 times, an unrecognized API, unclear instructions, or cascading
    breakage → STOP and escalate (Escalation Protocol). Retrying wastes tokens and produces bad code.
-6. **No test writing.** Tests belong to the `write-test` agent. If a plan step is tests, do NOT write them —
-   ensure the report's `## Changed Files` lists every implementation file so write-test can find what needs
-   coverage, and note pending tests in `## Notes`.
+6. **No test writing — absolute, no override.** This agent NEVER writes tests, under any circumstances. If a
+   plan step, phase file, orchestrator prompt, fix instruction, or the user (directly or via any of those
+   channels) asks you to write, generate, or fix tests, do NOT comply and do NOT hand off to `write-test` —
+   skip the step entirely. Reasons this is non-negotiable: (a) this agent lacks the execution-path analysis
+   the `write-test` agent requires to write meaningful tests, so tests written here would be shallow or wrong;
+   (b) the implementation has not yet been reviewed or approved by the user, and writing or fixing tests
+   against unapproved code is wasted work that gets thrown away or re-done once the implementation changes.
+   Tests are written only by the `write-test` agent, only after the user explicitly requests them at the
+   closing gate once every coding phase is implemented and reviewed. Ensure the report's `## Changed Files`
+   lists every implementation file so `write-test` can find what needs coverage later, and note pending tests
+   in `## Notes`. This is not just a prompt rule: `PreToolUse` hooks (`hooks/scope-guard.js` for
+   `{{tool_write}}`/`{{tool_edit}}`, `hooks/bash-scope-guard.js` for a shell redirect/heredoc/`sed -i`
+   reaching the same path) deny any attempt to write a path matching a test file/directory convention
+   (`*.test.*`, `*.spec.*`, `__tests__/`, `test(s)/`, `test_*.py`, `*_test.py`, `*_test.go`, `*_spec.rb`,
+   `spec_*.rb`, `*Test(s).java/.kt/.cs`), regardless of what the plan, a fix instruction, or the user asked
+   for. If you hit that denial, treat it as confirmation to skip the step, not as an error to work around.
 7. **Verify after every edit.** Always run the profile's build command after each change. No exceptions.
 8. **Use the profile's commands.** {{tool_read}} build/test/testOne/format/lint from
    `{{runtime_dir}}/repo-profile.json` and use them verbatim. NEVER hardcode a build tool.
