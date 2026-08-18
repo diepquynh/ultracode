@@ -95,8 +95,8 @@ a forked-context pipeline; if you extend ultracode, derive the path rather than 
 at the implementation review, so a phase's code is never covered before a later phase can still change it. Once
 every coding phase has passed review and `format` has run, the orchestrator asks once — write tests? update the
 module docs? — and runs only what you pick. Ask for either later, or up front in your request, and it runs
-without a gate. Whatever you decline is named in the completion report, with the command that would do it
-(`/epa` → `/write-test`, `/module-docs`), so a skipped stage is never silent.
+without a gate. Whatever you decline is named in the completion report, along with how to ask for it later — just
+tell the orchestrator to run it, so a skipped stage is never silent.
 
 **Within a requested test run, a boilerplate-only phase stays uncovered.** The `plan` agent tags every phase with
 a **Test policy** of `Required` or `Skip`, alongside its complexity tier. `Skip` means every step in the phase
@@ -174,8 +174,8 @@ your decision before it spawns the generate agents.
   missing route: it keeps the model init-kit chose, so re-initializing an already-initialized repo works.)
   - **The hook owns the decision end to end.** `hooks/model-router.py` runs as a `PreToolUse` hook on agent
     spawns, resolves the route from *that spawn's* repo, translates neutral tiers for the active harness, and
-    sets the call's `model` argument via `updatedInput`. The orchestrator and the explicit commands pass no
-    `model` argument at all, so there is no second place to keep in sync. Once a profile exists, malformed or
+    sets the call's `model` argument via `updatedInput`. The orchestrator passes no `model` argument at all, so
+    there is no second place to keep in sync. Once a profile exists, malformed or
     missing routes deny the spawn. Set a route to `"default"` to select the generated agent default or `"inherit"` to intentionally
     leave the spawn model untouched. The hook re-reads the profile per spawn, so mid-session edits apply next.
   - **Generated defaults are the floor.** Claude agents retain their frontmatter defaults. Codex role TOML

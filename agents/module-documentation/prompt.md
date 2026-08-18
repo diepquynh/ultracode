@@ -23,9 +23,9 @@ the files, never from general knowledge of the stack.
 | **grounding** | Extracting content by reading the actual source file, not by generating from memory. |
 | **output report** | `{session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmmss}.md`. |
 
-## Step 1 — Read inputs and load routing
+## Step 1 — {{tool_read}} inputs and load routing
 
-Read, in order: the repo profile, the inventory, the research report, the spec file if the prompt names one,
+{{tool_read}}, in order: the repo profile, the inventory, the research report, the spec file if the prompt names one,
 every plan report the prompt names, and EVERY implement report path the orchestrator provided. Treat the union
 of the implement reports as one change set: on a spec-driven run they span every deliverable, so an area may
 appear in several of them. For phased runs, read each `ultracode-implement-*-phase-{N}.md`; for unphased runs,
@@ -60,15 +60,15 @@ updates needed":
 
 For each affected area, resolve its reference path from the map's `Reference` column, or default to
 `{{skills_dir}}/module-hub/references/{area}.md` when the column is `—`. Classify each area:
-- **UPDATE** — the reference file exists (check with `ls`/`Glob`); apply changes surgically with Edit.
+- **UPDATE** — the reference file exists (check with `ls`/`{{tool_glob}}`); apply changes surgically with {{tool_edit}}.
 - **CREATE** — the reference file does not exist; write a new file per Archetype C.
 
 **Pass:** at least one area is CREATE or UPDATE.
 **Fail:** no area needs documentation → skip to Step 6 with "No documentation updates needed".
 
-## Step 3 — Read reference material
+## Step 3 — {{tool_read}} reference material
 
-Read `{{skills_dir}}/module-hub/references/*.md` to learn the house structure: for UPDATE, read the target
+{{tool_read}} `{{skills_dir}}/module-hub/references/*.md` to learn the house structure: for UPDATE, read the target
 file plus 1 other existing reference; for CREATE, read 2 existing references. Note the section order and
 heading conventions actually in use.
 
@@ -80,10 +80,10 @@ services). Add stack-appropriate subsections only when the existing references u
 **Pass:** you understand the existing structure and the target Archetype C shape.
 **Fail:** no reference files exist yet → follow Archetype C from memory of this Step's shape and continue.
 
-## Step 4 — Read source and extract content
+## Step 4 — {{tool_read}} source and extract content
 
 Prefer a code-graph MCP if the prompt says one is available (for structure, callers, and dependents); else
-use Grep/Glob to locate and Read to open. Either way, you MUST read the actual changed source files for each
+use {{tool_search_text}}/{{tool_glob}} to locate and {{tool_read}} to open. Either way, you MUST read the actual changed source files for each
 affected area. Do NOT generate documentation from an implement-report summary alone.
 
 For each changed source file, read it and extract only what the file states, using the file's real names:
@@ -100,17 +100,17 @@ For a deleted file, record the removal only; do not invent a replacement.
 **Fail:** a changed source file cannot be read → log its path for Step 6 and continue with the rest; do NOT
 generate content for a file you could not open.
 
-## Step 5 — Write or edit reference files
+## Step 5 — {{tool_write}} or edit reference files
 
 Apply every one of the 15 Writing Laws and Chain-of-Thought to every sentence. Enforce, per sentence: term
 defined before first use (L1); one instruction or fact per sentence (L2); ALL/ANY explicit (L3); concrete not
 abstract (L4); exhaustive enumerations with no "etc." (L10); grounding over generation (L15).
 
-**UPDATE.** Identify the sections the changed files affect. Use Edit for targeted changes (add an entry point,
+**UPDATE.** Identify the sections the changed files affect. Use {{tool_edit}} for targeted changes (add an entry point,
 update a signature, add a data shape, extend a field list). Do NOT rewrite the whole file unless the change
 touches more than 70% of it. Preserve every still-accurate line.
 
-**CREATE.** Use Write at the resolved reference path, following the Archetype C shape and the section order
+**CREATE.** Use {{tool_write}} at the resolved reference path, following the Archetype C shape and the section order
 observed in Step 3. Every type name, function name, field name, route path, and config key MUST come from the
 files read in Step 4. Do NOT invent names.
 
@@ -121,7 +121,7 @@ files read in Step 4. Do NOT invent names.
 After writing or editing EACH reference file, re-read that whole file and verify ALL of the following; on ANY
 failure, fix it by editing immediately, then re-read the changed section:
 - Top-to-bottom readability: no section depends on a later one; no forward reference.
-- Accurate type names: every type name matches source (Grep to spot-check when unsure).
+- Accurate type names: every type name matches source ({{tool_search_text}} to spot-check when unsure).
 - Accurate signatures: every function/method name and signature matches source.
 - Accurate entry points: every route path and verb/trigger matches the handler in source.
 - No vague enumerations: zero instances of "etc.", "and more", "and so on", "various", or "handles various …".
@@ -137,7 +137,7 @@ If any reference file was written or edited AND the repo profile defines `comman
 command once; read its output and fix any failure it surfaces in a file you touched. If `commands.format` is
 `null`, skip formatting.
 
-Write the output report to `{session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmmss}.md`:
+{{tool_write}} the output report to `{session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmmss}.md`:
 ```markdown
 # Module Documentation Report
 **Date:** {YYYY-MM-DD} · **Pipeline position:** final (post-review)
@@ -193,10 +193,10 @@ Files changed: (none)
 Priority on conflict: a rule here overrides any earlier instruction in this file.
 
 1. No yapping. No emojis. Every sentence carries information.
-2. Docs only. Edit ONLY files under `{{skills_dir}}/module-hub/references/`; write ONLY the output report in the session dir. Never edit source, tests, config, or build files.
-3. Grounding mandatory. Read the real source; never guess a type, function, field, route path, or config key.
+2. Docs only. {{tool_edit}} ONLY files under `{{skills_dir}}/module-hub/references/`; write ONLY the output report in the session dir. Never edit source, tests, config, or build files.
+3. Grounding mandatory. {{tool_read}} the real source; never guess a type, function, field, route path, or config key.
 4. Existing structure. Follow the section order of existing references and the Archetype C shape; invent a new structure only when no references exist.
-5. Surgical edits. For UPDATE, use Edit; do not rewrite a file unless the change exceeds 70% of it.
+5. Surgical edits. For UPDATE, use {{tool_edit}}; do not rewrite a file unless the change exceeds 70% of it.
 6. Only affected areas. Never create or update a reference for an area with no changed source file.
 7. Self-review mandatory. Re-read and check every file you write or edit against Step 6; on any forward reference, restructure immediately.
 8. Commands from the profile. Run only the repo profile's `commands.format` string verbatim; never hardcode a build tool.

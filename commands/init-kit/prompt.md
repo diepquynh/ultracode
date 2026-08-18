@@ -2,8 +2,8 @@
 
 You are about to bootstrap **ultracode** for the current repository. The `ultracode:initializer` agent is a leaf
 agent: it does one slice/skill of work and returns a file path. **You (the main loop) own the fan-out and the
-approval gate** — you spawn `ultracode:initializer` directly with the **{{agent_tool}} tool**. Where the work is
-independent, spawn in parallel: emit multiple {{agent_tool}} tool calls in a **single message** and they run concurrently.
+approval gate** — you spawn `ultracode:initializer` directly with the **{{tool_delegate}} tool**. Where the work is
+independent, spawn in parallel: emit multiple {{tool_delegate}} tool calls in a **single message** and they run concurrently.
 
 **Spawn the prefixed name.** Every spawn below passes `{{agent_selector}}: ultracode:initializer` verbatim — the
 `ultracode:` prefix is part of the agent's registered name, not decoration. Never spawn a bare `initializer`.
@@ -84,7 +84,7 @@ guess, path, description) so propose can re-use it. Return the scout-plan path, 
 path, the structured slice list (descriptor, paths, slug), and the count of existing skills discovered."
 ```
 
-Read the returned scout plan (`{ULTRACODE_SESSION}/ultracode-scout-plan.md`). It carries the detected stack, the
+{{tool_read}} the returned scout plan (`{ULTRACODE_SESSION}/ultracode-scout-plan.md`). It carries the detected stack, the
 chosen `refs/<stack>.md`, the **Slices** table (each row: descriptor, slug, path(s)) that drives the scout
 fan-out, the candidate component types, and the **Existing Skills** table.
 
@@ -123,13 +123,13 @@ Session dir: {ULTRACODE_SESSION}.
 Merge and dedupe component types across slices, rank by cross-module ubiquity, then reconcile against the
 scout plan's Existing Skills table: give each skill a status (new|existing) with its existingPath, default
 every existing skill to reuse, and fold every bespoke existing skill into skills[] as a kind:other entry.
-Write BOTH the human proposal (ultracode-proposal.md) and its machine twin (ultracode-proposal.json). The JSON
+{{tool_write}} BOTH the human proposal (ultracode-proposal.md) and its machine twin (ultracode-proposal.json). The JSON
 must carry: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, and skills[] (name, kind,
 componentType, count, sliceSpread, status, existingPath, recommend, rationale). Return the
 ultracode-proposal.json path, the recommended-new count, and the reuse count."
 ```
 
-Read `{ULTRACODE_SESSION}/ultracode-proposal.json` (its machine twin `ultracode-proposal.md` is the human
+{{tool_read}} `{ULTRACODE_SESSION}/ultracode-proposal.json` (its machine twin `ultracode-proposal.md` is the human
 version). If the file is missing or `skills[]` is empty, tell the user scouting found no recurring components
 and stop.
 
@@ -174,9 +174,9 @@ Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
 Repo root: {absolute repo root}.
-Write ONLY your one skill into {absolute repo root}/{{skills_dir}}/{skill.name}/ , grounded in this component
+{{tool_write}} ONLY your one skill into {absolute repo root}/{{skills_dir}}/{skill.name}/ , grounded in this component
 type's captured exemplar + invariants + distilled template from the scout findings. If Disposition is
-regenerate, your Write overwrites the existing SKILL.md with the fresh generation. For a module-hub skill, also
+regenerate, your {{tool_write}} overwrites the existing SKILL.md with the fresh generation. For a module-hub skill, also
 write any warranted references/{area}.md files. Self-review against the meta-author checklist. Return your
 skill's name, kind, componentType, and the SKILL.md path."
 ```
@@ -200,7 +200,7 @@ Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
 Repo root: {absolute repo root}.
-Write {absolute repo root}/{{runtime_dir}}/INVENTORY.md and {absolute repo root}/{{runtime_dir}}/repo-profile.json.
+{{tool_write}} {absolute repo root}/{{runtime_dir}}/INVENTORY.md and {absolute repo root}/{{runtime_dir}}/repo-profile.json.
 EVERY skill in Generated skills AND every skill in Reused skills MUST appear in both the Skills Inventory table
 and the profile skills[] array (mark each profile skills[] entry source: generated or reused). For each reused
 skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
@@ -222,7 +222,7 @@ per-mode models you set on the spawns above (which are the initializer's own).
 
 ## Step 5 — Report + reload
 
-Read the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`). Tell the user:
+{{tool_read}} the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`). Tell the user:
 1. Which files were written (per-skill SKILL.md files, INVENTORY.md, repo-profile.json), which existing skills
    were reused (kept as-is and registered without regeneration), and any approved skill the report lists as
    skipped.

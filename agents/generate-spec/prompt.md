@@ -28,7 +28,7 @@ reads**. It never sees the criteria document, the research document, or this pro
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
-| **repos in scope** | The one or more repos this spec targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo request — a `Repos in scope:` list of `{repo key} → {absolute root}`. Read each repo's profile and inventory. |
+| **repos in scope** | The one or more repos this spec targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo request — a `Repos in scope:` list of `{repo key} → {absolute root}`. {{tool_read}} each repo's profile and inventory. |
 | **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt. Tag every deliverable with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given; the plan agent reads your spec file from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` (one per repo in scope) — stack, commands, module map. |
@@ -37,16 +37,16 @@ reads**. It never sees the criteria document, the research document, or this pro
 | **research document** | A `{session-dir}/ultracode-research-*.md` from the explore agent, path given in the prompt. Source of grounding: real files, patterns, and data flows. |
 | **criterion** | One atomic, verifiable requirement statement from the criteria document, identified `C1`, `C2`, … Each criterion carries a Type, a Repo, a Depends-on set, a Grounding, and a Status of `Confirmed` or `Provisional`. |
 | **spec file** | `{session-dir}/ultracode-spec-{run-stamp}-{topic-slug}.md` — **the single file you write.** It holds every requirement for the whole request. You never write a second spec file and never write an index file. |
-| **run stamp** | The `{YYYYMMDD}-{HHmmss}` string you compute once in **Step 1 — Read inputs and compute the run stamp** and use in the spec file name. Never recompute it. Written `{run-stamp}` in every path below. |
+| **run stamp** | The `{YYYYMMDD}-{HHmmss}` string you compute once in **Step 1 — {{tool_read}} inputs and compute the run stamp** and use in the spec file name. Never recompute it. Written `{run-stamp}` in every path below. |
 | **deliverable** | One independently shippable unit of the work, identified `D1`, `D2`, … A deliverable is a **section inside the spec file**, not a separate file. It groups the requirements that ship together, targets exactly one repo, and carries its own position in the delivery order. |
 | **requirement** | One EARS-notation statement inside the spec, identified `R{n}` — e.g. `R7`. Requirement numbers run in one flat sequence from `R1` across the whole file, never restarting per deliverable. |
 | **EARS** | Easy Approach to Requirements Syntax — the five sentence templates in **Step 6 — Write requirements in EARS notation**. Every requirement uses one of them. |
 | **acceptance criterion** | One Given/When/Then statement proving a requirement holds, identified `AC{n}.{m}` — e.g. `AC7.2` is the second acceptance criterion of `R7`. The plan agent turns these into success criteria. |
 | **contract provided** | An externally observable artifact this work creates that another deliverable or an external caller may consume: an API endpoint, a transfer-object/DTO shape, a schema/table, a published event, a client-facing type, or an exported function signature. |
 | **contract consumed** | A contract the work depends on. If a deliverable in this spec provides it, name that deliverable ID. If it already exists in the repo, cite its real path and symbol. |
-| **open question** | A question you cannot answer from the criteria document, the research document(s), the repo source code, or the module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
+| **open question** | A question you cannot answer from the criteria document, the research document(s), the repo source code, or the module-hub references. Written {{tool_ask_user}}-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with {{tool_ask_user}}. |
 
-## Step 1 — Read inputs and compute the run stamp
+## Step 1 — {{tool_read}} inputs and compute the run stamp
 
 The orchestrator's prompt contains: the user request; the repos in scope (a single `Repo root:` or a
 `Repos in scope:` list); the criteria document path; optionally one or more research document paths;
@@ -59,9 +59,9 @@ preferences, priority order).
    date +%Y%m%d-%H%M%S
    ```
 
-2. Read the criteria document. Extract every criterion with its ID, Statement, Type, Repo, Depends-on set,
-   Grounding, and Status. Read its Excluded table.
-3. Read each research document given. Extract Problem Statement, Requirements, Findings (relevant files,
+2. {{tool_read}} the criteria document. Extract every criterion with its ID, Statement, Type, Repo, Depends-on set,
+   Grounding, and Status. {{tool_read}} its Excluded table.
+3. {{tool_read}} each research document given. Extract Problem Statement, Requirements, Findings (relevant files,
    existing patterns, data flow, dependencies), Approaches, and Recommendation.
 4. **For each repo in scope**, read `{repo-root}/{{runtime_dir}}/repo-profile.json` and
    `{repo-root}/{{runtime_dir}}/INVENTORY.md`. You need the Module/Area Map to name the area each deliverable
@@ -90,12 +90,12 @@ requirement.
 ## Step 3 — Verify grounding in the repo
 
 The spec must describe real behavior against a real codebase, not a hypothetical one. If the prompt says a
-code-graph MCP is available, prefer it for locating code and tracing callers; otherwise use Grep/Glob/Read.
+code-graph MCP is available, prefer it for locating code and tracing callers; otherwise use {{tool_search_text}}/{{tool_glob}}/{{tool_read}}.
 
 For each criterion whose Grounding names a real file or symbol:
 
 - Confirm the file still exists and the symbol is still there. If it moved, record the new real path.
-- Read enough of it to state the criterion's current-behavior baseline: what the system does today.
+- {{tool_read}} enough of it to state the criterion's current-behavior baseline: what the system does today.
 
 For each criterion whose Grounding is `new — no precedent found`:
 
@@ -252,7 +252,7 @@ Walk every category against every deliverable and check whether the trusted sour
   concurrency and locking, downstream consumers, synchronous versus asynchronous.
 - **Scope:** what is explicitly out; the priority order across deliverables; what may be deferred.
 
-Write every open question AskUserQuestion-ready:
+Write every open question {{tool_ask_user}}-ready:
 
 - **question**: the full question, answerable without reading code.
 - **tag**: a short label, 12 characters or fewer (e.g. `Scope`, `Data model`, `API`, `Auth`).
@@ -261,13 +261,13 @@ Write every open question AskUserQuestion-ready:
 - **recommended option**: mark exactly one recommended, grounded in a real file or pattern, and cite it.
 
 **Pass:** every ambiguity is either resolved from a trusted source and written into a requirement, or surfaced
-as an AskUserQuestion-ready block with 2-4 options and one grounded recommended option.
+as an {{tool_ask_user}}-ready block with 2-4 options and one grounded recommended option.
 **Fail:** you answered an ambiguity from general knowledge, dropped one, or wrote a question with no options →
 re-walk this step.
 
-## Step 8 — Write the spec file
+## Step 8 — {{tool_write}} the spec file
 
-Write **exactly one file**, `{session-dir}/ultracode-spec-{run-stamp}-{topic-slug}.md`, using the Step 1 run
+{{tool_write}} **exactly one file**, `{session-dir}/ultracode-spec-{run-stamp}-{topic-slug}.md`, using the Step 1 run
 stamp. Do not write an index file. Do not write a second spec file. Substitute real values everywhere braces
 appear.
 

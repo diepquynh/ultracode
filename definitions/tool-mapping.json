@@ -3,64 +3,52 @@
   "capabilities": {
     "read": {
       "claude": "Read",
-      "codex": "exec_command",
-      "source_terms": ["Read"]
+      "codex": "exec_command"
     },
     "edit": {
-      "claude": "Update",
-      "codex": "apply_patch",
-      "source_terms": ["Update"]
+      "claude": "Edit",
+      "codex": "apply_patch"
     },
     "write": {
       "claude": "Write",
-      "codex": "apply_patch",
-      "source_terms": ["Write"]
+      "codex": "apply_patch"
     },
     "shell": {
       "claude": "Bash",
-      "codex": "exec_command",
-      "source_terms": ["Bash"]
+      "codex": "exec_command"
     },
     "search_text": {
       "claude": "Grep",
-      "codex": "exec_command",
-      "source_terms": ["Grep"]
+      "codex": "exec_command"
     },
     "glob": {
       "claude": "Glob",
-      "codex": "exec_command",
-      "source_terms": ["Glob"]
+      "codex": "exec_command"
     },
     "skill": {
       "claude": "Skill",
       "codex": "skill discovery",
-      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions.",
-      "source_terms": ["Skill"]
+      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions."
     },
     "web_search": {
       "claude": "WebSearch",
-      "codex": "web_search",
-      "source_terms": ["WebSearch"]
+      "codex": "web_search"
     },
     "web_fetch": {
       "claude": "WebFetch",
-      "codex": "web_search",
-      "source_terms": ["WebFetch"]
+      "codex": "web_search"
     },
     "delegate": {
       "claude": "Agent",
-      "codex": "spawn_agent",
-      "source_terms": ["Agent", "Task"]
+      "codex": "spawn_agent"
     },
     "ask_user": {
       "claude": "AskUserQuestion",
-      "codex": "request_user_input",
-      "source_terms": ["AskUserQuestion"]
+      "codex": "request_user_input"
     },
     "plan": {
       "claude": "EnterPlanMode",
-      "codex": "update_plan",
-      "source_terms": ["EnterPlanMode"]
+      "codex": "update_plan"
     }
   }
 }

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Enforce the "cap at 3 iterations" review-loop rule (skills/orchestrate/prompt.md
-// "Step 4 — Code-review loop"; commands/code-review/prompt.md) in code rather than
-// relying on the orchestrator to count.
+// "Step 4 — Code-review loop") in code rather than relying on the orchestrator to count.
 //
 // Reads a PreToolUse hook payload (matcher: Task|Agent / Agent) from stdin. When the
 // spawn targets ultracode:code-reviewer, counts the "## Iteration N" headers the

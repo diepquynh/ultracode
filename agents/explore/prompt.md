@@ -18,15 +18,15 @@ If you write "follow the existing pattern," show the pattern in full.
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given; the generate-spec agent reads both your documents from this exact path. |
-| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. Read it first. |
+| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. {{tool_read}} it first. |
 | **module-hub** | `{repo-root}/{{skills_dir}}/module-hub/SKILL.md` + `references/` — the area routing tables. |
 | **external technology** | Anything the request depends on that lives outside this repo: a managed service, SDK, library, framework, protocol, data store, wire format, or third-party API. |
-| **retrieved source** | A page you fetched **in this run** with WebSearch/WebFetch — vendor documentation, an API reference, release notes, an RFC, or the library's own repository — cited by URL plus the page's own version or date. Your recollection of an API is **not** a source. |
+| **retrieved source** | A page you fetched **in this run** with {{tool_web_search}}/{{tool_web_fetch}} — vendor documentation, an API reference, release notes, an RFC, or the library's own repository — cited by URL plus the page's own version or date. Your recollection of an API is **not** a source. |
 | **run stamp** | The single `{YYYYMMDD}-{HHmmss}` string you compute once in Step 1 and reuse in BOTH output file names. Never recompute it — mismatched stamps break the orchestrator's file matching. |
 | **research document** | `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`. |
 | **criteria document** | `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md` — the criteria table and the excluded items. The generate-spec agent consumes it. |
 | **criterion** | One atomic, testable requirement the request demands, identified `C1`, `C2`, … "Atomic" means it cannot be split into two independently verifiable statements. "Testable" means a test could tell whether it holds. |
-| **open question** | A question explore cannot answer from the repo source code or module-hub references. Written AskUserQuestion-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with the AskUserQuestion tool. |
+| **open question** | A question explore cannot answer from the repo source code or module-hub references. Written {{tool_ask_user}}-ready (tag + 2-4 options + one recommended option) for the orchestrator to surface with {{tool_ask_user}}. |
 
 ## Step 1 — Understand the request and compute the run stamp
 
@@ -41,17 +41,17 @@ date +%Y%m%d-%H%M%S
 **Fail:** no identifiable topic → write a research doc containing only the open question "What should I
 research?", write no criteria document, and return its path.
 
-## Step 2 — Read the inventory and area docs
+## Step 2 — {{tool_read}} the inventory and area docs
 
-Read `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Use
+{{tool_read}} `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Use
 the module-hub routing tables to find which area(s) the topic touches, and read their `references/*.md` if present.
 **Fail:** no area matches → note it as a finding and continue (may be infra or a new area).
 
 ## Step 3 — Explore the code
 
-Prefer a code-graph MCP if the prompt says one is available; otherwise use Grep/Glob/Read.
+Prefer a code-graph MCP if the prompt says one is available; otherwise use {{tool_search_text}}/{{tool_glob}}/{{tool_read}}.
 
-- Locate files: `Glob` for `**/*{Keyword}*.{ext}`; `Grep` for domain concepts, integration points
+- Locate files: `{{tool_glob}}` for `**/*{Keyword}*.{ext}`; `{{tool_search_text}}` for domain concepts, integration points
   (event listeners, message consumers, schedulers, config bindings), and configuration values.
 - For each core file: capture purpose, key public signatures, injected dependencies, integration points,
   and the design patterns in use.
@@ -65,11 +65,11 @@ definition; do not stop at the first match.
 Step 3 establishes what this codebase does. Whatever the request needs that the codebase has never done is
 **not** something you know: your training has a cutoff, and any external interface you can recall may have
 shipped a new version, renamed a field, changed a default, or deprecated the call since. Look it up with
-WebSearch, then WebFetch the pages worth reading in full.
+{{tool_web_search}}, then {{tool_web_fetch}} the pages worth reading in full.
 
 **Search when ANY of these is true:**
 
-1. The request names an external technology that Grep/Glob find nowhere in the repo — e.g. it asks to persist
+1. The request names an external technology that {{tool_search_text}}/{{tool_glob}} find nowhere in the repo — e.g. it asks to persist
    through DynamoDB in a repo that has never talked to DynamoDB.
 2. The repo uses that technology, but not the part the request needs. The code doing `GetItem` is precedent
    for a read; it is no precedent at all for transactional writes, streams, or a new index type.
@@ -80,7 +80,7 @@ WebSearch, then WebFetch the pages worth reading in full.
 
 **How to look it up.** Search the technology plus the specific question, and prefer primary sources: vendor or
 official documentation, the API reference, release notes and changelogs, the RFC, the library's own
-repository. WebFetch the primary page rather than trusting a search snippet or a third-party summary. Check
+repository. {{tool_web_fetch}} the primary page rather than trusting a search snippet or a third-party summary. Check
 each page's own version or date, and read at least two independent pages before recording a fact the design
 depends on. When sources disagree, the newer primary one wins.
 
@@ -173,8 +173,8 @@ NOT answer from recalled framework, language, or API knowledge, and do NOT assum
   answer. Questions that survive are about intent, scope, and trade-offs — what the user wants — not about
   what some external system does.
 
-Write every open question AskUserQuestion-ready so the orchestrator can pass it straight to the
-AskUserQuestion tool:
+Write every open question {{tool_ask_user}}-ready so the orchestrator can pass it straight to
+{{tool_ask_user}}:
 
 - **question**: the full question, answerable without reading the code.
 - **tag**: a short label, 12 characters or fewer (e.g. `Scope`, `Data model`, `API`).
@@ -187,14 +187,14 @@ Number your questions `Q1`, `Q2`, … and update any Step 5 criterion that one o
 `Provisional (Q{n})` (rule K7).
 
 **Pass:** every ambiguity is resolved from source/module-hub, resolved from a retrieved source, or surfaced as
-an AskUserQuestion-ready block with 2-4 options and one grounded recommended option, and every question has a
+an {{tool_ask_user}}-ready block with 2-4 options and one grounded recommended option, and every question has a
 `Q{n}` number.
 **Fail:** you answered an ambiguity from recalled knowledge, dropped one, asked the user something a vendor
 page answers, or wrote a question with no options → re-walk this step.
 
-## Step 7 — Write the research document
+## Step 7 — {{tool_write}} the research document
 
-Write to `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`, using the Step 1 run stamp:
+{{tool_write}} to `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`, using the Step 1 run stamp:
 
 ```markdown
 # Research: {Topic}
@@ -230,9 +230,9 @@ source.}
 
 Open questions live **only** here. The criteria document references them by number and never restates them.
 
-## Step 8 — Write the criteria document
+## Step 8 — {{tool_write}} the criteria document
 
-Write to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using the same Step 1 run stamp:
+{{tool_write}} to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using the same Step 1 run stamp:
 
 ```markdown
 # Requirement Criteria: {Topic}

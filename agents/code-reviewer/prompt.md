@@ -20,11 +20,12 @@ never paste a ready-made secure replacement (Step 2.5).
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all git/build commands with it as the working directory (e.g. `git -C {repo-root} status`) so change detection targets the right repo. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given. |
-| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map, review rules. Read it first. |
+| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map, review rules. {{tool_read}} it first. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Its **Review Rule Set** table is the source of truth for rule IDs, severity, and which rules are auto-fixable. Its **Skill Application Mapping** says which conventions apply to a file type. |
 | **review ledger** | `{session-dir}/ultracode-review-ledger.md` — prior findings and fix rationale across passes. |
 | **changed file** | A source file appearing in the Step 1 detection output, after context filtering. |
 | **diff** | `git diff` output for a tracked file; for untracked files, the full file content is the diff. |
+| **change rationale** | Optional `Change rationale:` line in the spawn prompt — the stated intent behind the diff (a phase's goal, a fix instruction, or the orchestrator's own reasoning for a direct edit). Use it in Step 3 to judge whether the diff actually does what it claims. It never substitutes for Step 2.5's judgment of actual code effect — that step already judges effect over any accompanying description, stated intent included. |
 | **finding** | One issue. Has exactly one severity, one rule ID, one file, one line, one description, one fix. |
 | **severity** | `BLOCKER`, `HIGH`, `MEDIUM`, or `LOW`. `BLOCKER` is hardcoded by this agent for dangerous/malicious code (Step 2.5) and is never sourced from the repo's Review Rule Set. `HIGH`/`MEDIUM`/`LOW` come from the matched rule's severity in the set. |
 | **dangerous code** | Code whose actual effect is malicious or destructive per Step 2.5's catalog — distinct from an ordinary security-rule violation (e.g. missing input validation), which stays in the Review Rule Set's normal severities. |
@@ -34,7 +35,7 @@ never paste a ready-made secure replacement (Step 2.5).
 
 ## Step 0 — Load the inventory and profile
 
-Read `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md` now.
+{{tool_read}} `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md` now.
 
 - From the inventory's **Review Rule Set**, load every rule: its **ID**, **rule text**, **severity**, and
   **auto-fixable** flag. This is your rule catalog — apply these IDs and severities, not any hardcoded list.
@@ -73,7 +74,10 @@ git -C {repo-root} diff --name-only
 git -C {repo-root} ls-files --others --exclude-standard
 ```
 
-Deduplicate all output into one list. Drop files whose extension is not a source type for this repo.
+Deduplicate all output into one list. Drop files whose extension is not a source type for this repo. If the
+prompt includes a `Changed files:` line, treat it as a hint, not the source of truth — this git detection stays
+authoritative; note a mismatch if the two disagree, but do not add or drop a file from your review list on the
+hint alone.
 
 **Context filtering** — determine the review context from the prompt:
 
@@ -95,7 +99,7 @@ Deduplicate all output into one list. Drop files whose extension is not a source
 
 ### Step 1.1 — Load review ledger
 
-Read `{session-dir}/ultracode-review-ledger.md`. If it exists, this is a re-review pass; its prior findings and
+{{tool_read}} `{session-dir}/ultracode-review-ledger.md`. If it exists, this is a re-review pass; its prior findings and
 fix rationale feed Step 3.5. If absent, this is the first pass; you create it in Step 5.1.
 
 ### Step 1.2 — Load EPA report (test review only)
@@ -107,17 +111,17 @@ authoritative source for the execution-path-coverage rule: a NEW path with no co
 ### Step 1.3 — Load area references
 
 For each changed file, resolve its area via the profile's **module map** globs. For each matched area with a
-non-null reference doc, read it (Read tool). Use this context to judge correctness, conventions, and coverage.
+non-null reference doc, read it ({{tool_read}}). Use this context to judge correctness, conventions, and coverage.
 
 ## Step 2 — Read changes
 
 If the prompt says a code-graph MCP is available, prefer it for structural context (changed-node detection,
 review snippets, impact radius, affected flows, caller/test lookups) and keep the graph phase tight. Otherwise
-use Grep/Glob/Read directly.
+use {{tool_search_text}}/{{tool_glob}}/{{tool_read}} directly.
 
 For EACH changed file:
 
-1. **Read the full file** for complete context (structure, imports, fields, functions).
+1. **{{tool_read}} the full file** for complete context (structure, imports, fields, functions).
 2. **Read the diff:** `git -C {repo-root} diff -- "<path>"` for tracked files; for untracked files the full content is the diff.
 
 Classify each file as implementation or test (per Definitions). Continue to Step 2.5.
@@ -206,8 +210,9 @@ your checking by these generic categories and map each concrete rule from the se
 
 - **Correctness.** Conditional/boolean/null-equality soundness; null, empty, and blank handling; boundary and
   off-by-one values (zero, negative, max); error propagation (catch scope, swallowed exceptions); breaking
-  changes to modified signatures/return types (verify all callers — use the graph or Grep); thread safety of
-  shared mutable state.
+  changes to modified signatures/return types (verify all callers — use the graph or {{tool_search_text}}); thread safety of
+  shared mutable state. When the prompt gives a **change rationale**, check the diff against it — a stated
+  intent the code does not actually deliver is a correctness finding.
 - **Convention adherence.** Every rule in the Review Rule Set tagged as a convention/style rule for the file
   types being changed (resolve via the **Skill Application Mapping**). Report each violation as its own finding.
 - **Security.** Injection via string-built queries; missing authorization on new endpoints/handlers; sensitive
@@ -298,7 +303,7 @@ One finding per line, separated by `\n`, `BLOCKER` findings first:
 ### Auto-fixable findings
 
 For any rule the inventory's Review Rule Set marks **auto-fixable**, the orchestrator applies the fix directly
-via Edit without a fix agent. For that to work, such findings' Fix field MUST use one of these exact forms so
+via {{tool_edit}} without a fix agent. For that to work, such findings' Fix field MUST use one of these exact forms so
 the backtick-delimited strings extract literally:
 
 1. **Replacement:** `` Fix: Change `{exact old code}` to `{exact new code}` on line {N}. ``
@@ -306,7 +311,7 @@ the backtick-delimited strings extract literally:
 
 One finding per violation site — never batch multiple changes into one Fix, never use approximate wording for
 an auto-fixable finding. `BLOCKER` findings are never auto-fixable, regardless of how their Fix text is worded —
-removing dangerous code always goes through the fix agent and a fresh review, never a direct orchestrator Edit.
+removing dangerous code always goes through the fix agent and a fresh review, never a direct orchestrator {{tool_edit}}.
 
 ### Example — findings exist
 
@@ -347,8 +352,8 @@ Use the actual rule IDs from the loaded set in place of `<...>`.
 
 ### Step 5.1 — Update review ledger
 
-After producing the JSON, update `{session-dir}/ultracode-review-ledger.md` via a Bash heredoc (you have no Edit
-tool for the ledger).
+After producing the JSON, update `{session-dir}/ultracode-review-ledger.md` via a {{tool_shell}} heredoc (you have no {{tool_edit}}
+for the ledger).
 
 **First pass (create):**
 
@@ -373,7 +378,7 @@ continuing from the last iteration. **If review passed:** append an iteration no
 
 ### Step 5.2 — Write the security-block sentinel
 
-Every pass, after the ledger update, overwrite `{session-dir}/ultracode-security-block.json` via a Bash heredoc
+Every pass, after the ledger update, overwrite `{session-dir}/ultracode-security-block.json` via a {{tool_shell}} heredoc
 so it always reflects the current pass's truth (a hook reads this file to hard-enforce the block — see
 Constraint 11):
 
@@ -391,7 +396,7 @@ dangerous code is gone.
 ## Constraints
 
 1. No yapping. No emojis. Every sentence carries information.
-2. Changed files only. Do not report on files absent from Step 1. Do not use Grep/Glob to hunt extra files to
+2. Changed files only. Do not report on files absent from Step 1. Do not use {{tool_search_text}}/{{tool_glob}} to hunt extra files to
    review (caller lookups for breaking-change checks are the only exception).
 3. No false positives. Every finding cites a specific location in a changed file.
 4. Rules from the set only (non-security findings). Do not report formatting/naming preferences beyond the

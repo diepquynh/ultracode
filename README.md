@@ -60,7 +60,6 @@ The deep dives live under [`docs/`](docs/):
 - [Installation](docs/installation.md) — published, manual, and local development installation flows.
 - [Architecture](docs/architecture.md) — the plugin/per-repo split, inventory-based routing, how agents communicate, and design notes.
 - [Agents](docs/agents.md) — every `subagent_type`, its role, the namespace prefix rule, and how existing skills are re-used.
-- [Commands](docs/commands.md) — the Claude slash command and Codex explicit-skill entry point per pipeline stage.
 - [Tested models](docs/tested-models.md) — field notes per role, per model, to seed your `repo-profile.json` `models` block.
 - [Definition authoring](docs/definitions.md) — edit harness-neutral agent, skill, and command sources and generate either target.
 - [Extending & publishing](docs/extending.md) — add a new stack reference, and publish/validate the plugin.
@@ -94,10 +93,11 @@ See [Installation](docs/installation.md) for manual installation.
 | Runtime inventory and profile | `.claude/ultracode/` | `.codex/ultracode/` |
 | Generated project skills | `.claude/skills/` | `.agents/skills/` |
 
-Run the initializer once per repository, reload the harness, then use the orchestrator. Individual stages are
-also available as Claude slash commands or explicit Codex skills: `explore`, `generate-spec`, `plan`,
-`implement`, `code-review`, `epa`, `write-test`, `module-docs`, and `prompt-gen`. See
-[Commands](docs/commands.md) for arguments, artifacts, approval gates, and model routing.
+Run the initializer once per repository, reload the harness, then use the orchestrator — it's the only entry
+point into the pipeline. Individual stages (`explore`, `generate-spec`, `plan`, `implement`, `code-review`,
+`epa`, `write-test`, `module-docs`, `prompt-gen`) are internal subagents the orchestrator spawns on your behalf;
+they aren't separate slash commands, so you never need to know which one to run — ask the orchestrator in plain
+language and it decides.
 
 Commit the generated runtime files so your team shares them: `.claude/ultracode/` and `.claude/skills/` for
 Claude Code, or `.codex/ultracode/` and `.agents/skills/` for Codex.

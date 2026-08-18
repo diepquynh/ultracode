@@ -42,19 +42,7 @@ const HARNESS_LAYOUT = JSON.parse(
 
 const LAYOUT_TOKEN_PATTERN = /\{\{[a-z][a-z0-9_]*\}\}/g;
 
-const COMMAND_NAMES = new Set([
-  "code-review",
-  "epa",
-  "explore",
-  "fact-check",
-  "generate-spec",
-  "implement",
-  "init-kit",
-  "module-docs",
-  "plan",
-  "prompt-gen",
-  "write-test",
-]);
+const COMMAND_NAMES = new Set(["init-kit"]);
 
 let WORKSPACE = null;
 let GENERATED_SOURCE_ROOT = null;
@@ -114,7 +102,6 @@ function adaptForTarget(text, targetName) {
         : "the user's text following the explicit skill invocation",
     "{{command_prefix}}": targetName === "claude" ? "/" : "$",
     "{{agent_selector}}": targetName === "claude" ? "subagent_type" : "agent_type",
-    "{{agent_tool}}": targetName === "claude" ? "Agent" : "spawn_agent",
     "{{session_id_expr}}": target.session_id_expr,
     "{{session_id_source}}": target.session_id_source,
     "{{session_id_names}}": target.session_id_names,
@@ -128,6 +115,9 @@ function adaptForTarget(text, targetName) {
     "{{balanced_model}}": MODEL_MAPPING.tiers.balanced[targetName],
     "{{advanced_model}}": MODEL_MAPPING.tiers.advanced[targetName],
   };
+  for (const [id, entry] of Object.entries(TOOL_MAPPING.capabilities)) {
+    replacements[`{{tool_${id}}}`] = entry[targetName];
+  }
   for (const [token, value] of Object.entries(replacements)) {
     text = text.split(token).join(value);
   }
@@ -318,7 +308,7 @@ function sourceDefinitions() {
 
 test("every definition was migrated", () => {
   const definitions = sourceDefinitions();
-  assert.equal(definitions.length, 24);
+  assert.equal(definitions.length, 14);
   assert.deepEqual(
     new Set(
       definitions
@@ -389,7 +379,7 @@ test("claude generation matches pre-refactor behavior", () => {
     );
     assert.equal(body, adaptForTarget(sourceBody, "claude"));
   }
-  assert.match(stdout, /generated 24 definitions for claude/);
+  assert.match(stdout, /generated 14 definitions for claude/);
 });
 
 test("generation is deterministic for both targets", () => {
@@ -578,12 +568,6 @@ test("model tiers map to both harnesses", () => {
 
 test("tool mapping covers declared and referenced tools", () => {
   const capabilities = TOOL_MAPPING.capabilities;
-  const sourceTerms = new Set();
-  for (const capability of Object.values(capabilities)) {
-    for (const term of capability.source_terms || []) {
-      sourceTerms.add(term);
-    }
-  }
   const declaredClaudeTools = new Set();
   for (const [, definition] of sourceDefinitions()) {
     if (definition.kind !== "agent") continue;
@@ -602,8 +586,19 @@ test("tool mapping covers declared and referenced tools", () => {
     }
   }
   assert.deepEqual(declaredClaudeTools, expectedDeclared);
-  for (const required of ["Agent", "Task", "AskUserQuestion", "EnterPlanMode"]) {
-    assert.ok(sourceTerms.has(required));
+  // delegate/ask_user/plan are never declared in an agent's config.tools (only the orchestrator
+  // skill's prose uses their {{tool_*}} placeholders directly) — assert their claude-native names
+  // still match what that prose assumes.
+  assert.equal(capabilities.delegate.claude, "Agent");
+  assert.equal(capabilities.ask_user.claude, "AskUserQuestion");
+  assert.equal(capabilities.plan.claude, "EnterPlanMode");
+});
+
+test("{{tool_*}} placeholders resolve to the correct harness-native name", () => {
+  for (const [id, entry] of Object.entries(TOOL_MAPPING.capabilities)) {
+    const token = `{{tool_${id}}}`;
+    assert.equal(adaptForTarget(token, "claude"), entry.claude);
+    assert.equal(adaptForTarget(token, "codex"), entry.codex);
   }
 });
 
@@ -1466,14 +1461,14 @@ test("codex output uses codex runtime layout", () => {
     "utf-8",
   );
   assert.match(inventoryReference, /\.agents\/skills/);
-  const exploreCommand = fs.readFileSync(
-    path.join(CODEX_PLUGIN_ROOT, "skills", "explore", "SKILL.md"),
+  const initKitCommand = fs.readFileSync(
+    path.join(CODEX_PLUGIN_ROOT, "skills", "init-kit", "SKILL.md"),
     "utf-8",
   );
-  assert.match(exploreCommand, /\$\{CODEX_THREAD_ID:-no-session-id\}/);
-  assert.match(exploreCommand, /# \$explore/);
-  assert.ok(!exploreCommand.includes("$ARGUMENTS"));
-  assert.ok(!exploreCommand.includes("subagent_type"));
+  assert.match(initKitCommand, /\$\{CODEX_THREAD_ID:-no-session-id\}/);
+  assert.match(initKitCommand, /# \$init-kit/);
+  assert.ok(!initKitCommand.includes("$ARGUMENTS"));
+  assert.ok(!initKitCommand.includes("subagent_type"));
 });
 
 test("codex plugin metadata matches plugin identity", () => {

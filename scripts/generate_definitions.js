@@ -44,7 +44,6 @@ const HARNESS_TEMPLATE_KEYS = new Set([
   "arguments",
   "command_prefix",
   "agent_selector",
-  "agent_tool",
   "session_id_expr",
   "session_id_source",
   "session_id_names",
@@ -105,11 +104,19 @@ function require_(condition, message) {
   if (!condition) throw new DefinitionError(message);
 }
 
-function validateNeutralText(filePath, text) {
+function toolTemplateTokens(mapping) {
+  return Object.keys(mapping.capabilities).map((id) => `tool_${id}`);
+}
+
+function allowedTemplateTokens(mapping) {
+  return new Set([...HARNESS_TEMPLATE_KEYS, ...toolTemplateTokens(mapping)]);
+}
+
+function validateNeutralText(filePath, text, allowedTokens) {
   const unknownTokens = new Set();
   for (const match of text.matchAll(HARNESS_TEMPLATE_PATTERN)) {
     const token = match[1];
-    if (!HARNESS_TEMPLATE_KEYS.has(token)) unknownTokens.add(token);
+    if (!allowedTokens.has(token)) unknownTokens.add(token);
   }
   require_(
     unknownTokens.size === 0,
@@ -149,12 +156,17 @@ function validateMapping(filePath, mapping) {
         `${filePath}: ${capabilityId}.${target} must be a non-empty string`,
       );
     }
-    const sourceTerms = entry.source_terms;
+    if (entry.codex_strategy !== undefined) {
+      require_(
+        typeof entry.codex_strategy === "string" && entry.codex_strategy.length > 0,
+        `${filePath}: ${capabilityId}.codex_strategy must be a non-empty string when present`,
+      );
+    }
+    const allowedFields = new Set(["claude", "codex", "codex_strategy"]);
+    const extraFields = Object.keys(entry).filter((k) => !allowedFields.has(k));
     require_(
-      Array.isArray(sourceTerms) &&
-        sourceTerms.length > 0 &&
-        sourceTerms.every((term) => typeof term === "string" && term.length > 0),
-      `${filePath}: ${capabilityId}.source_terms must contain non-empty strings`,
+      extraFields.length === 0,
+      `${filePath}: ${capabilityId} has unknown fields: ${extraFields.sort().join(", ")}`,
     );
   }
 }
@@ -421,6 +433,7 @@ function listFilesMatching(dir, suffix) {
 function loadDefinitions(sourceRoot, mapping, modelMapping) {
   const toolIds = new Set(Object.keys(mapping.capabilities));
   const modelTiers = new Set(Object.keys(modelMapping.tiers));
+  const allowedTokens = allowedTemplateTokens(mapping);
   const definitions = [];
   for (const parentName of SOURCE_PARENTS) {
     const parent = path.join(sourceRoot, parentName);
@@ -435,8 +448,8 @@ function loadDefinitions(sourceRoot, mapping, modelMapping) {
       );
       const promptPath = path.join(path.dirname(path_), data.prompt);
       const prompt = fs.readFileSync(promptPath, "utf-8");
-      validateNeutralText(path_, data.description);
-      validateNeutralText(promptPath, prompt);
+      validateNeutralText(path_, data.description, allowedTokens);
+      validateNeutralText(promptPath, prompt, allowedTokens);
       definitions.push({ sourceDir: path.dirname(path_), data, prompt });
     }
   }
@@ -541,37 +554,23 @@ function codexToolPolicy(definition, mapping) {
   return lines.join("\n");
 }
 
-function codexVocabularyPolicy(prompt, mapping) {
-  const translations = [];
-  const strategies = [];
-  for (const entry of Object.values(mapping.capabilities)) {
-    const sourceTerms = entry.source_terms || [];
-    const usedTerms = sourceTerms.filter((term) => {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const pattern = new RegExp(`\\b${escaped}\\b`);
-      return pattern.test(prompt);
-    });
-    if (usedTerms.length === 0) continue;
-    const source = usedTerms.map((t) => `\`${t}\``).join("/");
-    translations.push(`- ${source} means the Codex \`${entry.codex}\` capability.`);
-    const strategy = entry.codex_strategy;
-    if (strategy && !strategies.includes(strategy)) strategies.push(strategy);
+// Tool names are already resolved to their Codex-native form by the {{tool_*}}
+// placeholder substitution in renderHarnessTemplate. This only surfaces the extra
+// behavioral guidance (codex_strategy) for capabilities whose Codex mechanism needs
+// more explanation than a name swap — e.g. Skill has no direct Codex tool.
+function codexCapabilityNotes(promptRaw, mapping) {
+  const notes = [];
+  for (const [id, entry] of Object.entries(mapping.capabilities)) {
+    if (!entry.codex_strategy) continue;
+    if (promptRaw.includes(`{{tool_${id}}}`) && !notes.includes(entry.codex_strategy)) {
+      notes.push(entry.codex_strategy);
+    }
   }
-  if (translations.length === 0) return "";
-  const lines = [
-    "# Codex Vocabulary",
-    "",
-    "The preserved prompt uses Claude Code tool names. Interpret them as follows:",
-    "",
-    ...translations,
-  ];
-  if (strategies.length > 0) {
-    lines.push("", ...strategies);
-  }
-  return lines.join("\n");
+  if (notes.length === 0) return "";
+  return ["# Codex Notes", "", ...notes].join("\n");
 }
 
-function renderHarnessTemplate(text, target, harnessLayout, modelMapping) {
+function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mapping) {
   const layout = harnessLayout.layouts[target];
   const replacements = {
     "{{state_dir}}": layout.state_dir,
@@ -585,7 +584,6 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping) {
         : "the user's text following the explicit skill invocation",
     "{{command_prefix}}": target === "claude" ? "/" : "$",
     "{{agent_selector}}": target === "claude" ? "subagent_type" : "agent_type",
-    "{{agent_tool}}": target === "claude" ? "Agent" : "spawn_agent",
     "{{session_id_expr}}": layout.session_id_expr,
     "{{session_id_source}}": layout.session_id_source,
     "{{session_id_names}}": layout.session_id_names,
@@ -599,6 +597,9 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping) {
     "{{balanced_model}}": modelMapping.tiers.balanced[target],
     "{{advanced_model}}": modelMapping.tiers.advanced[target],
   };
+  for (const [id, entry] of Object.entries(mapping.capabilities)) {
+    replacements[`{{tool_${id}}}`] = entry[target];
+  }
   for (const [token, value] of Object.entries(replacements)) {
     text = text.split(token).join(value);
   }
@@ -633,13 +634,10 @@ function renderCodexAgent(
     "codex",
     harnessLayout,
     modelMapping,
+    mapping,
   );
-  const policies = [
-    codexToolPolicy(definition, mapping),
-    codexVocabularyPolicy(adaptedPrompt, mapping),
-  ];
-  const instructions =
-    policies.filter((p) => p).join("\n\n") + "\n\n" + adaptedPrompt;
+  const policy = codexToolPolicy(definition, mapping);
+  const instructions = `${policy}\n\n${adaptedPrompt}`;
   const codexEffort =
     config.reasoning_effort.codex ?? config.reasoning_effort.claude;
   const lines = [
@@ -648,7 +646,7 @@ function renderCodexAgent(
     "# Codex role files do not expose per-role timeout or context-mode fields.",
     "# The model router supplies the target model so repo-profile.json remains authoritative.",
     `name = ${tomlString(data.name)}`,
-    `description = ${tomlString(renderHarnessTemplate(data.description, "codex", harnessLayout, modelMapping))}`,
+    `description = ${tomlString(renderHarnessTemplate(data.description, "codex", harnessLayout, modelMapping, mapping))}`,
     `model_reasoning_effort = ${tomlString(codexEffort)}`,
     `sandbox_mode = ${tomlString(sandboxMode)}`,
     `developer_instructions = ${tomlString(instructions)}`,
@@ -658,13 +656,14 @@ function renderCodexAgent(
 }
 
 function renderCodexSkill(definition, mapping, modelMapping, harnessLayout) {
-  const policy = codexVocabularyPolicy(definition.prompt, mapping);
-  const body = policy ? `${policy}\n\n${definition.prompt}` : definition.prompt;
+  const notes = codexCapabilityNotes(definition.prompt, mapping);
+  const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
   return renderHarnessTemplate(
     claudeFrontmatter(definition, mapping, modelMapping) + body,
     "codex",
     harnessLayout,
     modelMapping,
+    mapping,
   );
 }
 
@@ -674,13 +673,14 @@ function renderCodexCommand(
   modelMapping,
   harnessLayout,
 ) {
-  const policy = codexVocabularyPolicy(definition.prompt, mapping);
-  const body = policy ? `${policy}\n\n${definition.prompt}` : definition.prompt;
+  const notes = codexCapabilityNotes(definition.prompt, mapping);
+  const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
   return renderHarnessTemplate(
     claudeFrontmatter(definition, mapping, modelMapping) + body,
     "codex",
     harnessLayout,
     modelMapping,
+    mapping,
   );
 }
 
@@ -833,9 +833,11 @@ function pluginStaticFiles(
   target,
   sourceRoot,
   definitions,
+  mapping,
   modelMapping,
   harnessLayout,
 ) {
+  const allowedTokens = allowedTemplateTokens(mapping);
   const inputs = [...COMMON_PLUGIN_INPUTS];
   const files = new Map();
   for (const inputName of inputs) {
@@ -854,10 +856,10 @@ function pluginStaticFiles(
       if (path.extname(filePath) === ".md") {
         const text = content.toString("utf-8");
         if (COMMON_PLUGIN_INPUTS.includes(inputName)) {
-          validateNeutralText(filePath, text);
+          validateNeutralText(filePath, text, allowedTokens);
         }
         content = Buffer.from(
-          renderHarnessTemplate(text, target, harnessLayout, modelMapping),
+          renderHarnessTemplate(text, target, harnessLayout, modelMapping, mapping),
           "utf-8",
         );
       }
@@ -901,7 +903,7 @@ function render(target, definition, mapping, modelMapping, harnessLayout) {
       definition.data.kind === "command"
         ? renderClaudeCommand(definition)
         : renderClaude(definition, mapping, modelMapping);
-    return renderHarnessTemplate(source, target, harnessLayout, modelMapping);
+    return renderHarnessTemplate(source, target, harnessLayout, modelMapping, mapping);
   }
   if (definition.data.kind === "command") {
     return renderCodexCommand(definition, mapping, modelMapping, harnessLayout);
@@ -977,6 +979,7 @@ function generate(target, sourceRoot, outputRoot, check) {
     target,
     sourceRoot,
     definitions,
+    mapping,
     modelMapping,
     harnessLayout,
   )) {
