@@ -8,7 +8,8 @@
     "model_tier": "balanced",
     "reasoning_effort": {
       "claude": "high",
-      "codex": "high"
+      "codex": "high",
+      "grok": "high"
     },
     "tools": [
       "read",

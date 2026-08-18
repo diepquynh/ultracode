@@ -347,6 +347,13 @@ test("every definition was migrated", () => {
     const prompt = path.join(path.dirname(filePath), data.prompt);
     assert.ok(fs.existsSync(prompt), `${prompt} missing`);
     assert.equal(path.dirname(prompt), path.dirname(filePath));
+    if (data.kind === "agent") {
+      assert.deepEqual(
+        Object.keys(data.config.reasoning_effort).sort(),
+        ["claude", "codex", "grok"],
+        filePath,
+      );
+    }
   }
 });
 
@@ -1849,11 +1856,23 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.match(explore, /^---\nname: explore\n/);
   assert.match(explore, /prompt_mode: full/);
   assert.match(explore, /permission_mode: default/);
+  assert.match(explore, /^effort: high$/m);
   assert.doesNotMatch(explore, /^model:/m);
+  const grokEffortByName = Object.fromEntries(
+    sourceDefinitions()
+      .filter(([, definition]) => definition.kind === "agent")
+      .map(([, definition]) => [
+        definition.name,
+        definition.config.reasoning_effort.grok ??
+          definition.config.reasoning_effort.claude,
+      ]),
+  );
   for (const name of fs.readdirSync(path.join(GROK_PLUGIN_ROOT, "agents"))) {
     if (!name.endsWith(".md")) continue;
     const text = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "agents", name), "utf-8");
+    const agentName = name.slice(0, -".md".length);
     assert.doesNotMatch(text, /^model:/m, name);
+    assert.match(text, new RegExp(`^effort: ${grokEffortByName[agentName]}$`, "m"), name);
   }
   assert.match(explore, /tools: read_file, search_replace, run_terminal_command, grep, list_dir, web_search, web_fetch/);
   assert.match(explore, /\.grok\/ultracode/);

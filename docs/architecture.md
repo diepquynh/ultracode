@@ -193,7 +193,8 @@ skill set. A user-approval gate sits between scouting and generation.
     stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both that and Claude/Codex
     snake_case.
   - `effort` can't be routed this way — it's a subagent-definition field only (no per-invocation `effort` on
-    the Agent tool, no env var for it), so `effort: high` in front matter always holds regardless of tier.
+    the Agent / `spawn_subagent` tool, no env var for it). Claude and Grok write `effort` in agent front
+    matter; Codex writes `model_reasoning_effort` in the role TOML. That value always holds regardless of tier.
   - `models.byAgent`: `explore`, `generate-spec`, `plan`, and the authoring stages → `advanced`;
     `code-reviewer`, `execution-path-analyzer` → `balanced`.
   - `models.byPhaseComplexity`: `implement`/`write-test` → `fast` for low/medium complexity, `balanced` for

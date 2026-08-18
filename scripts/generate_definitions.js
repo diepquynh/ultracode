@@ -394,9 +394,9 @@ function validateDefinition(filePath, data, toolIds, modelTiers) {
         effort !== null &&
         Object.keys(effort).every((k) => k === "claude" || k === "codex" || k === "grok") &&
         ["low", "medium", "high", "max"].includes(effort.claude) &&
-        ["low", "medium", "high", "xhigh", "max"].includes(effort.codex ?? "high") &&
-        ["low", "medium", "high", "max"].includes(effort.grok ?? effort.claude),
-      `${filePath}: config.reasoning_effort.claude must be set`,
+        ["low", "medium", "high", "xhigh", "max"].includes(effort.codex) &&
+        ["low", "medium", "high", "xhigh", "max"].includes(effort.grok),
+      `${filePath}: config.reasoning_effort must set claude, codex, and grok`,
     );
     require_(
       Number.isInteger(config.timeout_seconds) && config.timeout_seconds > 0,
@@ -738,10 +738,14 @@ function grokFrontmatter(definition, mapping) {
     const permissionMode = data.config.tools.some((t) => writeTools.has(t))
       ? "default"
       : "plan";
+    const grokEffort =
+      data.config.reasoning_effort.grok ?? data.config.reasoning_effort.claude;
     // No model: spawn/hook (or inherit-parent) stays authoritative, like Codex.
+    // effort stays on the definition — spawn_subagent has no per-invocation field.
     lines.push(
       "prompt_mode: full",
       `permission_mode: ${permissionMode}`,
+      `effort: ${grokEffort}`,
       `tools: ${translatedTools.join(", ")}`,
     );
   }

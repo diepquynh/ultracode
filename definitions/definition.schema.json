@@ -27,12 +27,12 @@
             "reasoning_effort": {
               "type": "object",
               "additionalProperties": false,
+              "required": ["claude", "codex", "grok"],
               "properties": {
                 "claude": { "enum": ["low", "medium", "high", "max"] },
                 "codex": { "enum": ["low", "medium", "high", "xhigh", "max"] },
-                "grok": { "enum": ["low", "medium", "high", "max"] }
-              },
-              "minProperties": 1
+                "grok": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+              }
             },
             "tools": {
               "type": "array",
