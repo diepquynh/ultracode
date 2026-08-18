@@ -173,8 +173,10 @@ skill set. A user-approval gate sits between scouting and generation.
 
 ## Design notes
 
-- **Portable tools only.** Every agent uses `Read/Edit/Write/Bash/Grep/Glob` (+ `Skill`) — no MCP or language
-  server assumed. Agents prefer a code-graph MCP if one exists, else fall back to Grep/Glob.
+- **Portable tools only.** Every agent uses `Read/Edit/Write/Bash/Grep/Glob` — no MCP or language
+  server assumed. Skill loading is harness-specific: Claude Code has a `Skill` tool; Codex and Grok Build
+  have none, so agents read the skill's `SKILL.md` instead. Agents prefer a code-graph MCP if one exists,
+  else fall back to Grep/Glob.
 - **Seeded from real setups.** The pipeline agents, `orchestrate`, `meta-author`, and the stack references were
   generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
 - **Model tiers, per repo and per phase.** `repo-profile.json`'s `models` block decides which model each

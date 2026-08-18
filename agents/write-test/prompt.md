@@ -73,11 +73,11 @@ listed test skill). Route by name from that table, never by skill descriptions.
 
 ## Step 3 — Load and apply test skills
 
-**Always load skills via {{tool_skill}} — never use {{tool_read}} on a SKILL.md file directly.** Reading raw skill text does
-not activate it. Invoke {{tool_skill}} for every skill on the orchestrator's `Required skills:` line, plus
-any test skill the Skill Application Mapping assigns to a file type you are covering. Load them from the repo
-root (Definitions) — {{tool_skill}} resolves skills relative to your working directory, so a load from the
-wrong directory fails or activates another repo's skill.
+**Always load skills via {{tool_skill}}.** A named skill is not loaded until you do that. Follow the loaded
+instructions exactly. Load every skill on the orchestrator's `Required skills:` line, plus any test skill the
+Skill Application Mapping assigns to a file type you are covering. Load them from the repo root (Definitions)
+— {{tool_skill}} resolves skills relative to your working directory, so a load from the wrong directory fails
+or activates another repo's skill.
 
 The test skills are the single source of truth: follow their templates, patterns, and conventions exactly. Do
 not deviate.

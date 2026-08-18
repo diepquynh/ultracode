@@ -33,10 +33,10 @@
     },
     "skill": {
       "claude": "Skill",
-      "codex": "skill discovery",
-      "grok": "skill discovery",
-      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions.",
-      "grok_strategy": "Load named skills through Grok skill discovery (or invoke `/<skill-name>`) and follow their SKILL.md instructions."
+      "codex": "exec_command on the skill's SKILL.md",
+      "grok": "read_file on the skill's SKILL.md",
+      "codex_strategy": "Codex has no Skill tool. Load a named skill by reading its SKILL.md with exec_command and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills still need their SKILL.md opened the same way — a catalog listing does not load a skill.",
+      "grok_strategy": "Grok Build has no Skill tool. Load a named skill by reading its SKILL.md with read_file and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills appear in the session catalog with a path — read that path. A catalog listing or slash command does not load the skill for a spawned subagent."
     },
     "web_search": {
       "claude": "WebSearch",

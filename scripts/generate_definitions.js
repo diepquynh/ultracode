@@ -559,7 +559,7 @@ function codexToolPolicy(definition, mapping) {
   for (const toolId of definition.data.config.tools) {
     const entry = mapping.capabilities[toolId];
     const codexTool = entry.codex;
-    if (codexTool && codexTool !== "skill discovery") {
+    if (codexTool && !codexTool.includes(" ")) {
       codexTools.push(codexTool);
     }
     const instruction = entry.codex_strategy;
@@ -582,7 +582,9 @@ function codexToolPolicy(definition, mapping) {
 // Tool names are already resolved to their Codex-native form by the {{tool_*}}
 // placeholder substitution in renderHarnessTemplate. This only surfaces the extra
 // behavioral guidance (codex_strategy) for capabilities whose Codex mechanism needs
-// more explanation than a name swap — e.g. Skill has no direct Codex tool.
+// more explanation than a name swap — e.g. neither Codex nor Grok Build has a Skill
+// tool, so skill loading is a read of the skill's SKILL.md. Prose mappings (any
+// value that contains a space) are instructions, not Codex tool names.
 function codexCapabilityNotes(promptRaw, mapping) {
   const notes = [];
   for (const [id, entry] of Object.entries(mapping.capabilities)) {
@@ -663,7 +665,13 @@ function renderCodexAgent(
     modelMapping,
     mapping,
   );
-  const policy = codexToolPolicy(definition, mapping);
+  const policy = renderHarnessTemplate(
+    codexToolPolicy(definition, mapping),
+    "codex",
+    harnessLayout,
+    modelMapping,
+    mapping,
+  );
   const instructions = `${policy}\n\n${adaptedPrompt}`;
   const codexEffort =
     config.reasoning_effort.codex ?? config.reasoning_effort.claude;

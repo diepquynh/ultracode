@@ -20,7 +20,7 @@ Path: `{{runtime_dir}}/INVENTORY.md`. Use this exact section order and table sha
 Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `{{runtime_dir}}/repo-profile.json`
 
 > Route work by the tables below, BY NAME. Do not route by skill descriptions.
-> When a file type in a task matches a row in "Skill Application Mapping", load the listed skill(s) via the Skill tool.
+> When a file type in a task matches a row in "Skill Application Mapping", load the listed skill(s) via {{tool_skill}}.
 
 ## Commands
 

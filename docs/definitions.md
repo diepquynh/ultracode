@@ -26,9 +26,9 @@ The schema is `definitions/definition.schema.json`. Neutral model tiers resolve 
 `advanced` map to Sonnet-or-Opus/Terra-or-Sol/`grok-4.6` (Grok's balanced and advanced tiers currently resolve
 to the same model). Canonical capabilities and their
 Claude Code/Grok Build/Codex translations are explicit in `definitions/tool-mapping.json`. Add a mapping
-before using a new capability in a definition. Codex has no direct `Skill` tool, so that mapping emits a
-skill-discovery instruction. Grok has no structured question or plan-mode tool, so those mappings emit
-conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
+before using a new capability in a definition. Codex and Grok Build have no `Skill` tool, so that mapping
+emits an instruction to read the skill's `SKILL.md` with the harness read capability. Grok also has no
+structured question or plan-mode tool, so those mappings emit conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
 capabilities, and to Grok's `read_file` / `search_replace` / `grep` / `list_dir` / `run_terminal_command`.
 
 Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Claude Code
@@ -88,8 +88,8 @@ This writes Claude-shaped `agents/<name>.md`, `skills/<name>/SKILL.md`, and `com
 Grok-adapted hooks under `hooks/`. Agent front matter uses Grok's `prompt_mode` / `permission_mode` /
 `effort` / `tools` fields and omits `model` so the model-router hook (or inherit-parent) stays
 authoritative. `effort` is taken from `reasoning_effort.grok`, falling back to `reasoning_effort.claude`.
-Grok has no `Skill` / structured-question / plan-mode tools, so those capabilities emit
-discovery or conversation notes the same way Codex does.
+Grok has no `Skill` / structured-question / plan-mode tools, so those capabilities emit a
+read-the-`SKILL.md` instruction or a conversation note the same way Codex does.
 
 Generate the Codex plugin distribution with:
 

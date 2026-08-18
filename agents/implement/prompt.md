@@ -140,8 +140,8 @@ for skills relative to it, so a load from the wrong directory fails or activates
 Load the `convention` skill via {{tool_skill}} now — it is always on for any code edit. Load every other
 skill on demand.
 
-**IMPORTANT: Always load skills with {{tool_skill}}. NEVER read a skill's `SKILL.md` with {{tool_read}}.**
-{{tool_skill}} activates the skill; reading the file only shows raw text without applying it.
+**IMPORTANT: Always load skills with {{tool_skill}}.**
+A named skill is not loaded until you do that. Follow the loaded instructions exactly.
 
 1. **Per-phase invocation:** in the phase file, find the `## Required Skills` section and load each listed
    skill via {{tool_skill}} BEFORE Step 3. Load ALL of them; skip none.

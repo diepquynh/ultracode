@@ -624,6 +624,49 @@ test("{{tool_*}} placeholders resolve to the correct harness-native name", () =>
   }
 });
 
+test("codex and grok load skills by reading SKILL.md, not a Skill tool", () => {
+  const skill = TOOL_MAPPING.capabilities.skill;
+  assert.equal(skill.claude, "Skill");
+  assert.equal(skill.codex, "exec_command on the skill's SKILL.md");
+  assert.equal(skill.grok, "read_file on the skill's SKILL.md");
+  assert.match(skill.codex_strategy, /Codex has no Skill tool/);
+  assert.match(skill.grok_strategy, /Grok Build has no Skill tool/);
+
+  const implementGrok = fs.readFileSync(
+    path.join(GROK_PLUGIN_ROOT, "agents", "implement.md"),
+    "utf-8",
+  );
+  assert.match(implementGrok, /Grok Build has no Skill tool/);
+  assert.match(implementGrok, /read_file on the skill's SKILL.md/);
+  assert.match(implementGrok, /\.grok\/skills\/\{name\}\/SKILL\.md/);
+  assert.doesNotMatch(implementGrok, /NEVER read a skill's `SKILL\.md`/);
+  assert.doesNotMatch(implementGrok, /skill discovery/);
+  assert.match(
+    implementGrok,
+    /^tools: read_file, search_replace, search_replace, run_terminal_command, grep, list_dir$/m,
+  );
+
+  const writeTestGrok = fs.readFileSync(
+    path.join(GROK_PLUGIN_ROOT, "agents", "write-test.md"),
+    "utf-8",
+  );
+  assert.match(writeTestGrok, /read_file on the skill's SKILL.md/);
+  assert.doesNotMatch(writeTestGrok, /never use read_file on a SKILL.md file directly/i);
+
+  const implementCodex = parseToml(
+    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implement.toml"), "utf-8"),
+  ).developer_instructions;
+  assert.match(implementCodex, /Codex has no Skill tool/);
+  assert.match(implementCodex, /exec_command on the skill's SKILL.md/);
+  assert.match(implementCodex, /\.agents\/skills\/\{name\}\/SKILL\.md/);
+  assert.doesNotMatch(implementCodex, /NEVER read a skill's `SKILL\.md`/);
+  assert.doesNotMatch(implementCodex, /skill discovery/);
+  assert.match(
+    implementCodex,
+    /Limit direct tool use in this role to these Codex capabilities: `exec_command`, `apply_patch`/,
+  );
+});
+
 test("generated output passes check mode", () => {
   for (const [target, root] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
@@ -1887,6 +1930,7 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.match(orchestrate, /subagent_type/);
   assert.match(orchestrate, /# Grok Notes/);
   assert.match(orchestrate, /There is no structured question tool/);
+  assert.match(orchestrate, /Grok Build has no Skill tool/);
 
   const initKit = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "commands", "init-kit.md"), "utf-8");
   assert.match(initKit, /# \/init-kit/);
