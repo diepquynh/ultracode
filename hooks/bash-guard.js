@@ -10,7 +10,7 @@
 
 "use strict";
 
-const { readHookInput, denyPreToolUse } = require("./lib/common");
+const { readHookInput, denyPreToolUse, hookToolInput, hookAgentType } = require("./lib/common");
 
 const BANNED_PATTERNS = [
   { pattern: /^\s*(true|:)\s*;?\s*$/, label: "a no-op keepalive (`true`/`:`)" },
@@ -24,9 +24,9 @@ const BANNED_PATTERNS = [
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  if (typeof hookInput.agent_type === "string" && hookInput.agent_type) return 0;
+  if (hookAgentType(hookInput)) return 0;
 
-  const toolInput = hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   const command = toolInput && typeof toolInput.command === "string" ? toolInput.command : "";
   if (!command) return 0;
 

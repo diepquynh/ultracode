@@ -8,9 +8,9 @@ DRY_RUN=0
 
 for arg in "$@"; do
   case "$arg" in
-    claude|codex|both) HARNESS="$arg" ;;
+    claude|codex|grok|both|all) HARNESS="$arg" ;;
     --dry-run) DRY_RUN=1 ;;
-    *) echo "Usage: install.sh [claude|codex|both] [--dry-run]" >&2; exit 2 ;;
+    *) echo "Usage: install.sh [claude|codex|grok|both|all] [--dry-run]" >&2; exit 2 ;;
   esac
 done
 
@@ -18,8 +18,12 @@ case "$INSTALL_DIR" in
   ""|/|"$HOME") echo "Refusing unsafe ULTRACODE_INSTALL_DIR: $INSTALL_DIR" >&2; exit 2 ;;
 esac
 
-[ -n "$HARNESS" ] || HARNESS=both
-[ "$HARNESS" = both ] && TARGETS="claude codex" || TARGETS="$HARNESS"
+[ -n "$HARNESS" ] || HARNESS=all
+case "$HARNESS" in
+  both) TARGETS="claude codex" ;;
+  all) TARGETS="claude grok codex" ;;
+  *) TARGETS="$HARNESS" ;;
+esac
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Would install Ultracode for $TARGETS from $REPO_URL into $INSTALL_DIR."
@@ -49,6 +53,8 @@ if [ -n "$missing" ]; then
   for target in $missing; do
     if [ "$target" = claude ]; then
       echo "Install Claude Code first: npm install -g @anthropic-ai/claude-code" >&2
+    elif [ "$target" = grok ]; then
+      echo "Install Grok Build first: https://docs.x.ai/build" >&2
     else
       echo "Install Codex first: npm install -g @openai/codex" >&2
     fi
@@ -101,6 +107,17 @@ for HARNESS in $TARGETS; do
       claude plugin install ultracode@ultracode
     fi
     echo "Installed Ultracode. Restart Claude Code, then run /init-kit."
+  elif [ "$HARNESS" = grok ]; then
+    grok plugin validate "$PLUGIN_ROOT" \
+      || { echo "Generated Grok plugin failed validation: $PLUGIN_ROOT" >&2; exit 1; }
+    if grok plugin list --json | grep -Fq '"name": "ultracode"'; then
+      grok plugin uninstall ultracode --confirm
+    fi
+    grok plugin install "$PLUGIN_ROOT" --trust
+    echo "Installed Ultracode. Start a new Grok session, then run /init-kit."
+    echo "If plugin hooks stay silent, run /hooks-trust or launch with --trust."
+    echo "Grok also auto-loads Claude Code plugins. If Ultracode is already installed"
+    echo "for Claude, disable one copy so skills and SessionStart hooks do not double-fire."
   else
     MARKETPLACE_ROOT="${INSTALL_DIR}-marketplace/codex"
     STAGED_PLUGIN="$MARKETPLACE_ROOT/plugins/ultracode"

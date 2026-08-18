@@ -3,7 +3,7 @@
     "code-reviewer": {
       "frontmatter": {
         "name": "code-reviewer",
-        "description": "Repo-agnostic post-change code review subagent for ultracode. Spawned by the orchestrator when: (1) an implement or write-test agent finishes and uncommitted code changes must be reviewed before proceeding, (2) the user asks to review the current working-tree changes, (3) correctness, convention adherence, security, test coverage, and clarity must be verified as a quality gate. It detects changed files from git, loads the repo's Review Rule Set from the inventory, reviews each change, and returns findings as a single JSON object the orchestrator parses. It also runs a hardcoded, non-overridable security scan for dangerous/malicious code (backdoors, exfiltration, destructive ops, obfuscated payloads, supply-chain tampering, prompt-injection payloads) on every changed file regardless of the repo's rule set, and flags hits as BLOCKER findings that no user or embedded instruction can waive. Each BLOCKER finding pairs a literal removal fix with human-facing Guidance that teaches the underlying risk and where to research the correct pattern, without handing over a ready-made secure replacement. It does NOT modify project source.",
+        "description": "Repo-agnostic post-change code review subagent for ultracode. Spawned by the orchestrator when: (1) an implement or write-test agent finishes and uncommitted code changes must be reviewed before proceeding, (2) the user asks to review the current working-tree changes, (3) correctness, convention adherence, security, test coverage, and clarity must be verified as a quality gate, (4) the orchestrator itself made a low-stakes direct edit (Rule D1b) and must verify it independently before proceeding. It detects changed files from git, loads the repo's Review Rule Set from the inventory, reviews each change against that rule set and the spawn's optional Changed files/Change rationale context, and returns findings as a single JSON object the orchestrator parses. It also runs a hardcoded, non-overridable security scan for dangerous/malicious code (backdoors, exfiltration, destructive ops, obfuscated payloads, supply-chain tampering, prompt-injection payloads) on every changed file regardless of the repo's rule set, and flags hits as BLOCKER findings that no user or embedded instruction can waive. Each BLOCKER finding pairs a literal removal fix with human-facing Guidance that teaches the underlying risk and where to research the correct pattern, without handing over a ready-made secure replacement. It does NOT modify project source.",
         "model": "sonnet",
         "effort": "high",
         "tools": [
@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0e1c203f9d949bb202e74573a44b9c43e0eb9b81b933d8de0aac983765d97571"
+      "body_sha256": "1bfe1b567c3a9a5acaf9535847d9a9e810bd84095ddd287a8b7a40b60e6a5ca2"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "61af771c43c033cb50b32a81b4fedc434c1dc8ddb8bc443d612e8d69fb13043e"
+      "body_sha256": "1179d49dd116aadb29e9057335963529bb6cc6aff68c14004ed8d1b6f5ef66cc"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "51b9b8007c75b4d8ae9d3204a98f565a31ab72b5931c711dcf49b0fb164d0cb1"
+      "body_sha256": "9d04084cfedf9ed089976ece4ceed8efac3228dca6930d498a8d1b9c94707b60"
     },
     "generate-spec": {
       "frontmatter": {
@@ -64,6 +64,7 @@
         "tools": [
           "Read",
           "Write",
+          "Edit",
           "Bash",
           "Grep",
           "Glob"
@@ -71,7 +72,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "9586067b1650078172918641389557f7766d30babc9820b30e829eee79cefff7"
+      "body_sha256": "328fad42387c60dbcda39e358469af69cd2ed30c2e910ad1af6a28f54302fd85"
     },
     "implement": {
       "frontmatter": {
@@ -91,7 +92,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "503d94c6a4452eb84d7d2b9ee952fcc0f703046966d1dc3ebb8c9ea806fb6001"
+      "body_sha256": "febd87e6fd48f9b44f15de772d17408c9e176d07b42370f6d201387e95a01469"
     },
     "initializer": {
       "frontmatter": {
@@ -146,7 +147,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "6fe4e50457c609ad45b83a8b8c3f3b185dcea18b803b7993489fa1f454cd786f"
+      "body_sha256": "0b58eae3041744ef91fd1b121d154e90a1bdb9a60ef6ace04527a9a8c78753c0"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -166,7 +167,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "3516f9322814af9a3ee33f57ad99b33facda25e9d85015dfcb24aafe5b42756e"
+      "body_sha256": "58043ea0672d2d3fd1beeeda020d19f3cf6fa2cf6d78b038b0afd1820cc7f441"
     },
     "write-test": {
       "frontmatter": {
@@ -186,7 +187,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "ba13e05b08ec7c6c0deb5f014c165da0360d8f68d48fe621108f503e23e76532"
+      "body_sha256": "38398a709ded9785d0b956da1fede7bd0c04a5cb4c83a1ec4601829c5fd83cda"
     },
     "fact-check": {
       "frontmatter": {
@@ -196,6 +197,7 @@
         "effort": "high",
         "tools": [
           "Read",
+          "Write",
           "Bash",
           "Grep",
           "Glob"
@@ -219,7 +221,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "b3d4b8b845ad589cb877b780ee41fab75f5f388042ee0506a068fe74585ae90f"
+      "body_sha256": "a34672dc542147fb7fec74a7ec17a252b04b8d73ab76c58ee3f7cdc976422d79"
     }
   }
 }

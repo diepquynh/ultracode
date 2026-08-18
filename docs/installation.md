@@ -4,7 +4,7 @@ The installer requires Git, Node 20+ for Ultracode's runtime hooks, and the CLI 
 
 ## Quick local install
 
-Install both harnesses:
+Install every harness:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash
@@ -14,21 +14,28 @@ Select one harness explicitly:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- claude
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- grok
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- codex
 ```
 
-From a checkout, use `bash install.sh` for both or pass `claude`/`codex` for one. The script keeps an updatable
-checkout under `${XDG_DATA_HOME:-$HOME/.local/share}/ultracode`; override it with `ULTRACODE_INSTALL_DIR`.
-Pass `--dry-run` when running the local script to preview the workflow.
+From a checkout, use `bash install.sh` for all three or pass `claude`/`grok`/`codex` for one. The script keeps
+an updatable checkout under `${XDG_DATA_HOME:-$HOME/.local/share}/ultracode`; override it with
+`ULTRACODE_INSTALL_DIR`. Pass `--dry-run` when running the local script to preview the workflow. `both` still
+means Claude + Codex; `all` (the default) includes Grok.
 
 The installer generates `dist/<harness>/ultracode` from that checkout's neutral sources on every run, after
 pulling. The distributions are build output rather than committed files, so an install always matches the
 revision it just fetched and no plugin is ever shipped stale.
 
-After a Claude Code install, restart Claude Code. After a Codex install, start a new session, open `/hooks`,
-and trust Ultracode's hooks; start one more session so the `SessionStart` hook runs. Codex intentionally does
-not trust plugin hooks automatically, so initialization reminders and profile model enforcement remain inactive
-until then.
+After a Claude Code install, restart Claude Code. After a Grok install, start a new session and run
+`/init-kit`. Grok trusts plugins under `~/.grok/plugins/` automatically; a project-local copy in
+`.grok/plugins/` needs `/hooks-trust` or `--trust` first. After a Codex install, start a new session, open
+`/hooks`, and trust Ultracode's hooks; start one more session so the `SessionStart` hook runs. Codex
+intentionally does not trust plugin hooks automatically, so initialization reminders and profile model
+enforcement remain inactive until then.
+
+Grok also auto-loads Claude Code plugins. If Ultracode is already installed for Claude, skip the Grok target
+or disable one copy so skills and SessionStart hooks do not double-fire.
 
 ## Claude Code manual install
 
@@ -56,6 +63,32 @@ claude --plugin-dir /absolute/path/to/ultracode/dist/claude/ultracode
 
 Published marketplaces use the same `claude plugin marketplace add <owner/repo-or-url>` and
 `claude plugin install ultracode@<marketplace>` flow.
+
+## Grok Build manual install
+
+Generate the distribution first — `dist/` is not committed — then install it as a local plugin:
+
+```bash
+node scripts/generate_definitions.js --target grok
+grok plugin validate ./dist/grok/ultracode
+grok plugin install ./dist/grok/ultracode --trust
+```
+
+To browse it as a marketplace instead, add the generated plugin root (it carries
+`.grok-plugin/marketplace.json` pointing at `.`) and install by name:
+
+```bash
+grok plugin marketplace add /absolute/path/to/ultracode/dist/grok/ultracode
+grok plugin install ultracode --trust
+```
+
+For a one-session dry run without installing, pass `--plugin-dir`:
+
+```bash
+grok --plugin-dir /absolute/path/to/ultracode/dist/grok/ultracode
+```
+
+Confirm the load with `grok inspect`. Then run `/init-kit`.
 
 ## Codex manual install
 

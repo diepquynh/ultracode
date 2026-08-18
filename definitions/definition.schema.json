@@ -29,7 +29,8 @@
               "additionalProperties": false,
               "properties": {
                 "claude": { "enum": ["low", "medium", "high", "max"] },
-                "codex": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+                "codex": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+                "grok": { "enum": ["low", "medium", "high", "max"] }
               },
               "minProperties": 1
             },

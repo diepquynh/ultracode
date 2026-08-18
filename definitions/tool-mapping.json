@@ -3,52 +3,67 @@
   "capabilities": {
     "read": {
       "claude": "Read",
-      "codex": "exec_command"
+      "codex": "exec_command",
+      "grok": "read_file"
     },
     "edit": {
       "claude": "Edit",
-      "codex": "apply_patch"
+      "codex": "apply_patch",
+      "grok": "search_replace"
     },
     "write": {
       "claude": "Write",
-      "codex": "apply_patch"
+      "codex": "apply_patch",
+      "grok": "search_replace"
     },
     "shell": {
       "claude": "Bash",
-      "codex": "exec_command"
+      "codex": "exec_command",
+      "grok": "run_terminal_command"
     },
     "search_text": {
       "claude": "Grep",
-      "codex": "exec_command"
+      "codex": "exec_command",
+      "grok": "grep"
     },
     "glob": {
       "claude": "Glob",
-      "codex": "exec_command"
+      "codex": "exec_command",
+      "grok": "list_dir"
     },
     "skill": {
       "claude": "Skill",
       "codex": "skill discovery",
-      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions."
+      "grok": "skill discovery",
+      "codex_strategy": "Load named skills through Codex skill discovery and follow their SKILL.md instructions.",
+      "grok_strategy": "Load named skills through Grok skill discovery (or invoke `/<skill-name>`) and follow their SKILL.md instructions."
     },
     "web_search": {
       "claude": "WebSearch",
-      "codex": "web_search"
+      "codex": "web_search",
+      "grok": "web_search"
     },
     "web_fetch": {
       "claude": "WebFetch",
-      "codex": "web_search"
+      "codex": "web_search",
+      "grok": "web_fetch"
     },
     "delegate": {
       "claude": "Agent",
-      "codex": "spawn_agent"
+      "codex": "spawn_agent",
+      "grok": "spawn_subagent"
     },
     "ask_user": {
       "claude": "AskUserQuestion",
-      "codex": "request_user_input"
+      "codex": "request_user_input",
+      "grok": "ask the user",
+      "grok_strategy": "There is no structured question tool. Ask the user in the conversation and wait for their reply."
     },
     "plan": {
       "claude": "EnterPlanMode",
-      "codex": "update_plan"
+      "codex": "update_plan",
+      "grok": "present the plan",
+      "grok_strategy": "There is no plan-mode tool. Present the plan in the conversation and wait for approval before implementing."
     }
   }
 }

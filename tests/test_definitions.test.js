@@ -21,6 +21,7 @@ const IGNORED_SOURCE_ENTRIES = [
   ".git",
   ".claude",
   ".codex",
+  ".grok",
   ".code-review-graph",
   "dist",
   "tmp",
@@ -48,6 +49,7 @@ let WORKSPACE = null;
 let GENERATED_SOURCE_ROOT = null;
 let CLAUDE_PLUGIN_ROOT = null;
 let CODEX_PLUGIN_ROOT = null;
+let GROK_PLUGIN_ROOT = null;
 const GENERATOR_STDOUT = {};
 
 // Minimal TOML reader — the generator emits only basic strings and a flat
@@ -97,11 +99,11 @@ function adaptForTarget(text, targetName) {
     "{{agents_dir}}": target.agents_dir,
     "{{plugin_root}}": `\${${target.plugin_root_env}}`,
     "{{arguments}}":
-      targetName === "claude"
-        ? "$ARGUMENTS"
-        : "the user's text following the explicit skill invocation",
-    "{{command_prefix}}": targetName === "claude" ? "/" : "$",
-    "{{agent_selector}}": targetName === "claude" ? "subagent_type" : "agent_type",
+      targetName === "codex"
+        ? "the user's text following the explicit skill invocation"
+        : "$ARGUMENTS",
+    "{{command_prefix}}": targetName === "codex" ? "$" : "/",
+    "{{agent_selector}}": targetName === "codex" ? "agent_type" : "subagent_type",
     "{{session_id_expr}}": target.session_id_expr,
     "{{session_id_source}}": target.session_id_source,
     "{{session_id_names}}": target.session_id_names,
@@ -111,7 +113,9 @@ function adaptForTarget(text, targetName) {
     "{{reload_action}}":
       targetName === "claude"
         ? "running `/reload-plugins` or restarting the session"
-        : "starting a new Codex session",
+        : targetName === "grok"
+          ? "pressing `r` in the Plugins tab or starting a new session"
+          : "starting a new Codex session",
     "{{balanced_model}}": MODEL_MAPPING.tiers.balanced[targetName],
     "{{advanced_model}}": MODEL_MAPPING.tiers.advanced[targetName],
   };
@@ -174,14 +178,14 @@ function copyTreeFiltered(src, dest, ignore) {
 }
 
 before(() => {
-  // Build both plugin distributions the way install.sh does: from a clean
+  // Build all plugin distributions the way install.sh does: from a clean
   // copy of the sources. The generator's default output path is used on
   // purpose — that `dist/<target>/ultracode` layout is the one install.sh
   // points each harness marketplace at.
   WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-tests-"));
   GENERATED_SOURCE_ROOT = path.join(WORKSPACE, "checkout");
   copyTreeFiltered(ROOT, GENERATED_SOURCE_ROOT, IGNORED_SOURCE_ENTRIES);
-  for (const target of ["claude", "codex"]) {
+  for (const target of ["claude", "codex", "grok"]) {
     const stdout = runGeneratorWithDefaultOutput(target, {
       sourceRoot: GENERATED_SOURCE_ROOT,
     });
@@ -197,6 +201,12 @@ before(() => {
     GENERATED_SOURCE_ROOT,
     "dist",
     "codex",
+    "ultracode",
+  );
+  GROK_PLUGIN_ROOT = path.join(
+    GENERATED_SOURCE_ROOT,
+    "dist",
+    "grok",
     "ultracode",
   );
 });
@@ -382,8 +392,8 @@ test("claude generation matches pre-refactor behavior", () => {
   assert.match(stdout, /generated 14 definitions for claude/);
 });
 
-test("generation is deterministic for both targets", () => {
-  for (const target of ["claude", "codex"]) {
+test("generation is deterministic for every target", () => {
+  for (const target of ["claude", "codex", "grok"]) {
     const first = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-${target}-a-`));
     const second = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-${target}-b-`));
     runGenerator(target, first);
@@ -409,7 +419,9 @@ test("neutral sources do not hardcode a harness layout", () => {
   const concreteTerms = [
     ".claude/",
     ".codex/",
+    ".grok/",
     "${CLAUDE_PLUGIN_ROOT}",
+    "${GROK_PLUGIN_ROOT}",
     "${PLUGIN_ROOT}",
     "CLAUDE_CODE_SESSION_ID",
     "GROK_SESSION_ID",
@@ -449,6 +461,7 @@ test("generated text resolves all layout tokens", () => {
   for (const [target, root] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
+    ["grok", GROK_PLUGIN_ROOT],
   ]) {
     const stack = [root];
     const textFiles = [];
@@ -548,11 +561,11 @@ test("codex agents are valid TOML", () => {
   }
 });
 
-test("model tiers map to both harnesses", () => {
+test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
-    fast: { claude: "haiku", codex: "gpt-5.6-luna" },
-    balanced: { claude: "sonnet", codex: "gpt-5.6-terra" },
-    advanced: { claude: "opus", codex: "gpt-5.6-sol" },
+    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-build-0.1" },
+    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.5" },
+    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6" },
   });
   for (const [, definition] of sourceDefinitions()) {
     if (definition.kind === "agent") {
@@ -576,6 +589,7 @@ test("tool mapping covers declared and referenced tools", () => {
       const entry = capabilities[capabilityId];
       assert.ok(entry.claude);
       assert.ok(entry.codex);
+      assert.ok(entry.grok);
       declaredClaudeTools.add(entry.claude);
     }
   }
@@ -599,6 +613,7 @@ test("{{tool_*}} placeholders resolve to the correct harness-native name", () =>
     const token = `{{tool_${id}}}`;
     assert.equal(adaptForTarget(token, "claude"), entry.claude);
     assert.equal(adaptForTarget(token, "codex"), entry.codex);
+    assert.equal(adaptForTarget(token, "grok"), entry.grok);
   }
 });
 
@@ -606,6 +621,7 @@ test("generated output passes check mode", () => {
   for (const [target, root] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
+    ["grok", GROK_PLUGIN_ROOT],
   ]) {
     runGenerator(target, root, { check: true, sourceRoot: GENERATED_SOURCE_ROOT });
   }
@@ -629,6 +645,7 @@ test("default output uses nested harness plugin root", () => {
   for (const [target, expectedRoot] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
+    ["grok", GROK_PLUGIN_ROOT],
   ]) {
     assert.equal(
       expectedRoot,
@@ -689,8 +706,19 @@ test("real npm ci against the generated plugin root installs a working ultracode
   assert.equal(result, "");
 });
 
-test("installer dry run covers both harnesses", () => {
-  for (const target of ["claude", "codex"]) {
+function pluginRootFor(target) {
+  if (target === "claude") return CLAUDE_PLUGIN_ROOT;
+  if (target === "codex") return CODEX_PLUGIN_ROOT;
+  if (target === "grok") return GROK_PLUGIN_ROOT;
+  throw new Error(`unknown target: ${target}`);
+}
+
+function expectedModel(target, tier) {
+  return MODEL_MAPPING.tiers[tier][target];
+}
+
+test("installer dry run covers every harness", () => {
+  for (const target of ["claude", "codex", "grok"]) {
     const result = execFileSync(
       "bash",
       [INSTALLER, target, "--dry-run"],
@@ -700,12 +728,12 @@ test("installer dry run covers both harnesses", () => {
     assert.ok(result.includes("Would generate dist/<harness>/ultracode"));
     assert.ok(result.includes("local marketplace"));
   }
-  const both = execFileSync(
+  const all = execFileSync(
     "bash",
     [INSTALLER, "--dry-run"],
     { cwd: ROOT, encoding: "utf-8" },
   );
-  assert.ok(both.includes("for claude codex"));
+  assert.ok(all.includes("for claude grok codex"));
 });
 
 test("installer reports missing harness before installing", () => {
@@ -798,7 +826,7 @@ function routeProfileTest(target) {
     },
   };
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const hookInput = {
     cwd: repo,
     tool_input: {
@@ -807,7 +835,7 @@ function routeProfileTest(target) {
       model: "wrong-model",
     },
   };
-  const expected = target === "claude" ? "sonnet" : "gpt-5.6-terra";
+  const expected = expectedModel(target, "balanced");
 
   let stdout = runHook(
     path.join(pluginRoot, "hooks", "model-router.js"),
@@ -840,6 +868,7 @@ function routeProfileTest(target) {
   profile.models.byAgent["code-reviewer"] = {
     claude: "custom-claude-model",
     codex: "custom-codex-model",
+    grok: "custom-grok-model",
   };
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
   const targeted = runHook(
@@ -865,6 +894,7 @@ function routeProfileTest(target) {
 test("model router rewrites and honors explicit fallbacks", () => {
   routeProfileTest("claude");
   routeProfileTest("codex");
+  routeProfileTest("grok");
 });
 
 function routeInitializerTest(target) {
@@ -877,8 +907,8 @@ function routeInitializerTest(target) {
     models: { byAgent: { explore: "advanced" }, byPhaseComplexity: {} },
   };
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
-  const explicitTierModel = target === "claude" ? "haiku" : "gpt-5.6-luna";
+  const pluginRoot = pluginRootFor(target);
+  const explicitTierModel = expectedModel(target, "fast");
   const hookInput = {
     cwd: repo,
     tool_input: {
@@ -910,6 +940,7 @@ function routeInitializerTest(target) {
 test("model router keeps the initializer model when reinitializing", () => {
   routeInitializerTest("claude");
   routeInitializerTest("codex");
+  routeInitializerTest("grok");
 });
 
 function routeFactCheckExemptionTest(target) {
@@ -924,7 +955,7 @@ function routeFactCheckExemptionTest(target) {
     JSON.stringify({ models: { byAgent: { explore: "advanced" }, byPhaseComplexity: {} } }),
     "utf-8",
   );
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const hookInput = {
     cwd: repo,
     tool_input: {
@@ -949,6 +980,7 @@ function routeFactCheckExemptionTest(target) {
 test("model router exempts fact-check from requiring an explicit route", () => {
   routeFactCheckExemptionTest("claude");
   routeFactCheckExemptionTest("codex");
+  routeFactCheckExemptionTest("grok");
 });
 
 test("model router denies a malformed profile", () => {
@@ -981,7 +1013,7 @@ function reviewCapTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-reviewcap-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
@@ -1014,13 +1046,14 @@ function reviewCapTest(target) {
 test("review-cap denies a 4th code-review iteration", () => {
   reviewCapTest("claude");
   reviewCapTest("codex");
+  reviewCapTest("grok");
 });
 
 function sessionGuardTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-sessguard-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const expectedDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   const hookPath = path.join(pluginRoot, "hooks", "session-guard.js");
   const run = (prompt) =>
@@ -1047,10 +1080,11 @@ function sessionGuardTest(target) {
 test("session-guard denies a missing or invented Session dir:", () => {
   sessionGuardTest("claude");
   sessionGuardTest("codex");
+  sessionGuardTest("grok");
 });
 
 function bashGuardTest(target) {
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const hookPath = path.join(pluginRoot, "hooks", "bash-guard.js");
   const run = (command, agentType) =>
     runHook(hookPath, {
@@ -1071,10 +1105,11 @@ function bashGuardTest(target) {
 test("bash-guard denies orchestrator wait/sleep but exempts subagents", () => {
   bashGuardTest("claude");
   bashGuardTest("codex");
+  bashGuardTest("grok");
 });
 
 function artifactGuardTest(target) {
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const hookPath = path.join(pluginRoot, "hooks", "artifact-guard.js");
   const run = (filePath, agentType) =>
     runHook(hookPath, {
@@ -1103,13 +1138,14 @@ function artifactGuardTest(target) {
 test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts subagents", () => {
   artifactGuardTest("claude");
   artifactGuardTest("codex");
+  artifactGuardTest("grok");
 });
 
 function pipelineGateTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-gate-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const hookPath = path.join(pluginRoot, "hooks", "pipeline-gate.js");
@@ -1157,13 +1193,14 @@ function pipelineGateTest(target) {
 test("pipeline-gate denies plan/implement spawns without a recorded approval", () => {
   pipelineGateTest("claude");
   pipelineGateTest("codex");
+  pipelineGateTest("grok");
 });
 
 function securityBlockTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-secblock-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const hookPath = path.join(pluginRoot, "hooks", "security-block.js");
@@ -1212,22 +1249,32 @@ function securityBlockTest(target) {
 test("security-block denies waiver instructions and blocked module-documentation spawns", () => {
   securityBlockTest("claude");
   securityBlockTest("codex");
+  securityBlockTest("grok");
 });
 
-test("both plugin distributions bundle the ultracode_gate MCP server", () => {
+test("every plugin distribution bundles the ultracode_gate MCP server", () => {
   for (const [target, root, envVar] of [
     ["claude", CLAUDE_PLUGIN_ROOT, "CLAUDE_PLUGIN_ROOT"],
     ["codex", CODEX_PLUGIN_ROOT, "PLUGIN_ROOT"],
+    ["grok", GROK_PLUGIN_ROOT, "GROK_PLUGIN_ROOT"],
   ]) {
     assert.ok(fs.statSync(path.join(root, "mcp", "gate-server.js")).isFile());
     assert.ok(fs.statSync(path.join(root, "package.json")).isFile());
     assert.ok(fs.statSync(path.join(root, "package-lock.json")).isFile());
-    const manifestPath =
-      target === "claude"
-        ? path.join(root, ".claude-plugin", "plugin.json")
-        : path.join(root, ".codex-plugin", "plugin.json");
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
-    assert.deepEqual(manifest.mcpServers, {
+    const servers =
+      target === "grok"
+        ? JSON.parse(fs.readFileSync(path.join(root, ".mcp.json"), "utf-8")).mcpServers
+        : JSON.parse(
+            fs.readFileSync(
+              path.join(
+                root,
+                target === "claude" ? ".claude-plugin" : ".codex-plugin",
+                "plugin.json",
+              ),
+              "utf-8",
+            ),
+          ).mcpServers;
+    assert.deepEqual(servers, {
       "ultracode-gate": {
         command: "node",
         args: [`\${${envVar}}/mcp/gate-server.js`],
@@ -1240,7 +1287,7 @@ function factcheckRecordTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-fcrecord-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
@@ -1282,13 +1329,14 @@ function factcheckRecordTest(target) {
 test("factcheck-record captures fact-check verdicts and increments rounds", () => {
   factcheckRecordTest("claude");
   factcheckRecordTest("codex");
+  factcheckRecordTest("grok");
 });
 
 function progressTrackerTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-progress-${target}-`));
   const repo = tempDir;
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = target === "claude" ? CLAUDE_PLUGIN_ROOT : CODEX_PLUGIN_ROOT;
+  const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase file: ${path.join(sessionDir, "phase-2.md")}.`;
@@ -1321,6 +1369,7 @@ function progressTrackerTest(target) {
 test("spawn-log records structured progress.json read back by session-resume", () => {
   progressTrackerTest("claude");
   progressTrackerTest("codex");
+  progressTrackerTest("grok");
 });
 
 test("mcp/lib/memory dedupes by (area, lesson), moves the newest to the end, and caps entries", () => {
@@ -1366,10 +1415,11 @@ test("mcp/lib/gate refuses approval without a fact-check PASS and allows it once
   assert.equal(gates.plan.notes, "needs rework");
 });
 
-test("both plugin distributions include target hooks", () => {
+test("every plugin distribution includes target hooks", () => {
   for (const [target, root] of [
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
+    ["grok", GROK_PLUGIN_ROOT],
   ]) {
     const hookDir = path.join(root, "hooks");
     const files = fs
@@ -1523,4 +1573,102 @@ test("source tree has no generated definition leftovers", () => {
     [],
   );
   assert.ok(!fs.existsSync(path.join(ROOT, ".claude-plugin")));
+  assert.ok(!fs.existsSync(path.join(ROOT, ".grok-plugin")));
+});
+
+test("grok generation uses Claude-shaped files and grok layout", () => {
+  assert.ok(fs.existsSync(path.join(GROK_PLUGIN_ROOT, ".grok-plugin", "plugin.json")));
+  assert.ok(fs.existsSync(path.join(GROK_PLUGIN_ROOT, ".grok-plugin", "marketplace.json")));
+  assert.ok(!fs.existsSync(path.join(GROK_PLUGIN_ROOT, ".claude-plugin")));
+  assert.ok(!fs.existsSync(path.join(GROK_PLUGIN_ROOT, ".codex-plugin")));
+  assert.ok(fs.existsSync(path.join(GROK_PLUGIN_ROOT, ".mcp.json")));
+  assert.ok(fs.existsSync(path.join(GROK_PLUGIN_ROOT, "commands", "init-kit.md")));
+  assert.ok(fs.existsSync(path.join(GROK_PLUGIN_ROOT, "agents", "explore.md")));
+  assert.ok(!fs.existsSync(path.join(GROK_PLUGIN_ROOT, "agents", "explore.toml")));
+
+  const plugin = JSON.parse(
+    fs.readFileSync(path.join(GROK_PLUGIN_ROOT, ".grok-plugin", "plugin.json"), "utf-8"),
+  );
+  const marketplace = JSON.parse(
+    fs.readFileSync(path.join(GROK_PLUGIN_ROOT, ".grok-plugin", "marketplace.json"), "utf-8"),
+  );
+  const sourceMetadata = JSON.parse(
+    fs.readFileSync(path.join(ROOT, "definitions", "plugin-metadata.json"), "utf-8"),
+  );
+  assert.equal(plugin.name, sourceMetadata.name);
+  assert.equal(plugin.version, sourceMetadata.version);
+  assert.equal(marketplace.plugins[0].source.type, "local");
+  assert.equal(marketplace.plugins[0].category, sourceMetadata.grok.category);
+
+  const explore = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "agents", "explore.md"), "utf-8");
+  assert.match(explore, /^---\nname: explore\n/);
+  assert.match(explore, /prompt_mode: full/);
+  assert.match(explore, /permission_mode: default/);
+  assert.match(explore, /model: grok-4\.6/);
+  assert.match(explore, /tools: read_file, search_replace, run_terminal_command, grep, list_dir, web_search, web_fetch/);
+  assert.match(explore, /\.grok\/ultracode/);
+  assert.ok(!explore.includes(".claude/"));
+  assert.ok(!explore.includes("CLAUDE_PLUGIN_ROOT"));
+
+  const orchestrate = fs.readFileSync(
+    path.join(GROK_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+    "utf-8",
+  );
+  assert.match(orchestrate, /spawn_subagent/);
+  assert.match(orchestrate, /subagent_type/);
+  assert.match(orchestrate, /# Grok Notes/);
+  assert.match(orchestrate, /There is no structured question tool/);
+
+  const initKit = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "commands", "init-kit.md"), "utf-8");
+  assert.match(initKit, /# \/init-kit/);
+  assert.match(initKit, /\$ARGUMENTS/);
+  assert.match(initKit, /pressing `r` in the Plugins tab/);
+  assert.match(initKit, /\$\{GROK_SESSION_ID:-\$\{CLAUDE_CODE_SESSION_ID:-no-session-id\}\}/);
+
+  const hooks = JSON.parse(fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "hooks", "hooks.json"), "utf-8"));
+  assert.match(hooks.hooks.SessionStart[0].hooks[0].command, /GROK_PLUGIN_ROOT/);
+  assert.match(hooks.hooks.PreToolUse[0].matcher, /spawn_subagent/);
+  assert.ok(hooks.hooks.PreCompact);
+});
+
+test("grok hooks accept camelCase payloads", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-grok-camel-"));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts.grok.runtime_dir;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+  const allowed = runHook(
+    path.join(GROK_PLUGIN_ROOT, "hooks", "session-guard.js"),
+    {
+      cwd: repo,
+      sessionId: "testsess",
+      toolInput: { subagentType: "ultracode:explore", prompt },
+    },
+    { GROK_PLUGIN_ROOT: GROK_PLUGIN_ROOT },
+  );
+  assert.equal(allowed, "");
+
+  const denied = JSON.parse(
+    runHook(
+      path.join(GROK_PLUGIN_ROOT, "hooks", "session-guard.js"),
+      {
+        cwd: repo,
+        sessionId: "testsess",
+        toolInput: { subagentType: "ultracode:explore", prompt: `Repo root: ${repo}.` },
+      },
+      { GROK_PLUGIN_ROOT: GROK_PLUGIN_ROOT },
+    ),
+  );
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.hookSpecificOutput.permissionDecision, "deny");
+
+  const bashDenied = JSON.parse(
+    runHook(
+      path.join(GROK_PLUGIN_ROOT, "hooks", "bash-guard.js"),
+      { toolInput: { command: "sleep 5" } },
+      { GROK_PLUGIN_ROOT: GROK_PLUGIN_ROOT },
+    ),
+  );
+  assert.equal(bashDenied.decision, "deny");
 });

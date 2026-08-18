@@ -14,12 +14,14 @@ const {
   denyPreToolUse,
   promptFromToolInput,
   field,
+  hookToolInput,
+  hookSessionId,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, matchesSessionDir } = require("./lib/session");
 
 async function main() {
   const hookInput = await readHookInput();
-  const toolInput = hookInput && hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   const prompt = promptFromToolInput(toolInput);
@@ -44,7 +46,7 @@ async function main() {
     declaredSessionDir,
     repoRoot,
     info.runtimeDir,
-    hookInput.session_id,
+    hookSessionId(hookInput),
   );
   if (!ok) {
     denyPreToolUse(

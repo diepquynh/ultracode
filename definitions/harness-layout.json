@@ -26,6 +26,19 @@
       "session_id_agent_names": "`CODEX_THREAD_ID`, falling back to `no-session-id`",
       "session_id_inheritance": "`CODEX_THREAD_ID` is the harness's own session identifier, and **every subagent inherits it unchanged**",
       "session_id_unavailable": "If `CODEX_THREAD_ID` is not set,"
+    },
+    "grok": {
+      "state_dir": ".grok",
+      "runtime_dir": ".grok/ultracode",
+      "skills_dir": ".grok/skills",
+      "agents_dir": ".grok/agents",
+      "plugin_root_env": "GROK_PLUGIN_ROOT",
+      "session_id_expr": "${GROK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-no-session-id}}",
+      "session_id_source": "`GROK_SESSION_ID`, else `CLAUDE_CODE_SESSION_ID` (inherited unchanged)",
+      "session_id_names": "`GROK_SESSION_ID`, else `CLAUDE_CODE_SESSION_ID`",
+      "session_id_agent_names": "`GROK_SESSION_ID`, or `CLAUDE_CODE_SESSION_ID` under Claude Code compatibility",
+      "session_id_inheritance": "`GROK_SESSION_ID` is the harness's own session identifier — under Claude Code compatibility `CLAUDE_CODE_SESSION_ID` may also be set — and **every subagent inherits it unchanged**",
+      "session_id_unavailable": "If neither `GROK_SESSION_ID` nor `CLAUDE_CODE_SESSION_ID` is set,"
     }
   }
 }

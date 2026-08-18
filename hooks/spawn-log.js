@@ -18,6 +18,10 @@ const {
   isDirectory,
   readJsonIfFile,
   writeJsonAtomic,
+  hookToolInput,
+  hookToolResponse,
+  hookSessionId,
+  hookAgentType,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
@@ -52,9 +56,9 @@ function statusOf(toolResponse) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  if (typeof hookInput.agent_type === "string" && hookInput.agent_type) return 0;
+  if (hookAgentType(hookInput)) return 0;
 
-  const toolInput = hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
   const agent = agentFromToolInput(toolInput);
   if (!agent) return 0;
@@ -66,7 +70,7 @@ async function main() {
   if (!sessionDir || !isDirectory(sessionDir)) {
     const info = pluginTargetInfo();
     if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
   const phaseFile = field(prompt, "Phase file");
@@ -75,8 +79,8 @@ async function main() {
     ts: new Date().toISOString(),
     agent,
     phase: phaseMatch ? `phase-${phaseMatch[1]}` : null,
-    status: statusOf(hookInput.tool_response),
-    summary: summarize(hookInput.tool_response),
+    status: statusOf(hookToolResponse(hookInput)),
+    summary: summarize(hookToolResponse(hookInput)),
   };
 
   try {

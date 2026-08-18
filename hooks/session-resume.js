@@ -11,7 +11,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { readHookInput, readTextIfFile, readJsonIfFile } = require("./lib/common");
+const { readHookInput, readTextIfFile, readJsonIfFile, hookSessionId } = require("./lib/common");
 const { pluginTargetInfo, baseSessionDir } = require("./lib/session");
 
 function formatRecord(record) {
@@ -50,8 +50,10 @@ async function main() {
   const info = pluginTargetInfo();
   if (!info) return 0;
 
-  const repoRoot = path.resolve(hookInput.cwd || process.cwd());
-  const baseDir = baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+  const repoRoot = path.resolve(
+    hookInput.cwd || hookInput.workspaceRoot || hookInput.workspace_root || process.env.GROK_WORKSPACE_ROOT || process.cwd(),
+  );
+  const baseDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
 
   const found = [...reportFor(baseDir, "")];
   let repoKeys = [];

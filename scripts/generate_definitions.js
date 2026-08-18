@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generate Claude Code or Codex definitions from neutral JSON sources.
+// Generate Claude Code, Grok Build, or Codex definitions from neutral JSON sources.
 //
 // Mirrors scripts/generate_definitions.py so install.sh can drive the same
 // plugin generation pipeline.
@@ -59,7 +59,9 @@ const HARNESS_TEMPLATE_PATTERN = /\{\{([a-z][a-z0-9_]*)\}\}/g;
 const HARNESS_SPECIFIC_SOURCE_TERMS = [
   ".claude/",
   ".codex/",
+  ".grok/",
   "${CLAUDE_PLUGIN_ROOT}",
+  "${GROK_PLUGIN_ROOT}",
   "${PLUGIN_ROOT}",
   "CLAUDE_CODE_SESSION_ID",
   "GROK_SESSION_ID",
@@ -150,7 +152,7 @@ function validateMapping(filePath, mapping) {
       `${filePath}: capability IDs must be lower-case snake_case`,
     );
     require_(typeof entry === "object" && entry !== null, `${filePath}: ${capabilityId} must be an object`);
-    for (const target of ["claude", "codex"]) {
+    for (const target of ["claude", "codex", "grok"]) {
       require_(
         typeof entry[target] === "string" && entry[target].length > 0,
         `${filePath}: ${capabilityId}.${target} must be a non-empty string`,
@@ -162,7 +164,13 @@ function validateMapping(filePath, mapping) {
         `${filePath}: ${capabilityId}.codex_strategy must be a non-empty string when present`,
       );
     }
-    const allowedFields = new Set(["claude", "codex", "codex_strategy"]);
+    if (entry.grok_strategy !== undefined) {
+      require_(
+        typeof entry.grok_strategy === "string" && entry.grok_strategy.length > 0,
+        `${filePath}: ${capabilityId}.grok_strategy must be a non-empty string when present`,
+      );
+    }
+    const allowedFields = new Set(["claude", "codex", "grok", "codex_strategy", "grok_strategy"]);
     const extraFields = Object.keys(entry).filter((k) => !allowedFields.has(k));
     require_(
       extraFields.length === 0,
@@ -180,8 +188,11 @@ function validateModelMapping(filePath, mapping) {
     require_(typeof models === "object" && models !== null, `${filePath}: tier ${tier} must be an object`);
     const keys = Object.keys(models).sort();
     require_(
-      keys.length === 2 && keys.includes("claude") && keys.includes("codex"),
-      `${filePath}: tier ${tier} must map both harnesses`,
+      keys.length === 3 &&
+        keys.includes("claude") &&
+        keys.includes("codex") &&
+        keys.includes("grok"),
+      `${filePath}: tier ${tier} must map every harness`,
     );
     for (const model of Object.values(models)) {
       require_(
@@ -214,10 +225,11 @@ function validateHarnessLayout(filePath, layout) {
   require_(
     typeof layouts === "object" &&
       layouts !== null &&
-      layoutKeys.length === 2 &&
+      layoutKeys.length === 3 &&
       layoutKeys.includes("claude") &&
-      layoutKeys.includes("codex"),
-    `${filePath}: layouts must map claude and codex`,
+      layoutKeys.includes("codex") &&
+      layoutKeys.includes("grok"),
+    `${filePath}: layouts must map claude, grok, and codex`,
   );
   for (const [target, values] of Object.entries(layouts)) {
     const valueKeys = Object.keys(values).sort();
@@ -249,6 +261,7 @@ const PLUGIN_METADATA_REQUIRED = [
   "keywords",
   "claude",
   "codex",
+  "grok",
 ];
 
 function validatePluginMetadata(filePath, metadata) {
@@ -298,6 +311,13 @@ function validatePluginMetadata(filePath, metadata) {
       typeof metadata.codex.interface === "object" &&
       metadata.codex.interface !== null,
     `${filePath}: codex.interface must be set`,
+  );
+  require_(
+    typeof metadata.grok === "object" &&
+      metadata.grok !== null &&
+      typeof metadata.grok.category === "string" &&
+      metadata.grok.category.trim().length > 0,
+    `${filePath}: grok.category must be set`,
   );
 }
 
@@ -368,9 +388,10 @@ function validateDefinition(filePath, data, toolIds, modelTiers) {
     require_(
       typeof effort === "object" &&
         effort !== null &&
-        Object.keys(effort).every((k) => k === "claude" || k === "codex") &&
+        Object.keys(effort).every((k) => k === "claude" || k === "codex" || k === "grok") &&
         ["low", "medium", "high", "max"].includes(effort.claude) &&
-        ["low", "medium", "high", "xhigh", "max"].includes(effort.codex ?? "high"),
+        ["low", "medium", "high", "xhigh", "max"].includes(effort.codex ?? "high") &&
+        ["low", "medium", "high", "max"].includes(effort.grok ?? effort.claude),
       `${filePath}: config.reasoning_effort.claude must be set`,
     );
     require_(
@@ -579,11 +600,11 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
     "{{agents_dir}}": layout.agents_dir,
     "{{plugin_root}}": `\${${layout.plugin_root_env}}`,
     "{{arguments}}":
-      target === "claude"
-        ? "$ARGUMENTS"
-        : "the user's text following the explicit skill invocation",
-    "{{command_prefix}}": target === "claude" ? "/" : "$",
-    "{{agent_selector}}": target === "claude" ? "subagent_type" : "agent_type",
+      target === "codex"
+        ? "the user's text following the explicit skill invocation"
+        : "$ARGUMENTS",
+    "{{command_prefix}}": target === "codex" ? "$" : "/",
+    "{{agent_selector}}": target === "codex" ? "agent_type" : "subagent_type",
     "{{session_id_expr}}": layout.session_id_expr,
     "{{session_id_source}}": layout.session_id_source,
     "{{session_id_names}}": layout.session_id_names,
@@ -593,7 +614,9 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
     "{{reload_action}}":
       target === "claude"
         ? "running `/reload-plugins` or restarting the session"
-        : "starting a new Codex session",
+        : target === "grok"
+          ? "pressing `r` in the Plugins tab or starting a new session"
+          : "starting a new Codex session",
     "{{balanced_model}}": modelMapping.tiers.balanced[target],
     "{{advanced_model}}": modelMapping.tiers.advanced[target],
   };
@@ -684,9 +707,58 @@ function renderCodexCommand(
   );
 }
 
+function grokCapabilityNotes(promptRaw, mapping) {
+  const notes = [];
+  for (const [id, entry] of Object.entries(mapping.capabilities)) {
+    if (!entry.grok_strategy) continue;
+    if (promptRaw.includes(`{{tool_${id}}}`) && !notes.includes(entry.grok_strategy)) {
+      notes.push(entry.grok_strategy);
+    }
+  }
+  if (notes.length === 0) return "";
+  return ["# Grok Notes", "", ...notes].join("\n");
+}
+
+function grokFrontmatter(definition, mapping, modelMapping) {
+  const data = definition.data;
+  const lines = [
+    "---",
+    `name: ${definition.data.name}`,
+    ...foldedYaml("description", data.description),
+  ];
+  if (definition.data.kind === "agent") {
+    const translatedTools = data.config.tools
+      .map((toolId) => mapping.capabilities[toolId].grok)
+      .filter((tool) => tool && !tool.includes(" "));
+    const model = modelMapping.tiers[data.config.model_tier].grok;
+    const writeTools = new Set(["edit", "write"]);
+    const permissionMode = data.config.tools.some((t) => writeTools.has(t))
+      ? "default"
+      : "plan";
+    lines.push(
+      "prompt_mode: full",
+      `permission_mode: ${permissionMode}`,
+      `model: ${model}`,
+      `tools: ${translatedTools.join(", ")}`,
+    );
+  }
+  lines.push("---");
+  return lines.join("\n") + "\n\n";
+}
+
+function renderGrok(definition, mapping, modelMapping, harnessLayout) {
+  const notes = grokCapabilityNotes(definition.prompt, mapping);
+  const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
+  const source =
+    definition.data.kind === "command"
+      ? renderClaudeCommand(definition)
+      : grokFrontmatter(definition, mapping, modelMapping) + body;
+  return renderHarnessTemplate(source, "grok", harnessLayout, modelMapping, mapping);
+}
+
 function outputPath(target, outputRoot, definition) {
   if (definition.data.kind === "agent") {
-    const suffix = target === "claude" ? ".md" : ".toml";
+    const suffix = target === "codex" ? ".toml" : ".md";
     return path.join(outputRoot, "agents", `${definition.data.name}${suffix}`);
   }
   if (definition.data.kind === "skill" || target === "codex") {
@@ -763,6 +835,37 @@ function pluginMetadataFiles(target, metadata, harnessLayout) {
     return {
       ".claude-plugin/plugin.json": jsonDocument(plugin),
       ".claude-plugin/marketplace.json": jsonDocument(marketplace),
+    };
+  }
+  if (target === "grok") {
+    const plugin = {
+      name: metadata.name,
+      version: metadata.version,
+      description: metadata.description,
+      author: metadata.author,
+      license: metadata.license,
+      keywords: metadata.keywords,
+    };
+    if (metadata.grok.homepage) plugin.homepage = metadata.grok.homepage;
+    const marketplace = {
+      name: metadata.name,
+      description: metadata.description,
+      owner: metadata.author,
+      plugins: [
+        {
+          name: metadata.name,
+          description: metadata.description,
+          category: metadata.grok.category,
+          source: { type: "local", path: "." },
+          keywords: metadata.keywords,
+        },
+      ],
+    };
+    if (metadata.grok.homepage) marketplace.plugins[0].homepage = metadata.grok.homepage;
+    return {
+      ".grok-plugin/plugin.json": jsonDocument(plugin),
+      ".grok-plugin/marketplace.json": jsonDocument(marketplace),
+      ".mcp.json": jsonDocument({ mcpServers: gateMcpServers(target, harnessLayout) }),
     };
   }
   const interfaceObj = {
@@ -905,6 +1008,9 @@ function render(target, definition, mapping, modelMapping, harnessLayout) {
         : renderClaude(definition, mapping, modelMapping);
     return renderHarnessTemplate(source, target, harnessLayout, modelMapping, mapping);
   }
+  if (target === "grok") {
+    return renderGrok(definition, mapping, modelMapping, harnessLayout);
+  }
   if (definition.data.kind === "command") {
     return renderCodexCommand(definition, mapping, modelMapping, harnessLayout);
   }
@@ -1042,8 +1148,8 @@ function parseArgs(argv) {
       throw new DefinitionError(`unknown argument: ${arg}`);
     }
   }
-  if (!args.target || (args.target !== "claude" && args.target !== "codex")) {
-    throw new DefinitionError("--target must be 'claude' or 'codex'");
+  if (!args.target || !["claude", "codex", "grok"].includes(args.target)) {
+    throw new DefinitionError("--target must be 'claude', 'codex', or 'grok'");
   }
   return args;
 }
@@ -1058,7 +1164,7 @@ function main() {
   }
   if (args.help) {
     process.stdout.write(
-      "Usage: node generate_definitions.js --target <claude|codex> [--output-dir DIR] [--source-root DIR] [--check]\n",
+      "Usage: node generate_definitions.js --target <claude|grok|codex> [--output-dir DIR] [--source-root DIR] [--check]\n",
     );
     return 0;
   }

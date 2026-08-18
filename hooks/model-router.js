@@ -18,6 +18,8 @@ function emit(payload) {
 
 function deny(reason) {
   emit({
+    decision: "deny",
+    reason,
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
@@ -159,11 +161,12 @@ async function main() {
   } catch {
     return 0;
   }
-  const toolInput = hookInput && hookInput.tool_input;
+  const toolInput = hookInput && (hookInput.tool_input || hookInput.toolInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   const pluginRoot = path.resolve(
-    process.env.PLUGIN_ROOT ||
+    process.env.GROK_PLUGIN_ROOT ||
+      process.env.PLUGIN_ROOT ||
       process.env.CLAUDE_PLUGIN_ROOT ||
       path.join(__dirname, ".."),
   );
@@ -182,7 +185,7 @@ async function main() {
     return 0;
   }
 
-  const agentValue = ["subagent_type", "agent_type", "task_name"]
+  const agentValue = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName"]
     .map((key) => toolInput[key])
     .find((value) => typeof value === "string") || "";
   let agent = agentValue;

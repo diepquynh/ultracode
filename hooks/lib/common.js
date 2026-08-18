@@ -16,6 +16,8 @@ function emit(payload) {
 
 function denyPreToolUse(reason) {
   emit({
+    decision: "deny",
+    reason,
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
@@ -86,10 +88,42 @@ async function readHookInput() {
 
 function pluginRootFromEnv() {
   return path.resolve(
-    process.env.PLUGIN_ROOT ||
+    process.env.GROK_PLUGIN_ROOT ||
+      process.env.PLUGIN_ROOT ||
       process.env.CLAUDE_PLUGIN_ROOT ||
       path.join(__dirname, "..", ".."),
   );
+}
+
+function pick(obj, ...keys) {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined) return obj[key];
+  }
+  return undefined;
+}
+
+function hookToolInput(hookInput) {
+  return pick(hookInput, "tool_input", "toolInput") || null;
+}
+
+function hookToolResponse(hookInput) {
+  const value = pick(hookInput, "tool_response", "toolResponse", "tool_result", "toolResult");
+  return value === undefined ? null : value;
+}
+
+function hookSessionId(hookInput) {
+  return (
+    pick(hookInput, "session_id", "sessionId") ||
+    process.env.GROK_SESSION_ID ||
+    process.env.CLAUDE_CODE_SESSION_ID ||
+    process.env.CODEX_THREAD_ID ||
+    "no-session-id"
+  );
+}
+
+function hookAgentType(hookInput) {
+  return pick(hookInput, "agent_type", "agentType") || "";
 }
 
 function bareAgentName(value) {
@@ -98,7 +132,7 @@ function bareAgentName(value) {
 }
 
 function agentFromToolInput(toolInput) {
-  const value = ["subagent_type", "agent_type", "task_name"]
+  const value = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName"]
     .map((key) => toolInput[key])
     .find((v) => typeof v === "string");
   return bareAgentName(value || "");
@@ -170,6 +204,11 @@ module.exports = {
   readStdin,
   readHookInput,
   pluginRootFromEnv,
+  pick,
+  hookToolInput,
+  hookToolResponse,
+  hookSessionId,
+  hookAgentType,
   bareAgentName,
   agentFromToolInput,
   promptFromToolInput,

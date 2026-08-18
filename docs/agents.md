@@ -6,8 +6,8 @@ Code's built-in `Explore` and `Plan` agents, which are not ultracode agents and 
 Spawn the names below verbatim.
 
 The discoverable files under `dist/<harness>/ultracode/agents/` are generated artifacts. Edit
-`agents/<name>/definition.json` and `agents/<name>/prompt.md`, then regenerate both distributions as described
-in [Definition authoring](definitions.md).
+`agents/<name>/definition.json` and `agents/<name>/prompt.md`, then regenerate all three distributions as
+described in [Definition authoring](definitions.md).
 
 | Agent (`subagent_type`) | Role |
 | --- | --- |
@@ -30,7 +30,8 @@ it as `ultracode:ultracode:explore`. The same holds for `repo-profile.json`'s `m
 
 Re-running `/init-kit` — or running it the first time in a repo that already ships hand-authored skills — does
 **not** clobber what's there. During **detect** the initializer discovers every skill already under the active
-harness's project skill directory (`.claude/skills/` for Claude Code, `.agents/skills/` for Codex). In
+harness's project skill directory (`.claude/skills/` for Claude Code, `.grok/skills/` for Grok Build,
+`.agents/skills/` for Codex). In
 **propose** each is marked `status: existing` and, by default, **re-used as-is**: kept on disk and registered
 in `INVENTORY.md`, never regenerated.
 

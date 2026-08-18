@@ -35,7 +35,10 @@ function pluginTargetInfo() {
 function resolveRepoRoot(hookInput, prompt) {
   const declared = field(prompt, "Repo root");
   if (declared && isDirectory(declared)) return path.resolve(declared);
-  const cwd = (hookInput && hookInput.cwd) || process.cwd();
+  const cwd =
+    (hookInput && (hookInput.cwd || hookInput.workspaceRoot || hookInput.workspace_root)) ||
+    process.env.GROK_WORKSPACE_ROOT ||
+    process.cwd();
   return path.resolve(cwd);
 }
 

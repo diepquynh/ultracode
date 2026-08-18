@@ -28,6 +28,8 @@ const {
   field,
   isDirectory,
   readJsonIfFile,
+  hookToolInput,
+  hookSessionId,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
@@ -41,12 +43,12 @@ function resolveSessionDir(hookInput, prompt, repoRoot) {
   if (declared && isDirectory(declared)) return declared;
   const info = pluginTargetInfo();
   if (!info) return null;
-  return baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+  return baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
 }
 
 async function main() {
   const hookInput = await readHookInput();
-  const toolInput = hookInput && hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   const prompt = promptFromToolInput(toolInput);

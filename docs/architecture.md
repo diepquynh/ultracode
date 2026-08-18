@@ -23,17 +23,18 @@ The plugin is intentionally split into two layers:
 └───────────────────────────────────────────────────────┘
 ```
 
-Harness-ready plugins are build output, generated under `dist/claude/ultracode/` and `dist/codex/ultracode/`
-rather than committed — `install.sh` regenerates them from the checkout on every install. Target-specific hook
-configs, shared hook scripts, references, assets, and neutral command definitions remain at the root and are
-translated into the applicable distribution.
+Harness-ready plugins are build output, generated under `dist/claude/ultracode/`, `dist/grok/ultracode/`, and
+`dist/codex/ultracode/` rather than committed — `install.sh` regenerates them from the checkout on every
+install. Target-specific hook configs, shared hook scripts, references, assets, and neutral command definitions
+remain at the root and are translated into the applicable distribution.
 
 The pipeline **agents never hardcode a build tool, skill name, or review rule.** At run time they read the
-active harness's inventory and profile — `.claude/ultracode/` for Claude Code or `.codex/ultracode/` for
-Codex — and route from there. Generated project skills likewise use `.claude/skills/` or `.agents/skills/`.
-Agent, plugin-skill, and command authoring is harness-neutral: each definition directory contains
-`definition.json` and `prompt.md`. Both plugin distributions are generated from those sources. See
-[Definition authoring](definitions.md) for the layout and Codex target.
+active harness's inventory and profile — `.claude/ultracode/` for Claude Code, `.grok/ultracode/` for Grok
+Build, or `.codex/ultracode/` for Codex — and route from there. Generated project skills likewise use
+`.claude/skills/`, `.grok/skills/`, or `.agents/skills/`. Agent, plugin-skill, and command authoring is
+harness-neutral: each definition directory contains `definition.json` and `prompt.md`. All three plugin
+distributions are generated from those sources. See [Definition authoring](definitions.md) for the layout and
+per-target output.
 
 ## Route by inventory, not by description
 
@@ -55,9 +56,12 @@ it. So the path is **derived, never generated**:
 
 Claude Code derives this as
 `{repo-root}/.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}`.
+Grok Build derives this as
+`{repo-root}/.grok/ultracode/session/ultracode-session-${GROK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-no-session-id}}`.
 Codex derives it as
 `{repo-root}/.codex/ultracode/session/ultracode-session-${CODEX_THREAD_ID:-no-session-id}`. The selected harness
-identifier is inherited unchanged by spawned agents.
+identifier is inherited unchanged by spawned agents. Grok also injects `GROK_SESSION_ID` into plugin hooks, so
+the same derivation works from a hook process that never saw the spawn prompt.
 Two properties follow, and the pipeline leans on both. It is **idempotent** — any agent, in any working
 directory, at any point in the session, recomputes the same path, so re-running the derivation never forks a
 second dir mid-run. And it is **collision-free per session** — two sessions against one repo get separate dirs
@@ -178,9 +182,10 @@ your decision before it spawns the generate agents.
     there is no second place to keep in sync. Once a profile exists, malformed or
     missing routes deny the spawn. Set a route to `"default"` to select the generated agent default or `"inherit"` to intentionally
     leave the spawn model untouched. The hook re-reads the profile per spawn, so mid-session edits apply next.
-  - **Generated defaults are the floor.** Claude agents retain their frontmatter defaults. Codex role TOML
-    omits `model`, because a role-level Codex model outranks the spawn argument; the hook supplies its generated
-    default when the profile is absent or explicitly says `"default"`.
+  - **Generated defaults are the floor.** Claude and Grok agents retain their frontmatter defaults. Codex role
+    TOML omits `model`, because a role-level Codex model outranks the spawn argument; the hook supplies its
+    generated default when the profile is absent or explicitly says `"default"`. Grok hook stdin is camelCase
+    (`toolInput`, `sessionId`); the shared hook helpers accept both that envelope and Claude/Codex snake_case.
   - **Effort cannot be routed this way.** `effort` is a subagent-definition field only — the Agent tool takes no
     per-invocation `effort`, and there is no `CLAUDE_CODE_SUBAGENT_EFFORT`. Every agent's `effort: high` in
     front matter therefore holds regardless of tier, and it overrides the session effort level.

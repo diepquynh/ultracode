@@ -13,11 +13,12 @@ unknown stacks by discovering components empirically.
 Do not edit generated files under `dist/` directly — that tree is build output, regenerated on every install
 and never committed, so edits there are lost. Follow
 [Definition authoring](definitions.md): update the definition's JSON and prompt source, generate the Claude
-Code and Codex distributions, and run the definition tests before publishing.
+Code, Grok Build, and Codex distributions, and run the definition tests before publishing.
 
 ## Publish
 
 Set an explicit `version` in `definitions/plugin-metadata.json` and bump it on every release (pushing commits
-alone does not trigger updates for version-pinned installs). Regenerate both distributions. Validate the
-Claude distribution with `claude plugin validate dist/claude/ultracode`. Also run
-`node --test tests/test_definitions.test.js` to verify both generated harness formats.
+alone does not trigger updates for version-pinned installs). Regenerate all three distributions. Validate the
+Claude distribution with `claude plugin validate dist/claude/ultracode` and the Grok distribution with
+`grok plugin validate dist/grok/ultracode`. Also run `node --test tests/test_definitions.test.js` to verify
+every generated harness format.

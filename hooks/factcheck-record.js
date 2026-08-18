@@ -19,6 +19,9 @@ const {
   readJsonIfFile,
   writeJsonAtomic,
   extractJsonObject,
+  hookToolInput,
+  hookToolResponse,
+  hookSessionId,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
@@ -26,11 +29,11 @@ async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
 
-  const toolInput = hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
   if (agentFromToolInput(toolInput) !== "fact-check") return 0;
 
-  const payload = extractJsonObject(hookInput.tool_response);
+  const payload = extractJsonObject(hookToolResponse(hookInput));
   const target = payload && (payload.target === "spec" || payload.target === "plan") ? payload.target : null;
   const verdict = payload && (payload.verdict === "PASS" || payload.verdict === "FAIL") ? payload.verdict : null;
   if (!target || !verdict) return 0; // malformed/unparseable return — nothing safe to record
@@ -41,7 +44,7 @@ async function main() {
   if (!sessionDir || !isDirectory(sessionDir)) {
     const info = pluginTargetInfo();
     if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
   try {

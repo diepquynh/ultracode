@@ -23,6 +23,8 @@ const {
   readJsonIfFile,
   field,
   isDirectory,
+  hookToolInput,
+  hookSessionId,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
@@ -30,7 +32,7 @@ const MAX_ITERATIONS = 3;
 
 async function main() {
   const hookInput = await readHookInput();
-  const toolInput = hookInput && hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   if (agentFromToolInput(toolInput) !== "code-reviewer") return 0;
@@ -42,7 +44,7 @@ async function main() {
   if (!sessionDir || !isDirectory(sessionDir)) {
     const info = pluginTargetInfo();
     if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
   const ledgerPath = path.join(sessionDir, "ultracode-review-ledger.md");

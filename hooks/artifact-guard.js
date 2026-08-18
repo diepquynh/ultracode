@@ -11,7 +11,7 @@
 "use strict";
 
 const path = require("node:path");
-const { readHookInput, denyPreToolUse } = require("./lib/common");
+const { readHookInput, denyPreToolUse, hookToolInput, hookAgentType } = require("./lib/common");
 
 const PROTECTED_PATTERNS = [
   /^ultracode-spec-.*\.md$/,
@@ -23,10 +23,13 @@ const PROTECTED_PATTERNS = [
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  if (typeof hookInput.agent_type === "string" && hookInput.agent_type) return 0;
+  if (hookAgentType(hookInput)) return 0;
 
-  const toolInput = hookInput.tool_input;
-  const filePath = toolInput && typeof toolInput.file_path === "string" ? toolInput.file_path : "";
+  const toolInput = hookToolInput(hookInput);
+  const filePath =
+    toolInput && typeof (toolInput.file_path || toolInput.filePath || toolInput.path) === "string"
+      ? toolInput.file_path || toolInput.filePath || toolInput.path
+      : "";
   if (!filePath) return 0;
 
   const base = path.basename(filePath);

@@ -21,6 +21,8 @@ const {
   field,
   isDirectory,
   readJsonIfFile,
+  hookToolInput,
+  hookSessionId,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
@@ -37,7 +39,7 @@ function decisionFor(gates, gate) {
 
 async function main() {
   const hookInput = await readHookInput();
-  const toolInput = hookInput && hookInput.tool_input;
+  const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   const agent = agentFromToolInput(toolInput);
@@ -51,7 +53,7 @@ async function main() {
   if (!sessionDir || !isDirectory(sessionDir)) {
     const info = pluginTargetInfo();
     if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookInput.session_id);
+    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
   const gates = readJsonIfFile(path.join(sessionDir, "gates.json"));

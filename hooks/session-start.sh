@@ -3,7 +3,7 @@
 # Surfaces the generated routing inventory to the orchestrator, or prompts initialization.
 # Never fail the session: this hook only prints context.
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${CODEX_PROJECT_DIR:-$PWD}}"
+PROJECT_DIR="${GROK_WORKSPACE_ROOT:-${CLAUDE_PROJECT_DIR:-${CODEX_PROJECT_DIR:-$PWD}}}"
 RUNTIME_DIR="${1:?runtime directory argument is required}"
 SKILLS_DIR="${2:?skills directory argument is required}"
 INV="$PROJECT_DIR/$RUNTIME_DIR/INVENTORY.md"
@@ -20,7 +20,7 @@ else
   echo "ultracode :: this repo is NOT initialized."
   echo "Before handling the first user request, initialize Ultracode: scout the codebase, propose a skill"
   echo "set for approval, then generate $RUNTIME_DIR/INVENTORY.md + repo-profile.json and the"
-  if [ -n "${PLUGIN_ROOT:-}" ]; then
+  if [ -n "${GROK_PLUGIN_ROOT:-${PLUGIN_ROOT:-}}" ]; then
     echo "per-component skills under $SKILLS_DIR. Use the bundled Ultracode initializer workflow first."
   else
     echo "per-component skills under $SKILLS_DIR. Run /ultracode:init-kit before other repo work."
