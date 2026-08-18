@@ -6,6 +6,11 @@
 //   * deny            -> { hookSpecificOutput.permissionDecision = "deny" }
 //   * allow (inherit) -> no output, exit 0
 //   * allow (model)   -> { hookSpecificOutput.updatedInput.model = "<model>" }
+//
+// A caller-supplied model that does not resolve to the routed slug is denied,
+// not rewritten. Grok treats the original spawn `model` as an explicit
+// override (has_user_specified) and will keep it even after updatedInput
+// fires, so a silent rewrite cannot win. Omit model, or pass the routed slug.
 
 "use strict";
 
@@ -141,6 +146,19 @@ function resolveModel(route, routing, agent) {
   return ["model", model];
 }
 
+function canonicalizeCallerModel(name, routing) {
+  if (typeof name !== "string") return "";
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  if (routing.tiers && Object.prototype.hasOwnProperty.call(routing.tiers, trimmed)) {
+    return routing.tiers[trimmed];
+  }
+  if (routing.aliases && Object.prototype.hasOwnProperty.call(routing.aliases, trimmed)) {
+    return routing.aliases[trimmed];
+  }
+  return trimmed;
+}
+
 async function readStdin() {
   return new Promise((resolve, reject) => {
     let buffer = "";
@@ -243,6 +261,16 @@ async function main() {
   if (action === "inherit") return 0;
   if (action === "error" || !model) {
     deny("ultracode: invalid model route for " + agent + "; refusing an unenforced spawn.");
+    return 0;
+  }
+
+  const callerModel = canonicalizeCallerModel(toolInput.model, routing);
+  if (callerModel && callerModel !== model) {
+    deny(
+      `ultracode: spawn model "${toolInput.model}" does not match the routed model ` +
+        `"${model}" for ${agent}. Omit model, or re-spawn with model: ${model} — ` +
+        "the profile owns this route and a caller override is not applied.",
+    );
     return 0;
   }
 

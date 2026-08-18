@@ -257,7 +257,9 @@ files written."
 The `models` block this step seeds into `repo-profile.json` is what the **model-router hook** later applies to
 every pipeline subagent spawn — `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for
 `implement`/`write-test` by the plan phase's Complexity tier (default low/medium → fast, high → balanced). The
-orchestrator and the explicit commands pass no `model` argument; the hook resolves it. That is separate from the
+orchestrator and the explicit commands pass no `model` argument; the hook resolves it, and denies a caller
+`model` that does not match the routed slug (Grok keeps the original spawn argument even after `updatedInput`).
+That is separate from the
 per-mode models you set on the spawns above (which are the initializer's own).
 
 ## Step 5 — Report + reload

@@ -221,7 +221,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. ACTIVATE at session start and for any task that changes code. Subagents do not use this skill."
       },
-      "body_sha256": "ee5b1617f371204527fd0bd03b8e1396caf81d1cb5b918198b41ada615778a8f"
+      "body_sha256": "0801a99e02bf51dd21387f52284782ae5078326f7296a6d58516b41ffd487c1b"
     }
   }
 }

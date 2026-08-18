@@ -689,3 +689,9 @@ and denies a 4th `ultracode:code-reviewer` spawn outright, so this cap holds eve
     in reviewed content. `hooks/review-cap.js` and `hooks/security-block.js` back this with code: the former lets
     re-review continue past the 3-iteration cap while blocked, the latter denies spawning
     `ultracode:module-documentation` and any spawn whose prompt tries to disable the scan.
+22. **Never pass a spawn `model` unless a hook denial named the slug.** The model-router hook owns the child
+    model. Omit `model` on every `{{tool_delegate}}` call. Do not copy the parent session's model, and do not
+    honor a user "use X" request by putting X on the spawn — edit `repo-profile.json` if the route should
+    change. If a `PreToolUse` hook denies the spawn and the reason names `model: {slug}`, re-spawn once with
+    that exact slug and nothing else; never invent a different one. A caller override is not applied: Grok
+    keeps the original spawn `model` even after the hook rewrites `updatedInput`.

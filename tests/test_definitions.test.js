@@ -884,37 +884,54 @@ function routeProfileTest(target) {
     tool_input: {
       subagent_type: "ultracode:code-reviewer",
       prompt: `Repo root: ${repo}`,
-      model: "wrong-model",
     },
   };
   const expected = expectedModel(target, "balanced");
+  const hookPath = path.join(pluginRoot, "hooks", "model-router.js");
+  const run = (input = hookInput) =>
+    runHook(hookPath, input, { PLUGIN_ROOT: pluginRoot });
 
-  let stdout = runHook(
-    path.join(pluginRoot, "hooks", "model-router.js"),
-    hookInput,
-    { PLUGIN_ROOT: pluginRoot },
-  );
-  let output = JSON.parse(stdout).hookSpecificOutput;
+  let output = JSON.parse(run()).hookSpecificOutput;
   assert.equal(output.updatedInput.model, expected);
   if (target === "codex") assert.equal(output.permissionDecision, "allow");
 
+  const matched = JSON.parse(
+    run({
+      ...hookInput,
+      tool_input: { ...hookInput.tool_input, model: expected },
+    }),
+  ).hookSpecificOutput;
+  assert.equal(matched.updatedInput.model, expected);
+
+  const aliased = JSON.parse(
+    run({
+      ...hookInput,
+      tool_input: { ...hookInput.tool_input, model: "balanced" },
+    }),
+  ).hookSpecificOutput;
+  assert.equal(aliased.updatedInput.model, expected);
+
+  const conflicted = JSON.parse(
+    run({
+      ...hookInput,
+      tool_input: { ...hookInput.tool_input, model: "wrong-model" },
+    }),
+  ).hookSpecificOutput;
+  assert.equal(conflicted.permissionDecision, "deny");
+  assert.match(conflicted.permissionDecisionReason, /does not match the routed model/);
+  assert.match(conflicted.permissionDecisionReason, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
   profile.models.byAgent["code-reviewer"] = "inherit";
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const inherited = runHook(
-    path.join(pluginRoot, "hooks", "model-router.js"),
-    hookInput,
-    { PLUGIN_ROOT: pluginRoot },
-  );
+  const inherited = run({
+    ...hookInput,
+    tool_input: { ...hookInput.tool_input, model: "wrong-model" },
+  });
   assert.equal(inherited, "");
 
   profile.models.byAgent["code-reviewer"] = "default";
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const defaulted = runHook(
-    path.join(pluginRoot, "hooks", "model-router.js"),
-    hookInput,
-    { PLUGIN_ROOT: pluginRoot },
-  );
-  const defaultOutput = JSON.parse(defaulted).hookSpecificOutput;
+  const defaultOutput = JSON.parse(run()).hookSpecificOutput;
   assert.equal(defaultOutput.updatedInput.model, expected);
 
   profile.models.byAgent["code-reviewer"] = {
@@ -923,22 +940,12 @@ function routeProfileTest(target) {
     grok: "custom-grok-model",
   };
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const targeted = runHook(
-    path.join(pluginRoot, "hooks", "model-router.js"),
-    hookInput,
-    { PLUGIN_ROOT: pluginRoot },
-  );
-  const targetOutput = JSON.parse(targeted).hookSpecificOutput;
+  const targetOutput = JSON.parse(run()).hookSpecificOutput;
   assert.equal(targetOutput.updatedInput.model, `custom-${target}-model`);
 
   delete profile.models.byAgent["code-reviewer"];
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const missing = runHook(
-    path.join(pluginRoot, "hooks", "model-router.js"),
-    hookInput,
-    { PLUGIN_ROOT: pluginRoot },
-  );
-  const denied = JSON.parse(missing).hookSpecificOutput;
+  const denied = JSON.parse(run()).hookSpecificOutput;
   assert.equal(denied.permissionDecision, "deny");
   assert.match(denied.permissionDecisionReason, /no model route/);
 }
@@ -986,7 +993,18 @@ function routeInitializerTest(target) {
   profile.models.byAgent.initializer = "fast";
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
   const overridden = route();
-  assert.equal(overridden.updatedInput.model, explicitTierModel);
+  assert.equal(overridden.permissionDecision, "deny");
+  assert.match(overridden.permissionDecisionReason, /does not match the routed model/);
+  assert.match(
+    overridden.permissionDecisionReason,
+    new RegExp(explicitTierModel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
+
+  hookInput.tool_input = { ...hookInput.tool_input };
+  delete hookInput.tool_input.model;
+  const rewritten = route();
+  assert.notEqual(rewritten.permissionDecision, "deny");
+  assert.equal(rewritten.updatedInput.model, explicitTierModel);
 }
 
 test("model router keeps the initializer model when reinitializing", () => {

@@ -184,11 +184,15 @@ skill set. A user-approval gate sits between scouting and generation.
   skill generation always runs on the active harness's advanced model, set separately by the init-kit entry
   point — the `initializer` is the one agent the hook never denies for a missing route, so re-initializing an
   already-initialized repo keeps working.)
-  - `hooks/model-router.py` runs as a `PreToolUse` hook on every agent spawn, resolves the route for that
-    spawn's repo, translates it for the active harness, and sets `model` via `updatedInput` — the orchestrator
-    itself never passes a `model` argument. Once a profile exists, malformed or missing routes deny the spawn.
-    `"default"` = generated agent default; `"inherit"` = leave the spawn model untouched. The hook re-reads the
-    profile per spawn, so mid-session edits apply next call.
+  - `hooks/model-router.js` runs as a `PreToolUse` hook on every agent spawn, resolves the route for that
+    spawn's repo, translates it for the active harness, and sets `model` via `updatedInput` when the spawn
+    omitted `model` or already passed the routed slug. A caller `model` that does not resolve to that slug is
+    **denied**, not rewritten — Grok treats the original spawn argument as an explicit override even after
+    `updatedInput` fires, so a silent rewrite cannot win. The orchestrator should omit `model`; if a hook
+    denial names `model: <slug>`, re-spawn with that slug only. Once a profile exists, malformed or missing
+    routes deny the spawn. `"default"` = generated agent default; `"inherit"` = leave the spawn model
+    untouched (including a caller `model`). The hook re-reads the profile per spawn, so mid-session edits
+    apply next call.
   - Claude agents keep their frontmatter defaults. Codex role TOML and Grok agent front matter omit `model`
     so a role-level value cannot outrank the spawn argument — the hook fills its generated default when the
     profile is absent or says `"default"`, and a Grok spawn with no model inherits the parent. Grok hook
