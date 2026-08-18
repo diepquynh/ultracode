@@ -1,6 +1,7 @@
 # Installation
 
-The installer requires Git, Node 20+ for Ultracode's runtime hooks, and the CLI for each selected harness.
+The installer requires Git, Node 22.5+ for Ultracode's runtime hooks (the repo-memory store uses `node:sqlite`),
+and the CLI for each selected harness.
 
 ## Quick local install
 

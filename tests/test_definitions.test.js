@@ -564,7 +564,7 @@ test("codex agents are valid TOML", () => {
 test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
     fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-build-0.1" },
-    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.5" },
+    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6" },
     advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6" },
   });
   for (const [, definition] of sourceDefinitions()) {
@@ -1511,26 +1511,66 @@ test("spawn-log records structured progress.json read back by session-resume", (
   progressTrackerTest("grok");
 });
 
-test("mcp/lib/memory dedupes by (area, lesson), moves the newest to the end, and caps entries", () => {
-  const { appendLesson, DEFAULT_MAX_ENTRIES } = require(
-    path.join(ROOT, "mcp", "lib", "memory.js"),
-  );
-  let text = appendLesson("", { area: "auth", lesson: "L1", source: "a" });
-  text = appendLesson(text, { area: "build", lesson: "L2", source: "a" });
-  text = appendLesson(text, { area: "auth", lesson: "L1", source: "b" });
-  const lines = text.split("\n").filter((l) => l.startsWith("- "));
-  assert.deepEqual(lines, [
-    "- [build] L2 — source: a",
-    "- [auth] L1 — source: b",
-  ]);
+function tempMemoryDbPath() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-memory-"));
+  return path.join(dir, "knowledge.sqlite3");
+}
 
-  let capped = "";
-  for (let i = 0; i < DEFAULT_MAX_ENTRIES + 10; i++) {
-    capped = appendLesson(capped, { area: "a", lesson: `lesson-${i}`, source: "s" });
+test("mcp/lib/memory dedupes by (area, lesson), keeps the newest source, and never caps entries", () => {
+  const { recordLesson } = require(path.join(ROOT, "mcp", "lib", "memory.js"));
+  const dbPath = tempMemoryDbPath();
+
+  assert.equal(recordLesson(dbPath, { area: "auth", lesson: "L1", source: "a" }), 1);
+  assert.equal(recordLesson(dbPath, { area: "build", lesson: "L2", source: "a" }), 2);
+  // Re-recording the same (area, lesson) updates the row in place rather than growing the store.
+  assert.equal(recordLesson(dbPath, { area: "auth", lesson: "L1", source: "b" }), 2);
+
+  const seenAny = require(path.join(ROOT, "mcp", "lib", "memory.js")).recallLessons(dbPath, { limit: 50 });
+  const auth = seenAny.find((l) => l.area === "auth" && l.lesson === "L1");
+  assert.equal(auth.source, "b");
+
+  // No cap: recording well past the old 80-entry limit keeps every distinct lesson.
+  let total = 2;
+  for (let i = 0; i < 90; i++) {
+    total = recordLesson(dbPath, { area: "a", lesson: `lesson-${i}`, source: "s" });
   }
-  const cappedLines = capped.split("\n").filter((l) => l.startsWith("- "));
-  assert.equal(cappedLines.length, DEFAULT_MAX_ENTRIES);
-  assert.match(cappedLines[0], /lesson-10/);
+  assert.equal(total, 92);
+});
+
+test("mcp/lib/memory recall scopes by area (with sub-scopes) and ranks by text relevance", () => {
+  const { recordLesson, recallLessons } = require(path.join(ROOT, "mcp", "lib", "memory.js"));
+  const dbPath = tempMemoryDbPath();
+
+  recordLesson(dbPath, {
+    area: "auth",
+    lesson: "Token expiry causes flaky login integration tests",
+    source: "implement",
+  });
+  recordLesson(dbPath, {
+    area: "billing-service::InvoiceCalculator",
+    lesson: "Null total when currency conversion rate missing",
+    source: "implement",
+  });
+  recordLesson(dbPath, {
+    area: "build",
+    lesson: "Maven module order matters for parallel builds",
+    source: "implement",
+  });
+
+  const byQuery = recallLessons(dbPath, { query: "flaky login test" });
+  assert.equal(byQuery.length, 1);
+  assert.equal(byQuery[0].area, "auth");
+
+  // Scoping by the parent area matches its "area::..." sub-scope too.
+  const byArea = recallLessons(dbPath, { area: "billing-service" });
+  assert.equal(byArea.length, 1);
+  assert.equal(byArea[0].area, "billing-service::InvoiceCalculator");
+
+  const noMatch = recallLessons(dbPath, { query: "zzz nonexistent qqq" });
+  assert.deepEqual(noMatch, []);
+
+  const noDb = recallLessons(path.join(fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-memory-")), "missing.sqlite3"));
+  assert.deepEqual(noDb, []);
 });
 
 test("mcp/lib/gate refuses approval without a fact-check PASS and allows it once recorded", () => {

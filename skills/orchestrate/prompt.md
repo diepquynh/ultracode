@@ -48,11 +48,15 @@ Store, **per repo key**: its absolute root, its resolved command strings (build,
 and its auto-fixable rule-ID set. These hold for the rest of the session. Never apply one repo's commands,
 skills, or rules to another repo's files.
 
-**Repo memory.** Also read `{repo-root}/{{runtime_dir}}/memory/knowledge.md` if it exists — durable, repo-scoped
-lessons from prior sessions (a non-obvious constraint, a subtle invariant, a workaround for a specific bug).
-Pass its path as `Repo memory:` in every spawn for that repo so agents can read it before acting. Any agent that
-learns a lesson worth keeping calls the **`ultracode_memory`** tool to record it (deduped and capped in code —
-never hand-edit the file).
+**Repo memory.** This repo's runtime dir may hold `{{runtime_dir}}/memory/knowledge.sqlite3` — durable,
+repo-scoped lessons from prior sessions and subagent failures (a non-obvious constraint, a subtle invariant, a
+workaround for a specific bug), accumulated with no cap since a large repo can't be fully explored in one
+session's budget. It's a SQLite store, not a file to {{tool_read}} — every agent, including you, retrieves from
+it by calling the **`ultracode_memory_recall`** tool with its own `repo_root`, an optional `area` scope, and a
+free-text `query` describing the task or failure, instead of dumping the whole store into context. Tell agents
+in their spawn prompt to call it before starting work in an area, and again with the error as the query if they
+hit a failure. Any agent that learns a lesson worth keeping calls **`ultracode_memory`** to record it — deduped
+by `(area, lesson)`, never capped or trimmed.
 
 ## Session isolation
 

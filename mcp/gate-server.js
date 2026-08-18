@@ -10,14 +10,12 @@
 
 "use strict";
 
-const fs = require("node:fs");
 const path = require("node:path");
 const { z } = require("zod");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
-const { readTextIfFile } = require("../hooks/lib/common");
 const { pluginTargetInfo } = require("../hooks/lib/session");
-const { appendLesson } = require("./lib/memory");
+const { recordLesson, recallLessons } = require("./lib/memory");
 const { recordGateDecision } = require("./lib/gate");
 
 const server = new McpServer({ name: "ultracode-gate", version: "1.0.0" });
@@ -46,45 +44,83 @@ server.tool(
   },
 );
 
-// ultracode_memory — durable, repo-scoped lessons (a non-obvious constraint, a
-// subtle invariant, a workaround for a specific bug) that survive across
-// sessions, mirroring Pi's knowledge.md. Lives at {runtime_dir}/memory/, not
-// under session/ scratch, so it is meant to be committed alongside
-// INVENTORY.md and repo-profile.json. Dedupe-by-(area,lesson) and the
-// max-entries cap are code-enforced (mcp/lib/memory.js) rather than left to
-// whichever agent appends last to keep the file well-formed.
+// ultracode_memory / ultracode_memory_recall — durable, repo-scoped lessons (a non-obvious
+// constraint, a subtle invariant, a workaround for a specific bug) that survive across
+// sessions. Lives at {runtime_dir}/memory/knowledge.sqlite3, not under session/ scratch, so
+// it is meant to be committed alongside INVENTORY.md and repo-profile.json. Deliberately
+// uncapped — a large multi-module repo accumulates more lessons than any one session can
+// gather, across many spawns and subagent failures — so agents retrieve just what's relevant
+// via recall (mcp/lib/memory.js) rather than reading the whole store.
+
+function resolveMemoryDbPath(repo_root) {
+  const info = pluginTargetInfo();
+  if (!info) return null;
+  return path.join(repo_root, info.runtimeDir, "memory", "knowledge.sqlite3");
+}
+
+function missingRuntimeDirError() {
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text",
+        text: "ultracode: no generated hooks/model-routing.json found; cannot resolve this repo's runtime directory.",
+      },
+    ],
+  };
+}
+
 server.tool(
   "ultracode_memory",
   "Record a durable, repo-scoped lesson so every future session on this repo starts with it — a non-obvious " +
     "constraint, a subtle invariant, or a workaround for a specific bug. One line, no restating what the code " +
-    "already makes obvious. Deduped and capped automatically; do not hand-edit knowledge.md.",
+    "already makes obvious. Deduped automatically by (area, lesson); never capped or trimmed, so it's always " +
+    "safe to record another one. Do not hand-edit knowledge.sqlite3.",
   {
     repo_root: z.string().describe("Absolute repo root (the prompt's Repo root: value)."),
-    area: z.string().describe('Short slug for the affected area, e.g. "auth", "build".'),
+    area: z
+      .string()
+      .describe(
+        'Slug for the affected area, e.g. "auth", "build", or a hierarchical scope like ' +
+          '"billing-service::InvoiceCalculator" for a large multi-module repo.',
+      ),
     lesson: z.string().describe("The one-line lesson."),
     source: z.string().describe('Which agent recorded this, e.g. "ultracode:implement".'),
   },
   async ({ repo_root, area, lesson, source }) => {
-    const info = pluginTargetInfo();
-    if (!info) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: "ultracode: no generated hooks/model-routing.json found; cannot resolve this repo's runtime directory.",
-          },
-        ],
-      };
-    }
-    const knowledgePath = path.join(repo_root, info.runtimeDir, "memory", "knowledge.md");
-    const current = readTextIfFile(knowledgePath) || "";
-    const updated = appendLesson(current, { area, lesson, source });
-    fs.mkdirSync(path.dirname(knowledgePath), { recursive: true });
-    fs.writeFileSync(knowledgePath, updated, "utf-8");
+    const dbPath = resolveMemoryDbPath(repo_root);
+    if (!dbPath) return missingRuntimeDirError();
+    const total = recordLesson(dbPath, { area, lesson, source });
     return {
-      content: [{ type: "text", text: `Recorded lesson for [${area}] in ${knowledgePath}.` }],
+      content: [{ type: "text", text: `Recorded lesson for [${area}] in ${dbPath} (${total} lessons total).` }],
     };
+  },
+);
+
+server.tool(
+  "ultracode_memory_recall",
+  "Retrieve durable, repo-scoped lessons relevant to the task or failure at hand, instead of reading the " +
+    "whole memory store. Call this before starting work in an area, and again with the error/symptom as the " +
+    "query if you hit a failure. Ranked by text relevance to `query` and scoped to `area` (and its " +
+    "\"area::...\" sub-scopes) when given; returns at most `limit` lessons, most relevant first.",
+  {
+    repo_root: z.string().describe("Absolute repo root (the prompt's Repo root: value)."),
+    area: z
+      .string()
+      .optional()
+      .describe('Scope to an area/module, e.g. "billing-service::InvoiceCalculator". Optional.'),
+    query: z.string().optional().describe("Free-text description of the task or failure. Optional."),
+    limit: z.number().int().positive().max(50).optional().describe("Max lessons to return (default 8)."),
+  },
+  async ({ repo_root, area, query, limit }) => {
+    const dbPath = resolveMemoryDbPath(repo_root);
+    if (!dbPath) return missingRuntimeDirError();
+    const lessons = recallLessons(dbPath, { area, query, limit: limit || 8 });
+    if (!lessons.length) {
+      return { content: [{ type: "text", text: "No relevant repo memory found." }] };
+    }
+    const text = lessons.map((l) => `- [${l.area}] ${l.lesson} — source: ${l.source}`).join("\n");
+    return { content: [{ type: "text", text }] };
   },
 );
 

@@ -4,6 +4,9 @@
   "private": true,
   "description": "Bundled MCP server for the ultracode plugin (ultracode_gate: records spec/plan approval decisions for the pipeline-gate hook).",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^3.25.0"

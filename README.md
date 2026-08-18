@@ -66,7 +66,7 @@ The deep dives live under [`docs/`](docs/):
 
 ## Install
 
-Requires Node 20+ and the CLI for each harness you install.
+Requires Node 22.5+ and the CLI for each harness you install.
 
 ```bash
 # Install for every harness

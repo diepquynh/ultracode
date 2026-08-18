@@ -35,7 +35,15 @@ fi
 
 command -v node >/dev/null 2>&1 || {
   echo "Node is required by Ultracode's runtime hooks." >&2
-  echo "Install Node 20 or newer first: https://nodejs.org/" >&2
+  echo "Install Node 22.5 or newer first: https://nodejs.org/" >&2
+  exit 1
+}
+node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  process.exit(major > 22 || (major === 22 && minor >= 5) ? 0 : 1);
+' || {
+  echo "Ultracode's repo-memory store needs node:sqlite, which requires Node 22.5 or newer (found $(node --version))." >&2
+  echo "Install a newer Node first: https://nodejs.org/" >&2
   exit 1
 }
 command -v npm >/dev/null 2>&1 || {
