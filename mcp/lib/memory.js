@@ -1,10 +1,13 @@
 "use strict";
 
-// SQLite-backed durable, repo-scoped memory for the ultracode_memory / ultracode_memory_recall
-// MCP tools. Deliberately uncapped: a large multi-module repo can't be fully explored in one
-// session's token budget, so lessons accumulate across many sessions and subagent failures
-// instead of being trimmed. FTS5 (built into node:sqlite) ranks recall results by bm25 so an
-// agent can pull just the lessons relevant to its task or failure instead of reading the whole
+// SQLite-backed durable, repo-scoped memory for the ultracode_memory / ultracode_memory_recall /
+// ultracode_memory_forget MCP tools. Deliberately uncapped and never auto-expired: a large
+// multi-module repo can't be fully explored in one session's token budget, so lessons accumulate
+// across many sessions and subagent failures rather than aging out on a timer or a size limit.
+// deleteLesson exists only for the narrow, agent-confirmed case — a specific recorded lesson
+// turned out to be wrong or stale — so it's a targeted removal by exact (area, lesson), never a
+// bulk sweep or an automatic trim. FTS5 (built into node:sqlite) ranks recall results by bm25 so
+// an agent can pull just the lessons relevant to its task or failure instead of reading the whole
 // store. `timeout` on DatabaseSync sets SQLite's busy_timeout, so concurrent writers (parallel
 // phases each recording a lesson) wait on the real SQLite file lock instead of failing outright —
 // node:sqlite is real file-backed SQLite, not an in-memory copy that has to be serialized back by
@@ -56,6 +59,22 @@ function recordLesson(dbPath, { area, lesson, source }) {
        ON CONFLICT(area, lesson) DO UPDATE SET source = excluded.source, created_at = excluded.created_at`,
     ).run(area, lesson, source, new Date().toISOString());
     return db.prepare("SELECT count(*) AS total FROM lessons").get().total;
+  } finally {
+    db.close();
+  }
+}
+
+// Exact-match removal of a single confirmed-stale lesson, keyed the same way recordLesson
+// dedupes (area, lesson) — not a bulk or age-based sweep. No-op (rather than an error) when the
+// lesson or the store itself doesn't exist, so a caller acting on a recall result it already has
+// in hand can't fail on a race with another agent forgetting the same lesson first.
+function deleteLesson(dbPath, { area, lesson }) {
+  if (!fs.existsSync(dbPath)) return { deleted: false, total: 0 };
+  const db = openDatabase(dbPath);
+  try {
+    const result = db.prepare(`DELETE FROM lessons WHERE area = ? AND lesson = ?`).run(area, lesson);
+    const total = db.prepare("SELECT count(*) AS total FROM lessons").get().total;
+    return { deleted: result.changes > 0, total };
   } finally {
     db.close();
   }
@@ -144,4 +163,4 @@ function recallLessons(dbPath, { area, query, limit = DEFAULT_LIMIT } = {}) {
   }
 }
 
-module.exports = { recordLesson, recallLessons, ftsQueryFromText, openDatabase };
+module.exports = { recordLesson, recallLessons, deleteLesson, ftsQueryFromText, openDatabase };

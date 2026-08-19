@@ -1643,6 +1643,27 @@ test("mcp/lib/memory recall scopes by area (with sub-scopes) and ranks by text r
   assert.deepEqual(noDb, []);
 });
 
+test("mcp/lib/memory deleteLesson removes only the exact (area, lesson) match", () => {
+  const { recordLesson, recallLessons, deleteLesson } = require(path.join(ROOT, "mcp", "lib", "memory.js"));
+  const dbPath = tempMemoryDbPath();
+
+  recordLesson(dbPath, { area: "auth", lesson: "Stale lesson", source: "a" });
+  recordLesson(dbPath, { area: "auth", lesson: "Keep this one", source: "a" });
+
+  // Missing store: no-op, not an error.
+  const missingDb = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-memory-")), "missing.sqlite3");
+  assert.deepEqual(deleteLesson(missingDb, { area: "auth", lesson: "Stale lesson" }), { deleted: false, total: 0 });
+
+  // Non-matching lesson text: no-op, existing entries untouched.
+  assert.deepEqual(deleteLesson(dbPath, { area: "auth", lesson: "Never recorded" }), { deleted: false, total: 2 });
+
+  assert.deepEqual(deleteLesson(dbPath, { area: "auth", lesson: "Stale lesson" }), { deleted: true, total: 1 });
+
+  const remaining = recallLessons(dbPath, { limit: 50 });
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].lesson, "Keep this one");
+});
+
 test("mcp/lib/gate refuses approval without a fact-check PASS and allows it once recorded", () => {
   const { recordGateDecision } = require(path.join(ROOT, "mcp", "lib", "gate.js"));
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-gate-lib-"));

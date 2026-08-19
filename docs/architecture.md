@@ -52,9 +52,12 @@ area, and the build/test/format commands. Skill auto-discovery is just a conveni
 
 Alongside `INVENTORY.md` and `repo-profile.json`, the runtime dir holds `memory/knowledge.sqlite3` — durable,
 repo-scoped lessons (a non-obvious constraint, a subtle invariant, a workaround for a specific bug) that
-survive across sessions, mirroring Pi's `memory.ts`. It's deliberately uncapped: a large multi-module repo
-accumulates more lessons, across more subagent failures, than any single session's budget can gather in one
-pass, so the store has to keep growing across sessions rather than being trimmed to a fixed size.
+survive across sessions, mirroring Pi's `memory.ts`. It's deliberately uncapped and never auto-expired: a
+large multi-module repo accumulates more lessons, across more subagent failures, than any single session's
+budget can gather in one pass, so the store has to keep growing across sessions rather than aging out on a
+timer or a size limit. The one exception is **`ultracode_memory_forget`**, a narrow, agent-initiated removal
+of a single lesson an agent has confirmed is now wrong or stale — an exact `(area, lesson)` match, never a
+bulk sweep or an automatic trim.
 
 That scale is also why it's a real SQLite database (`node:sqlite`, with an FTS5 virtual table for ranked
 full-text search) rather than a flat file agents read in full. Any agent — not just the orchestrator — calls
@@ -63,10 +66,12 @@ sub-scopes like `billing-service::InvoiceCalculator`), and a free-text `query` d
 and gets back just the relevant lessons, ranked by bm25 within scope, then by relevance repo-wide as fill.
 Agents call it before starting work in an area and again with the error as the query after a failure, instead
 of dumping the whole store into context. Any agent that learns something worth keeping calls
-**`ultracode_memory`** to record it — both tools are served from `mcp/gate-server.js` (`mcp/lib/memory.js`
-holds the storage logic), alongside the `ultracode_gate` spec/plan-approval tool. Entries are deduped by
-`(area, lesson)` — the newest occurrence updates the existing row's source and timestamp in place rather than
-growing the store — but there is no cap. `node:sqlite` is real file-backed SQLite, so concurrent writers (e.g.
+**`ultracode_memory`** to record it — all three tools are served from `mcp/gate-server.js`
+(`mcp/lib/memory.js` holds the storage logic), alongside the `ultracode_gate` spec/plan-approval tool. Entries
+are deduped by `(area, lesson)` — the newest occurrence updates the existing row's source and timestamp in
+place rather than growing the store — but there is no cap or expiry; the only way an entry leaves the store is
+an agent explicitly calling `ultracode_memory_forget` with that exact `(area, lesson)` pair after confirming
+it's stale. `node:sqlite` is real file-backed SQLite, so concurrent writers (e.g.
 two phases running in parallel each recording a lesson) wait on SQLite's own file lock rather than clobbering
 each other; that correctness would have needed a hand-rolled lock file with an in-memory engine like `sql.js`.
 The store is meant to be committed alongside the other generated routing files, same as `INVENTORY.md` and

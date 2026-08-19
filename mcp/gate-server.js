@@ -15,7 +15,7 @@ const { z } = require("zod");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { pluginTargetInfo } = require("../hooks/lib/session");
-const { recordLesson, recallLessons } = require("./lib/memory");
+const { recordLesson, recallLessons, deleteLesson } = require("./lib/memory");
 const { recordGateDecision } = require("./lib/gate");
 
 const server = new McpServer({ name: "ultracode-gate", version: "1.0.0" });
@@ -44,13 +44,15 @@ server.tool(
   },
 );
 
-// ultracode_memory / ultracode_memory_recall — durable, repo-scoped lessons (a non-obvious
-// constraint, a subtle invariant, a workaround for a specific bug) that survive across
-// sessions. Lives at {runtime_dir}/memory/knowledge.sqlite3, not under session/ scratch, so
-// it is meant to be committed alongside INVENTORY.md and repo-profile.json. Deliberately
-// uncapped — a large multi-module repo accumulates more lessons than any one session can
-// gather, across many spawns and subagent failures — so agents retrieve just what's relevant
-// via recall (mcp/lib/memory.js) rather than reading the whole store.
+// ultracode_memory / ultracode_memory_recall / ultracode_memory_forget — durable, repo-scoped
+// lessons (a non-obvious constraint, a subtle invariant, a workaround for a specific bug) that
+// survive across sessions. Lives at {runtime_dir}/memory/knowledge.sqlite3, not under session/
+// scratch, so it is meant to be committed alongside INVENTORY.md and repo-profile.json.
+// Deliberately uncapped and never auto-expired — a large multi-module repo accumulates more
+// lessons than any one session can gather, across many spawns and subagent failures — so agents
+// retrieve just what's relevant via recall (mcp/lib/memory.js) rather than reading the whole
+// store. _forget is a narrow escape hatch for a single lesson an agent has confirmed is now wrong
+// or stale, not a bulk or automatic trim.
 
 function resolveMemoryDbPath(repo_root) {
   const info = pluginTargetInfo();
@@ -74,8 +76,10 @@ server.tool(
   "ultracode_memory",
   "Record a durable, repo-scoped lesson so every future session on this repo starts with it — a non-obvious " +
     "constraint, a subtle invariant, or a workaround for a specific bug. One line, no restating what the code " +
-    "already makes obvious. Deduped automatically by (area, lesson); never capped or trimmed, so it's always " +
-    "safe to record another one. Do not hand-edit knowledge.sqlite3.",
+    "already makes obvious. Deduped automatically by (area, lesson); never capped or auto-expired, so it's " +
+    "always safe to record another one. If a past lesson turns out to be wrong or stale, use " +
+    "ultracode_memory_forget to remove that one entry rather than leaving it to mislead future sessions. " +
+    "Do not hand-edit knowledge.sqlite3.",
   {
     repo_root: z.string().describe("Absolute repo root (the prompt's Repo root: value)."),
     area: z
@@ -121,6 +125,35 @@ server.tool(
     }
     const text = lessons.map((l) => `- [${l.area}] ${l.lesson} — source: ${l.source}`).join("\n");
     return { content: [{ type: "text", text }] };
+  },
+);
+
+server.tool(
+  "ultracode_memory_forget",
+  "Remove one specific durable lesson that a recall already surfaced and that has since been confirmed wrong " +
+    "or outdated (e.g. the constraint it described no longer holds, or the workaround it recorded is no " +
+    "longer needed). Requires the exact area and lesson text as returned by ultracode_memory_recall — this is " +
+    "a targeted removal, not a bulk or age-based cleanup, and there is no way to wipe an area or the whole " +
+    "store through this tool.",
+  {
+    repo_root: z.string().describe("Absolute repo root (the prompt's Repo root: value)."),
+    area: z.string().describe("Exact area of the lesson to remove, as returned by ultracode_memory_recall."),
+    lesson: z.string().describe("Exact lesson text to remove, as returned by ultracode_memory_recall."),
+  },
+  async ({ repo_root, area, lesson }) => {
+    const dbPath = resolveMemoryDbPath(repo_root);
+    if (!dbPath) return missingRuntimeDirError();
+    const { deleted, total } = deleteLesson(dbPath, { area, lesson });
+    return {
+      content: [
+        {
+          type: "text",
+          text: deleted
+            ? `Forgot lesson for [${area}] in ${dbPath} (${total} lessons remaining).`
+            : `No matching lesson found for [${area}] in ${dbPath}; nothing removed.`,
+        },
+      ],
+    };
   },
 );
 
