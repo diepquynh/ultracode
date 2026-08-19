@@ -18,23 +18,10 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { denyPreToolUse } = require("./lib/common.js")
 
 function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
-}
-
-function deny(reason) {
-  // Top-level `decision` only accepts "approve" | "block" — "deny" fails the
-  // harness's JSON schema check and the whole payload (including the deny) is
-  // discarded. hookSpecificOutput.permissionDecision is what actually blocks.
-  emit({
-    reason,
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason,
-    },
-  });
 }
 
 function field(prompt, label) {
@@ -188,9 +175,9 @@ async function main() {
 
   const pluginRoot = path.resolve(
     process.env.GROK_PLUGIN_ROOT ||
-      process.env.PLUGIN_ROOT ||
-      process.env.CLAUDE_PLUGIN_ROOT ||
-      path.join(__dirname, ".."),
+    process.env.PLUGIN_ROOT ||
+    process.env.CLAUDE_PLUGIN_ROOT ||
+    path.join(__dirname, ".."),
   );
 
   let routing;
@@ -201,7 +188,7 @@ async function main() {
     );
     routing = JSON.parse(text);
   } catch {
-    deny(
+    denyPreToolUse(
       "ultracode: generated model routing is unavailable; refusing an unenforced spawn.",
     );
     return 0;
@@ -237,15 +224,15 @@ async function main() {
       profile = null;
     }
     if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
-      deny(`ultracode: ${profilePath} is invalid; refusing an unenforced spawn.`);
+      denyPreToolUse(`ultracode: ${profilePath} is invalid; refusing an unenforced spawn.`);
       return 0;
     }
     const [present, computedRoute] = profileRoute(profile, agent, prompt);
     if (!present) {
       if (!isExemptFromRoute) {
-        deny(
+        denyPreToolUse(
           `ultracode: ${profilePath} has no model route for ${agent}; ` +
-            'set a tier, "default", or "inherit" explicitly.',
+          'set a tier, "default", or "inherit" explicitly.',
         );
         return 0;
       }
@@ -264,16 +251,16 @@ async function main() {
   const [action, model] = resolveModel(route, routing, agent);
   if (action === "inherit") return 0;
   if (action === "error" || !model) {
-    deny("ultracode: invalid model route for " + agent + "; refusing an unenforced spawn.");
+    denyPreToolUse("ultracode: invalid model route for " + agent + "; refusing an unenforced spawn.");
     return 0;
   }
 
   const callerModel = canonicalizeCallerModel(toolInput.model, routing);
   if (callerModel && callerModel !== model) {
-    deny(
+    denyPreToolUse(
       `ultracode: spawn model "${toolInput.model}" does not match the routed model ` +
-        `"${model}" for ${agent}. Omit model, or re-spawn with model: ${model} — ` +
-        "the profile owns this route and a caller override is not applied.",
+      `"${model}" for ${agent}. Omit model, or re-spawn with model: ${model} — ` +
+      "the profile owns this route and a caller override is not applied.",
     );
     return 0;
   }
