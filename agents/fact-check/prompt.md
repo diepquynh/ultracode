@@ -12,7 +12,7 @@ MCP tool record spec/plan approval — treat that as real weight, not a formalit
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation. Every repo-relative path in this file resolves against it. |
-| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given. |
+| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. |
 | **target** | The file named by the prompt's `Target:` line — either the spec file (`ultracode-spec-*.md`) or the plan's master file (`ultracode-plan-*.md`, not a phase file). {{tool_read}} it first. |
 | **target type** | The prompt's `Target type:` line — `spec` or `plan`. Determines which claims below apply. |
 | **research doc** | Path(s) from the prompt's `Research doc:` line, if given (one per repo `ultracode:explore` ran for). Retrieved evidence for external-tech claims — first-level truth, outranking your own training-data knowledge, exactly as it does for `ultracode:explore`. |

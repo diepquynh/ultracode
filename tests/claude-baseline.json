@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "1bfe1b567c3a9a5acaf9535847d9a9e810bd84095ddd287a8b7a40b60e6a5ca2"
+      "body_sha256": "39d31ebb3c3c90ff19027988fdff7a10aa7fdd3a2cfd73cc5973982c40fbc9ec"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "1179d49dd116aadb29e9057335963529bb6cc6aff68c14004ed8d1b6f5ef66cc"
+      "body_sha256": "b4584dabef6a918afbe66ed26737f6f186b5933cc68b7c3a21b64c7b9adcbd51"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "9d04084cfedf9ed089976ece4ceed8efac3228dca6930d498a8d1b9c94707b60"
+      "body_sha256": "ac40a567238e0de0122f6656ea6ba9591554975e04339e68ab441f751f376a07"
     },
     "generate-spec": {
       "frontmatter": {
@@ -72,7 +72,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "328fad42387c60dbcda39e358469af69cd2ed30c2e910ad1af6a28f54302fd85"
+      "body_sha256": "0c4198d771d8abe0406706eeb4e79be7377192503c0daff2a5e97761851e0dc4"
     },
     "implement": {
       "frontmatter": {
@@ -92,7 +92,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "af7d328c388d696d692d51de526f3f3a98c4f44e2cf2456a36cea5b096aa76da"
+      "body_sha256": "99793d7122026a205c3c904c6d45c01c2e88854ce68288cf7661d0310ee24dca"
     },
     "initializer": {
       "frontmatter": {
@@ -111,7 +111,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "83eebf88220a5b0388d0d89238274a596b20e797f779c69320946bed6f5c0250"
+      "body_sha256": "14acd547dd31b4834028245d9b8061694dda4343dcaa352dc11408f43cabbac4"
     },
     "module-documentation": {
       "frontmatter": {
@@ -130,7 +130,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0f0f6efb06be9126a25b1b383ac519b81d0e5b4ed466e03657ce076a8fc64625"
+      "body_sha256": "af47a42e4883b6532c2269375d7fd555f2fd039b2991f0aa32e493aff869a810"
     },
     "plan": {
       "frontmatter": {
@@ -147,7 +147,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0b58eae3041744ef91fd1b121d154e90a1bdb9a60ef6ace04527a9a8c78753c0"
+      "body_sha256": "1c5d7eeab3a1b025ee6acb46feda9035335badc81840d218b9927928ef0712b7"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -167,7 +167,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "58043ea0672d2d3fd1beeeda020d19f3cf6fa2cf6d78b038b0afd1820cc7f441"
+      "body_sha256": "e3347d9488686cd5d13f83efae6b42d86fc84746e1caefb4314bb01c2c38bff6"
     },
     "write-test": {
       "frontmatter": {
@@ -187,7 +187,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "02ed42f97e2e9537fc87e4e5e367d36b1f8c1faab2e13a7acf7add2d15b9f7f0"
+      "body_sha256": "8adb8ce594530ded213e1a6434caa034f2a560851c2a106daf05beeb4ee5a500"
     },
     "fact-check": {
       "frontmatter": {
@@ -205,7 +205,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "daf996e33cfd16ad1489e1df4d3975d816ae4b8b0461f2d3ea81b0e4fae6adc2"
+      "body_sha256": "72ce8660e90d2ee34143280b6facb04de9eb19aa777f4ebff449f20bc5ab04a7"
     }
   },
   "skills": {
@@ -221,7 +221,7 @@
         "name": "orchestrate",
         "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. Manually invoked only: the user turns it on explicitly — by typing `/ultracode:orchestrate` or by clearly asking for the ultracode pipeline/orchestrator. It does not self-activate, and it does not activate at session start. Subagents do not use this skill."
       },
-      "body_sha256": "be137e8be30663ee9011e2840ef720fced8c26e180bcb536b51f991af0da82d4"
+      "body_sha256": "68491e2c24da711bdccb612ea6b2dfa11376fb6e50aa3e6363b8a49c4399cb73"
     }
   }
 }

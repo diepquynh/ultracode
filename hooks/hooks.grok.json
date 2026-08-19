@@ -58,6 +58,10 @@
           {
             "type": "command",
             "command": "node \"${GROK_PLUGIN_ROOT}/hooks/bash-scope-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/hooks/skill-init-guard.js\""
           }
         ]
       },
@@ -71,6 +75,15 @@
           {
             "type": "command",
             "command": "node \"${GROK_PLUGIN_ROOT}/hooks/scope-guard.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read|read_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/hooks/skill-init-guard.js\""
           }
         ]
       }

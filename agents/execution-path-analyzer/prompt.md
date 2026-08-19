@@ -15,7 +15,7 @@ coverage. Never write "obvious path" or "standard checks"; there is no such thin
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
-| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given; the write-test agent reads your EPA report from this exact path. |
+| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the write-test agent reads your EPA report from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. {{tool_read}} it first for `commands.*` and `moduleMap`. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — the Skill Application Mapping (file type → test skills) and Module/Area map. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `{session-dir}/ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |

@@ -32,6 +32,7 @@ const COMMON_HOOK_FILES = [
   "pipeline-gate.js",
   "security-block.js",
   "factcheck-record.js",
+  "skill-init-guard.js",
   "lib/common.js",
   "lib/session.js",
   "lib/scope-policy.js",

@@ -13,7 +13,7 @@ yourself — you do not delegate back to the orchestrator except through the han
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
-| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given; the code-reviewer, EPA, and write-test agents read your change report from this exact path. |
+| **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the code-reviewer, EPA, and write-test agents read your change report from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
 | **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt when the plan tier was skipped for a lower-stakes request. |
@@ -411,12 +411,10 @@ Verification: All verifications passed
    Tests are written only by the `write-test` agent, only after the user explicitly requests them at the
    closing gate once every coding phase is implemented and reviewed. Ensure the report's `## Changed Files`
    lists every implementation file so `write-test` can find what needs coverage later, and note pending tests
-   in `## Notes`. This is not just a prompt rule: `PreToolUse` hooks (`hooks/scope-guard.js` for
-   `{{tool_write}}`/`{{tool_edit}}`, `hooks/bash-scope-guard.js` for a shell redirect/heredoc/`sed -i`
-   reaching the same path) deny any attempt to write a path matching a test file/directory convention
-   (`*.test.*`, `*.spec.*`, `__tests__/`, `test(s)/`, `test_*.py`, `*_test.py`, `*_test.go`, `*_spec.rb`,
-   `spec_*.rb`, `*Test(s).java/.kt/.cs`), regardless of what the plan, a fix instruction, or the user asked
-   for. If you hit that denial, treat it as confirmation to skip the step, not as an error to work around.
+   in `## Notes`. Never write a path matching a test file/directory convention (`*.test.*`, `*.spec.*`,
+   `__tests__/`, `test(s)/`, `test_*.py`, `*_test.py`, `*_test.go`, `*_spec.rb`, `spec_*.rb`,
+   `*Test(s).java/.kt/.cs`), regardless of what the plan, a fix instruction, or the user asked for. If a write
+   to such a path is denied, treat it as confirmation to skip the step, not as an error to work around.
 7. **Verify after every edit.** Always run the profile's build command after each change. No exceptions.
 8. **Use the profile's commands.** {{tool_read}} build/test/testOne/format/lint from
    `{{runtime_dir}}/repo-profile.json` and use them verbatim. NEVER hardcode a build tool.

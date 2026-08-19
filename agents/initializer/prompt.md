@@ -24,7 +24,7 @@
 | **scout findings** | A scout-mode output for one slice: component types found in that slice with counts, exemplars, and invariants. Written to `{session-dir}/ultracode-findings-<slice-slug>.md`. |
 | **proposal** | The propose-mode output: the ranked, merged, deduped skill recommendation for user approval. Written as `{session-dir}/ultracode-proposal.md` (human table) plus `{session-dir}/ultracode-proposal.json` (machine twin: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, skills[]) that the /init-kit command and the generate modes consume. |
 | **INVENTORY.md** | The routing table written to `<repo>/{{runtime_dir}}/INVENTORY.md`. Source of truth for skill routing; read as a plain file by all agents. See `{{plugin_root}}/refs/inventory-and-profile.md`. |
-| **repo-profile.json** | The machine-readable profile written to `<repo>/{{runtime_dir}}/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules, and model routing (the `models` block — which model each subagent spawn runs on, applied by the model-router hook). |
+| **repo-profile.json** | The machine-readable profile written to `<repo>/{{runtime_dir}}/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules, and model routing (the `models` block — which model each subagent spawn runs on). |
 | **existing skill** | A `SKILL.md` already present under `{repo}/{{skills_dir}}/` before this run — written by a prior init-kit run or hand-authored by the team. Discovered read-only in `detect`. Re-used as-is by default; never overwritten unless its `disposition` is `regenerate`. |
 | **cross-harness candidate** | A COMPLETE prior bootstrap (`repo-profile.json` + `INVENTORY.md`) found under a harness OTHER than this run's own `{{state_dir}}` (e.g. this run is Claude Code and Codex's runtime dir already has both files). Discovered read-only by Step D0, before any repo scan. Adopting one copies its skills + inventory into this harness's own dirs instead of re-scouting. |
 | **bespoke skill** | An existing skill whose `name` matches NO scouted component type and is neither `convention` nor `module-hub`. Registered in the inventory for routing but never regenerated. |
@@ -492,15 +492,22 @@ Per the contract, write:
 
 The repo's skill set is `Generated skills` PLUS `Reused skills`. EVERY skill in BOTH arrays MUST appear in the INVENTORY Skills Inventory table AND in the profile `skills` array (mirror them 1:1). On each profile `skills[]` entry set `source`: `generated` for a skill from `Generated skills`, `reused` for a skill from `Reused skills`. Build each skill's Skills Inventory `Load when` cell and Skill Application Mapping row from its component type when it has one; for a reused skill whose `componentType` is `null` (a bespoke skill), derive the `Load when` cell from the trigger in its own `SKILL.md` front-matter description, and add a Skill Application Mapping row only if a concrete file type triggers it. `commands` and `moduleMap` come from the proposal; the Review Rule Set is seeded from the stack reference with stable IDs.
 
-{{tool_write}} the profile's `models` block seeded with the contract's harness-neutral model routing, so the model-router hook can switch subagent models per repo and per phase (see the `models` schema and defaults in `{{plugin_root}}/refs/inventory-and-profile.md`):
+{{tool_write}} the profile's `models` block seeded with the contract's harness-neutral model routing, so subagent
+models are switched per repo and per phase (see the `models` schema and defaults in
+`{{plugin_root}}/refs/inventory-and-profile.md`):
 - `models.byAgent` — `explore`, `generate-spec`, `plan`, `fact-check` → `advanced`; `code-reviewer`, `execution-path-analyzer` → `balanced`; `module-documentation`, `prompt-generation` → `advanced`.
 - `models.byPhaseComplexity` — `implement` and `write-test` each `{ "low": "fast", "medium": "fast", "high": "balanced" }`.
 
-Every applicable route must be present: once this profile exists, the hook **denies** a spawn whose route is missing, so an omitted agent breaks that stage outright.
+Every applicable route must be present: once this profile exists, an omitted agent breaks that stage outright.
 
-Every key in both maps is the agent's **bare** name — never write an `ultracode:`-prefixed key (e.g. `explore`, NOT `ultracode:explore`). The hook strips the `ultracode:` prefix from the spawned agent name and looks the route up by that bare key, so a prefixed key would never match.
+Every key in both maps is the agent's **bare** name — never write an `ultracode:`-prefixed key (e.g. `explore`,
+NOT `ultracode:explore`); a prefixed key would never match.
 
-Do not add `implement`, `write-test`, or `initializer` to `byAgent` (the first two are tier-driven; the initializer is spawned by the /init-kit command, which sets its model per mode — the hook keeps that model instead of denying the missing route, so leaving it out does not break re-initialization). A route may be `"default"` to use the agent definition's neutral default or `"inherit"` to leave the spawn's model untouched; use either only when the user explicitly requests that fallback. Keep the seeded tier defaults otherwise.
+Do not add `implement`, `write-test`, or `initializer` to `byAgent` (the first two are tier-driven; the
+initializer is spawned by the /init-kit command, which sets its model per mode, so leaving it out does not
+break re-initialization). A route may be `"default"` to use the agent definition's neutral default or
+`"inherit"` to leave the spawn's model untouched; use either only when the user explicitly requests that
+fallback. Keep the seeded tier defaults otherwise.
 
 ### Step GI4 — Self-review
 

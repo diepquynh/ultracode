@@ -47,6 +47,10 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/bash-scope-guard.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/skill-init-guard.js\""
           }
         ]
       },

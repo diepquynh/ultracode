@@ -1710,6 +1710,7 @@ test("every plugin distribution includes target hooks", () => {
       "security-block.js",
       "session-guard.js",
       "session-resume.js",
+      "skill-init-guard.js",
       "spawn-log.js",
     ]);
     assert.ok(fs.statSync(path.join(hookDir, "lib", "common.js")).isFile());
