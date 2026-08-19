@@ -2,15 +2,6 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${GROK_PLUGIN_ROOT}/hooks/session-start.sh\" .grok/ultracode .grok/skills"
-          }
-        ]
-      },
-      {
         "matcher": "compact",
         "hooks": [
           {

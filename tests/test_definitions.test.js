@@ -1689,7 +1689,6 @@ test("every plugin distribution includes target hooks", () => {
       "security-block.js",
       "session-guard.js",
       "session-resume.js",
-      "session-start.sh",
       "spawn-log.js",
     ]);
     assert.ok(fs.statSync(path.join(hookDir, "lib", "common.js")).isFile());
@@ -1699,12 +1698,11 @@ test("every plugin distribution includes target hooks", () => {
     const config = JSON.parse(
       fs.readFileSync(path.join(hookDir, "hooks.json"), "utf-8"),
     );
-    assert.ok(config.hooks.SessionStart);
     assert.ok(config.hooks.PreToolUse);
     assert.ok(config.hooks.PostToolUse);
-    const sessionCommand = config.hooks.SessionStart[0].hooks[0].command;
-    assert.ok(sessionCommand.startsWith("bash "));
-    const compactCommand = config.hooks.SessionStart[1].hooks[0].command;
+    assert.equal(config.hooks.SessionStart.length, 1);
+    assert.equal(config.hooks.SessionStart[0].matcher, "compact");
+    const compactCommand = config.hooks.SessionStart[0].hooks[0].command;
     assert.match(compactCommand, /session-resume\.js/);
     const routing = JSON.parse(
       fs.readFileSync(path.join(hookDir, "model-routing.json"), "utf-8"),

@@ -31,12 +31,11 @@ revision it just fetched and no plugin is ever shipped stale.
 After a Claude Code install, restart Claude Code. After a Grok install, start a new session and run
 `/init-kit`. Grok trusts plugins under `~/.grok/plugins/` automatically; a project-local copy in
 `.grok/plugins/` needs `/hooks-trust` or `--trust` first. After a Codex install, start a new session, open
-`/hooks`, and trust Ultracode's hooks; start one more session so the `SessionStart` hook runs. Codex
-intentionally does not trust plugin hooks automatically, so initialization reminders and profile model
-enforcement remain inactive until then.
+`/hooks`, and trust Ultracode's hooks; start one more session so they take effect. Codex intentionally does
+not trust plugin hooks automatically, so the model-routing and pipeline guard hooks remain inactive until then.
 
 Grok also auto-loads Claude Code plugins. If Ultracode is already installed for Claude, skip the Grok target
-or disable one copy so skills and SessionStart hooks do not double-fire.
+or disable one copy so skills and hooks do not double-fire.
 
 ## Claude Code manual install
 

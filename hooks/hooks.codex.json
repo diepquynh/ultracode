@@ -2,15 +2,6 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${PLUGIN_ROOT}/hooks/session-start.sh\" .codex/ultracode .agents/skills"
-          }
-        ]
-      },
-      {
         "matcher": "compact",
         "hooks": [
           {

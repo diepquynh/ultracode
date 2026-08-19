@@ -96,16 +96,18 @@ See [Installation](docs/installation.md) for manual installation.
 | Runtime inventory and profile | `.claude/ultracode/` | `.grok/ultracode/` | `.codex/ultracode/` |
 | Generated project skills | `.claude/skills/` | `.grok/skills/` | `.agents/skills/` |
 
-Run the initializer once per repository, reload the harness, then use the orchestrator — it's the only entry
-point into the pipeline. Individual stages (`explore`, `generate-spec`, `plan`, `implement`, `code-review`,
-`epa`, `write-test`, `module-docs`, `prompt-gen`) are internal subagents the orchestrator spawns on your behalf;
-they aren't separate slash commands, so you never need to know which one to run — ask the orchestrator in plain
-language and it decides.
+Run the initializer once per repository, reload the harness, then invoke the orchestrator yourself — it's the
+only entry point into the pipeline, and it only runs when you ask for it (there's no session-start nag and no
+auto-activation on an arbitrary coding request). Explicitly invoke it with `/ultracode:orchestrate`, or ask for
+it in plain language, and it takes it from there. Individual stages (`explore`, `generate-spec`, `plan`,
+`implement`, `code-review`, `epa`, `write-test`, `module-docs`, `prompt-gen`) are internal subagents the
+orchestrator spawns on your behalf; they aren't separate slash commands, so you never need to know which one to
+run.
 
 Commit the generated runtime files so your team shares them: `.claude/ultracode/` and `.claude/skills/` for
 Claude Code, `.grok/ultracode/` and `.grok/skills/` for Grok Build, or `.codex/ultracode/` and `.agents/skills/`
 for Codex. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
-one copy so skills and SessionStart hooks do not double-fire.
+one copy so skills and hooks do not double-fire.
 
 For the agent roster, architecture, model notes, and how to extend Ultracode to a new stack, see [`docs/`](docs/).
 

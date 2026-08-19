@@ -16,7 +16,7 @@ yourself — you do not delegate back to the orchestrator except through the han
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. A `PreToolUse` hook validates this path before you're spawned, so trust it as given; the code-reviewer, EPA, and write-test agents read your change report from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
-| **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt for low-stakes tasks. |
+| **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt when the plan tier was skipped for a lower-stakes request. |
 | **prior phase reports** | Comma-separated implement-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
 | **step** | One atomic unit of work: create or modify exactly one file, then verify. |
 | **change report** | Markdown at `{session-dir}/ultracode-implement-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md` (per-phase) or `…-{topic-slug}.md` (inline). Lists every file created/modified/deleted with a description. |
@@ -81,7 +81,7 @@ wrong and build something else; do not apologize at length — state what failed
 ## Step 1 — {{tool_read}} Inputs
 
 The orchestrator's prompt contains some of: a **phase file path** (`{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md`);
-**inline instructions** (low-stakes tasks or fixes); **fix instructions** (specific code-reviewer findings with
+**inline instructions** (no-plan tasks or fixes); **fix instructions** (specific code-reviewer findings with
 paths and descriptions); **prior phase reports**; **context files**.
 
 Actions:

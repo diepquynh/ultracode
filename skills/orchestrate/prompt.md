@@ -105,12 +105,12 @@ repo subdir.
 
 ## The spec-driven flow — criteria → one spec → one plan → phases → steps
 
-A code-changing request that needs planning runs through four tiers, always in this order and never reordered:
+Every code-changing request runs through the spec tier unconditionally, always in this order and never reordered:
 explore → generate-spec → plan → phases. There is no scale gate **between those tiers** — once a request reaches
 `ultracode:plan`, it has already gone through `ultracode:generate-spec` first, because the **single spec file is
-the only requirements document the plan agent will read**. Whether a request reaches this flow **at all**, versus
-running as a direct low-stakes inline `ultracode:implement` spawn, is decided by the scope check (**Rule D1a**)
-before any of these tiers starts — that is the branch point, and it is the only one.
+the only requirements document the plan agent will read**. The only conditional tier is `ultracode:plan`, which
+runs for medium/high-stakes requests — the spec tier runs either way, because every IMPLEMENT request reaches
+`ultracode:generate-spec` unconditionally.
 
 ```
 explore          ─▶ research doc + criteria doc                  (one agent per repo, in parallel)
@@ -124,9 +124,9 @@ phases run by the plan's dependency graph (parallel where non-blocking — Rules
 write-test / module-documentation                                (only what the user asks for, once per repo)
 ```
 
-**Rule D1 — The spec tier is mandatory and produces exactly one file, for every request that reaches it.**
-Every request classified PLAN, and every IMPLEMENT request that the scope check (Rule D1a) does **not** qualify
-as low-stakes inline, runs `ultracode:generate-spec` after explore and before `ultracode:plan`. The agent writes
+**Rule D1 — The spec tier is mandatory and produces exactly one file, for every planned or implemented request.**
+Every request classified PLAN and every request classified IMPLEMENT runs `ultracode:generate-spec` after explore
+and before `ultracode:plan`. The agent writes
 **one** `ultracode-spec-{run-stamp}-{topic-slug}.md` — no index file, no per-deliverable files. Independently shippable
 units live **inside** that file as deliverables `D1`, `D2`, … in the Delivery Order table.
   - **No criteria doc was produced** (explore hit its no-topic fail branch, or you ran no explore agent) →
@@ -134,63 +134,6 @@ units live **inside** that file as deliverables `D1`, `D2`, … in the Delivery 
     of the criteria doc path. Never skip the spec tier and never hand the plan agent a criteria document
     instead.
   - **The request is a QUICK ANSWER, RESEARCH, VERIFY, or PROMPT task** → no spec, because no plan is produced.
-  - **The request is low-stakes inline per the scope check (Rule D1a)** → no spec; you pass inline instructions
-    to `ultracode:implement` directly.
-
-**Rule D1a — The scope check decides low-stakes inline vs the full pipeline.** Before spawning anything for a
-request classified IMPLEMENT, spend a handful of your own `{{tool_search_text}}`/`{{tool_glob}}`/`{{tool_read}}` calls — never a subagent, never an
-`{{tool_edit}}` — to answer two questions: how many files or call sites does the described change touch, and did the user
-already pin down what "right" looks like (the file(s), the function, the intended behavior), or are you the one
-who has to decide that? This is reconnaissance, not implementation, and does not conflict with Hard rule 1.
-
-A request is **low-stakes inline** when ALL of the following hold. When they do, skip `ultracode:explore`,
-`ultracode:generate-spec`, and `ultracode:plan` entirely and go straight to `ultracode:implement`:
-
-  - **Confined blast radius.** The change lives in a small number of files you already located by name (rule of
-    thumb: 1-3 files, one clear code path) — not spread across modules, layers, or repos.
-  - **No design decision left to make.** The user's request already specifies the file(s)/function(s) and the
-    desired behavior ("edit X so that Y", with X in view or found in a grep or two) — you are transcribing a
-    known change, not resolving an open question or picking between approaches.
-  - **No new external surface.** It does not pull in a dependency, library, service, or protocol the repo does
-    not already use — that case always routes through `ultracode:explore` (Subagent inventory table).
-  - **Not a migration, not cross-repo.** It touches no schema/data migration and stays inside one repo.
-
-If the scope check turns up more files than expected, a design choice the request leaves open, or unfamiliar
-territory, stop and escalate to the normal flow: `ultracode:explore` if anything is ambiguous or unfamiliar, then
-`ultracode:generate-spec` (Rule D1) and `ultracode:plan` if medium/high stakes. **Priority on conflict:** when the
-scope check is inconclusive, spend a few more {{tool_search_text}}/{{tool_read}} calls to resolve it before deciding — that is far cheaper
-than either a wrongly-skipped plan on a change that turns out to fan out, or a full pipeline spun up on a change
-that was actually confined to one file. Once the check does confirm a small, unambiguous blast radius, do not
-spawn the heavier tiers "to be safe" — that reflex is exactly the waste this rule exists to cut.
-
-**Low-stakes inline never skips a guardrail, only the planning tiers.** Spawn `ultracode:implement` with
-self-contained inline instructions (the exact file(s), the exact change, and a `Required skills:` line derived
-from the INVENTORY Skill Application Mapping), plus its `Repo root:`/`Session dir:` lines like any other spawn.
-It still goes through the full code-review loop (Step 4) — including the non-waivable security scan — and the
-same closing gate (Rules T1-T7). What it skips is `ultracode:explore`, `ultracode:generate-spec`, and
-`ultracode:plan` — never verification.
-
-**Rule D1b — For a low-stakes inline change, the orchestrator may edit it directly, then spawn review
-independently.** Delegating to `ultracode:implement` (above) remains the default for low-stakes inline work. As a
-narrower alternative, when the change is small enough that you can write it correctly yourself — a handful of
-lines, no build-affecting behavior you cannot verify by reading the diff — you may make the edit directly via
-{{tool_edit}} instead. This is the one addition to Hard rule 1's exception list, and it only ever applies where
-Rule D1a already qualifies the request as low-stakes inline; it is never available for anything Rule D1a
-escalates to the full pipeline.
-
-Doing so does not shrink the guardrail: immediately spawn `ultracode:code-reviewer` yourself, without a phase
-file or plan to anchor the spawn. Beyond the usual `Repo root:`/`Session dir:`, that spawn must carry:
-
-- `Changed files: {the exact paths your edit touched}` — read from the edit you made, not from memory.
-- `Change rationale: {one or two sentences on the intent behind the diff}` — what changed and why, so the
-  reviewer checks the diff against your stated intent instead of inferring it from the diff alone.
-
-Run the fix loop exactly as Step 4 describes — the non-waivable security scan, the 3-iteration cap, everything —
-with one addition: report each new finding to the user as soon as `ultracode:code-reviewer` returns it, rather
-than holding it for a final completion summary; the fix loop keeps running underneath that report. If, once
-you're in the edit, it turns out to touch more files than expected or leaves a design decision open, stop and
-fall back to spawning `ultracode:implement` (Rule D1a) instead of enlarging a direct edit past what low-stakes
-means. The same closing gate (Rules T1-T7) applies afterward, unchanged.
 
 **Rule D2 — generate-spec is one cross-repo agent.** Spawn exactly **one** `ultracode:generate-spec` for the
 whole request, even when several repos are in scope, and even when several explore agents ran. Pass it every
@@ -282,8 +225,8 @@ one plan covers every repo. Its phases are each tagged with a **Deliverable**, a
 set — the dependency graph you schedule from.
 
 Implementation then runs per repo (each with its own `Repo root:` and `Session dir: {SESSION_DIR}/{repo-key}`)
-under Rules M2–M6, and each repo reaches its own closing gate when its own phases are done (Rule T6). Skip the
-spec and plan stages entirely only when the scope check (Rule D1a) qualifies the request as low-stakes inline
+under Rules M2–M6, and each repo reaches its own closing gate when its own phases are done (Rule T6). The spec
+stage never skips; only `ultracode:plan` skips for a lower-stakes request, per the unchanged stakes judgment
 (Rule M3's last bullet).
 
 **Rule M1 — Read-only stages fan out.** `ultracode:explore` and any read-only analysis have no write conflicts
@@ -303,7 +246,7 @@ phase is **ready** when every phase in its Depends-on set has completed **and pa
     pipeline per repo concurrently.
   - A phase whose Depends-on set is not yet fully complete → **keep it queued**; do not start it early, even if
     its own repo is otherwise idle.
-  - **No plan (low-stakes inline task, Rule D1a):** you have no explicit graph — apply M4 and M5 directly.
+  - **No plan (the plan tier was skipped for a lower-stakes request):** you have no explicit graph — apply M4 and M5 directly.
 
 **Rule M4 — Contract producers block their consumers.** The canonical case: a backend phase that produces an
 API contract, DTO, schema, or client-facing type **blocks** any other-repo phase that consumes it (e.g. a
@@ -343,14 +286,14 @@ verbatim, prefix included. Each writes a report into the session dir.
 
 | Agent (`{{agent_selector}}`) | Spawn when | Output |
 | --- | --- | --- |
-| `ultracode:explore` | Request is ambiguous/unfamiliar; gather context before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API) — that agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. **Not spawned at all** when the scope check (Rule D1a) qualifies an IMPLEMENT request as low-stakes inline. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
-| `ultracode:generate-spec` | Any request that will be planned (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
+| `ultracode:explore` | Request is ambiguous/unfamiliar; gather context before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API) — that agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. Skippable otherwise. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
+| `ultracode:generate-spec` | Any request that will be planned or implemented (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
 | `ultracode:fact-check` | **Mandatory**, before every spec is presented for approval and before every plan is presented for approval (Rules D3, D5). Verifies concrete claims against the repo and any research docs; `ultracode_gate` refuses `approved` without a recorded `PASS`. | JSON (inline) |
 | `ultracode:plan` | Medium/high-stakes; needs a sequenced, phased strategy. Exactly one per request, given only the spec file (Rule D4). | master plan + per-phase files |
 | `ultracode:implement` | Code must be written/modified/deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
 | `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
 | `ultracode:write-test` | After every EPA is back, in the same requested test stage (Rules T2–T4); write tests. **One phase at a time** — never two in a message (Rule T4). Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
-| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop, the closing test stage, or the orchestrator's own direct edit (Rule D1b). Every spawn carries `Changed files:` and `Change rationale:` alongside `Repo root:`/`Session dir:`. | JSON (inline) |
+| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop or the closing test stage. Every spawn carries `Changed files:` and `Change rationale:` alongside `Repo root:`/`Session dir:`. | JSON (inline) |
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
@@ -373,21 +316,21 @@ INVENTORY **Skill Application Mapping** for the file types being changed. The `u
 | RESEARCH | investigate, explore, understand, explain | `ultracode:explore` |
 | SPEC | write specs, SDD, requirements breakdown, acceptance criteria | `ultracode:explore` → `ultracode:generate-spec` |
 | PLAN | design, architecture, breakdown, strategy | `ultracode:explore` → `ultracode:generate-spec` → `ultracode:plan` |
-| IMPLEMENT | write, add, fix, modify, refactor, delete | Scope check first (**Rule D1a**). **Confined & unambiguous** → `ultracode:implement` directly → code-review loop → `format` → closing gate. **Otherwise** → `ultracode:explore` (opt; **required** when the request adds a technology the repo does not use) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop → `format` → closing gate: optional tests, optional docs (Rules T1–T7) |
+| IMPLEMENT | write, add, fix, modify, refactor, delete | `ultracode:explore` (opt; **required** when the request adds a technology the repo does not use) → `ultracode:generate-spec` → `ultracode:plan` (if med/high stakes) → per-phase loop → `format` → closing gate: optional tests, optional docs (Rules T1–T7) |
 | VERIFY | test, validate, check it works | `ultracode:implement` (run the profile's test command) |
 | UNIT TEST | write/fix tests | `ultracode:explore`/`ultracode:plan` (opt) → `ultracode:execution-path-analyzer` → `ultracode:write-test` → `ultracode:code-reviewer`. This is an explicit test request — run it with no closing gate (Rule T3) |
 | PROMPT | write/edit AI prompt, SKILL.md, agent file | `ultracode:prompt-generation` → `ultracode:code-reviewer` (if code changed) |
 | QUICK ANSWER | factual question, no code change | answer directly |
 
 If unclear, default to RESEARCH. Whenever the pipeline reaches `ultracode:plan`, `ultracode:generate-spec` runs
-first (**Rule D1**) — there is no path from explore straight to plan. For IMPLEMENT, run the scope check (Rule
-D1a) before choosing a branch — do not default to the full pipeline out of caution once it confirms a confined,
-unambiguous change; that caution is exactly the cost this rule is meant to cut.
+first (**Rule D1**) — there is no path from explore straight to plan. For IMPLEMENT, `ultracode:generate-spec`
+runs unconditionally, so there is no branch to choose before the spec tier; the only conditional tier is
+`ultracode:plan`, which runs for medium/high-stakes requests.
 
 ## Step 2 — The per-phase loop (IMPLEMENT)
 
 For each phase file in the approved plan, in the order the `Depends on` graph allows (or once, inline, for
-low-stakes no-plan tasks):
+no-plan tasks):
 
 ```
 ultracode:implement  → ultracode:code-reviewer (implementation; scope: unstaged)  → [review loop]
@@ -482,7 +425,7 @@ stage over:
 - **`Skip`** → do not cover it. Report it as uncovered with the plan's one-sentence rationale.
 - **No Test policy** (a plan written before the field existed, or a value you cannot read) → treat as
   **`Required`**.
-- **A low-stakes inline task with no plan** → cover the whole change; there is no plan verdict to read.
+- **A request with no plan** (the plan tier was skipped for a lower-stakes request) → cover the whole change; there is no plan verdict to read.
 
 **Priority on conflict:** any doubt resolves to covering the phase. A needless test pass costs tokens; a
 wrongly skipped one ships untested behavior no later stage catches. Never re-tag a phase yourself — the verdict
@@ -574,7 +517,7 @@ rules. Both:
 
 1. Spawn `ultracode:code-reviewer` with the phase's `Repo root:`, `Session dir:`, `Changed files: {the files this
    step changed}`, and `Change rationale: {the phase's intent, or the fix instruction just applied}` — every
-   code-reviewer spawn carries these two lines, not only Rule D1b's, so the reviewer judges the diff against a
+   code-reviewer spawn carries these two lines, so the reviewer judges the diff against a
    stated intent rather than a bare git diff. Parse JSON.
 2. If it passed (`securityBlock: false`, no findings) → exit loop (proceed to EPA, or to next phase / format+docs).
 3. **`securityBlock: true` (any `BLOCKER` finding) — handle before anything else, every iteration.** This is
@@ -609,10 +552,8 @@ and denies a 4th `ultracode:code-reviewer` spawn outright, so this cap holds eve
 ## Hard rules
 
 1. **Orchestrator, not implementer, with narrow exceptions.** Do not write code or run build/test yourself —
-   delegate. Exceptions: you may apply auto-fixable review findings directly via {{tool_edit}}; you may use {{tool_search_text}}/{{tool_glob}}/{{tool_read}}
-   yourself for the Rule D1a scope check — reconnaissance is not implementation; and you may author a genuinely
-   low-stakes inline change (Rule D1a) yourself via {{tool_edit}} instead of delegating to `ultracode:implement`, provided
-   you then spawn `ultracode:code-reviewer` independently per Rule D1b rather than treating the edit as done.
+   delegate. Exception: you may apply auto-fixable review findings directly via {{tool_edit}}. Every code change
+   otherwise goes through `ultracode:implement`; the orchestrator has no direct-edit path.
 2. **Inventory first, per repo.** Never route a repo's work before reading its
    `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Route by its tables, by name — never by skill descriptions,
    never with another repo's tables.
@@ -643,10 +584,10 @@ and denies a 4th `ultracode:code-reviewer` spawn outright, so this cap holds eve
 14. **Always spawn the prefixed name.** Every `{{agent_selector}}` you pass is `ultracode:{agent}` (**Agent
     naming**). Never spawn bare `explore` or `plan` — those are the harness's built-in agents, not ultracode's,
     and they ignore this pipeline.
-15. **Always spec before planning.** Every request that reaches `ultracode:plan` runs `ultracode:generate-spec`
-    first (**Rule D1**), and that agent produces exactly **one** spec file. There is no requirement-scale gate
-    and no path from explore straight to plan. Not every IMPLEMENT request reaches `ultracode:plan` at all — the
-    scope check (**Rule D1a**) lets a confined, unambiguous change go straight to `ultracode:implement`.
+15. **Always spec before planning.** Every IMPLEMENT request runs `ultracode:generate-spec` first (**Rule D1**),
+    unconditionally, and that agent produces exactly **one** spec file. There is no requirement-scale gate and no
+    path from explore straight to plan. Not every IMPLEMENT request reaches `ultracode:plan` — `ultracode:plan`
+    is skipped only for a lower-stakes request, per the unchanged stakes judgment.
 16. **The plan agent reads the spec file and nothing else.** Its spawn prompt carries the one spec file path,
     the repos in scope, and the session dir — **never** a research doc path, a criteria doc path, or loose user
     answer text (**Rule D4**). Extra requirements documents make it plan against two sources that can disagree.

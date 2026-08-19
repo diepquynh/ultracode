@@ -11,7 +11,7 @@ The plugin is split into two layers:
 │  refs/      java-spring · typescript-node · python ·  │ ← the initializer's case-by-case library
 │             go · _generic · archetypes · contracts    │
 │  commands/  neutral definition + prompt sources        │
-│  hooks/     SessionStart  +  PreToolUse model router  │
+│  hooks/     PreToolUse guards  +  SessionStart(compact) resume │
 └────────────────────────┬──────────────────────────────┘
                          │  run /init-kit in a repo
                          ▼

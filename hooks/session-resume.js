@@ -5,7 +5,7 @@
 // current review-loop iteration count so the orchestrator can resume instead
 // of re-deriving (or losing) pipeline state from a compacted summary.
 //
-// Never fails the session: this hook only prints context, like session-start.sh.
+// Never fails the session: this hook only prints context.
 
 "use strict";
 

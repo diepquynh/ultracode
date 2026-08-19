@@ -21,7 +21,6 @@ const COMMON_PLUGIN_INPUTS = [
 ];
 const COMMON_HOOK_FILES = [
   "model-router.js",
-  "session-start.sh",
   "session-resume.js",
   "review-cap.js",
   "session-guard.js",
