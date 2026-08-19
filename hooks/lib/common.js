@@ -16,8 +16,11 @@ function emit(payload) {
 }
 
 function denyPreToolUse(reason) {
+  // Top-level `decision` is a legacy field that only accepts "approve" | "block" —
+  // "deny" is not a valid value there and fails the harness's JSON schema check,
+  // which silently discards the entire payload (and the deny with it). The only
+  // field that actually blocks a PreToolUse call is hookSpecificOutput.permissionDecision.
   emit({
-    decision: "deny",
     reason,
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

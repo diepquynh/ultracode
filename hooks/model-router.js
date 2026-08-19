@@ -3,7 +3,9 @@
 //
 // Reads a PreToolUse hook payload from stdin, writes a JSON hook response
 // to stdout:
-//   * deny            -> { hookSpecificOutput.permissionDecision = "deny" }
+//   * deny            -> { hookSpecificOutput.permissionDecision = "deny" } (no top-level `decision` —
+//                         that field only accepts "approve"/"block" and "deny" there fails schema
+//                         validation, silently discarding the whole payload)
 //   * allow (inherit) -> no output, exit 0
 //   * allow (model)   -> { hookSpecificOutput.updatedInput.model = "<model>" }
 //
@@ -22,8 +24,10 @@ function emit(payload) {
 }
 
 function deny(reason) {
+  // Top-level `decision` only accepts "approve" | "block" — "deny" fails the
+  // harness's JSON schema check and the whole payload (including the deny) is
+  // discarded. hookSpecificOutput.permissionDecision is what actually blocks.
   emit({
-    decision: "deny",
     reason,
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
