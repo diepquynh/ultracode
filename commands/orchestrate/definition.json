@@ -1,7 +1,10 @@
 {
   "schema_version": 1,
-  "kind": "skill",
+  "kind": "command",
   "name": "orchestrate",
   "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's {{runtime_dir}}/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. Manually invoked only: the user turns it on explicitly — by typing `/ultracode:orchestrate` or by clearly asking for the ultracode pipeline/orchestrator. It does not self-activate, and it does not activate at session start. Subagents do not use this skill.",
-  "prompt": "prompt.md"
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "[optional: the request to orchestrate, or leave blank to route the current conversation]"
+  }
 }
