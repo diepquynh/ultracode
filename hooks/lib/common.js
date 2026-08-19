@@ -30,6 +30,15 @@ function denyPreToolUse(reason) {
   });
 }
 
+// Blocks a UserPromptExpansion (a user typing a skill/command's slash form
+// directly, e.g. "/ultracode:orchestrate") — a different code path from a
+// model-issued tool call, so PreToolUse hooks never see it. This event's
+// hookSpecificOutput only carries additionalContext, not a permission
+// decision; the top-level `decision: "block"` field is what actually stops it.
+function denyUserPromptExpansion(reason) {
+  emit({ decision: "block", reason });
+}
+
 function field(text, label) {
   const pattern = new RegExp(
     `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*(.*?)\\s*\\.?$`,
@@ -217,6 +226,7 @@ function readJsonIfFile(filePath) {
 module.exports = {
   emit,
   denyPreToolUse,
+  denyUserPromptExpansion,
   field,
   readTextIfFile,
   isDirectory,

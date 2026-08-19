@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 // Hard-enforces the "repo must be initialized" check skills/orchestrate/prompt.md's Step
 // 0 used to state only in prose (a model can talk itself past a sentence; it cannot talk
-// itself past a denied tool call). Runs as a PreToolUse hook on whichever call loads the
-// orchestrate skill: Claude's `Skill` tool, or the Bash/Read call Codex and Grok Build use
-// instead — tool-mapping.json's `skill` capability has them open the skill's SKILL.md
-// directly, since neither harness has a Skill tool.
+// itself past a denied tool call). Runs on two different events, because there are two
+// different ways to load the orchestrate skill and each takes a different code path:
+//
+// - PreToolUse, on whichever call loads it as a tool: Claude's `Skill` tool, or the
+//   Bash/Read call Codex and Grok Build use instead — tool-mapping.json's `skill`
+//   capability has them open the skill's SKILL.md directly, since neither harness has a
+//   Skill tool.
+// - UserPromptExpansion, on Claude Code only: a user typing the skill's slash form
+//   directly (e.g. "/ultracode:orchestrate") expands straight into the model's prompt
+//   without ever emitting a `Skill` tool_use — PreToolUse never sees it, so this event
+//   is the only hook that can catch that path.
 //
 // Denies only when the *current working directory's* repo has no INVENTORY.md under its
 // runtime dir. A later-named repo in a multi-repo session is still checked in prose by
@@ -17,6 +24,7 @@ const path = require("node:path");
 const {
   readHookInput,
   denyPreToolUse,
+  denyUserPromptExpansion,
   hookToolInput,
   bareAgentName,
   isFile,
@@ -40,8 +48,37 @@ function targetsOrchestrateSkill(toolInput) {
   return Boolean(command) && ORCHESTRATE_SKILL_PATH.test(command);
 }
 
+// UserPromptExpansion's payload has no tool_input — it carries expansion_type
+// ("slash_command" | "mcp_prompt") and command_name (the typed name, prefix included).
+function targetsOrchestrateExpansion(hookInput) {
+  if (hookInput.expansion_type !== "slash_command") return false;
+  const commandName = typeof hookInput.command_name === "string" ? hookInput.command_name : "";
+  return Boolean(commandName) && bareAgentName(commandName) === "orchestrate";
+}
+
+function missingInventoryReason(repoRoot, info) {
+  if (isFile(path.join(repoRoot, info.runtimeDir, "INVENTORY.md"))) return null;
+  return (
+    `ultracode: refusing to run the orchestrate skill — repo \`${repoRoot}\` has no ultracode ` +
+    `inventory (\`${info.runtimeDir}/INVENTORY.md\`). Run /init-kit in it first to scout it and ` +
+    "generate skills."
+  );
+}
+
 async function main() {
   const hookInput = await readHookInput();
+  if (!hookInput || typeof hookInput !== "object") return 0;
+
+  if (hookInput.hook_event_name === "UserPromptExpansion") {
+    if (!targetsOrchestrateExpansion(hookInput)) return 0;
+    const info = pluginTargetInfo();
+    if (!info) return 0;
+    const repoRoot = resolveRepoRoot(hookInput, "");
+    const reason = missingInventoryReason(repoRoot, info);
+    if (reason) denyUserPromptExpansion(reason);
+    return 0;
+  }
+
   const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
   if (!targetsOrchestrateSkill(toolInput)) return 0;
@@ -50,14 +87,8 @@ async function main() {
   if (!info) return 0;
 
   const repoRoot = resolveRepoRoot(hookInput, "");
-  const inventoryPath = path.join(repoRoot, info.runtimeDir, "INVENTORY.md");
-  if (isFile(inventoryPath)) return 0;
-
-  denyPreToolUse(
-    `ultracode: refusing to run the orchestrate skill — repo \`${repoRoot}\` has no ultracode ` +
-      `inventory (\`${info.runtimeDir}/INVENTORY.md\`). Run /init-kit in it first to scout it and ` +
-      "generate skills.",
-  );
+  const reason = missingInventoryReason(repoRoot, info);
+  if (reason) denyPreToolUse(reason);
   return 0;
 }
 
