@@ -22,9 +22,9 @@ configuration records its argument hint. `prompt.md` contains only the large pro
 preserved by generation.
 
 The schema is `definitions/definition.schema.json`. Neutral model tiers resolve through
-`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.6`/`gemini-3.7-flash-high`, `balanced` maps to
-Sonnet/Terra/`grok-4.6`/`gemini-3.7-flash-high`, and `advanced` maps to
-Opus/Sol/`grok-4.6`/`claude-opus-4-6-thinking` (every Grok tier currently resolves
+`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.6`/`flash`, `balanced` maps to
+Sonnet/Terra/`grok-4.6`/`flash`, and `advanced` maps to
+Opus/Sol/`grok-4.6`/`flash` (every Grok and Antigravity tier currently resolves
 to the same model). Canonical capabilities and their
 Claude Code/Grok Build/Codex/Antigravity translations are explicit in `definitions/tool-mapping.json`. Add a mapping
 before using a new capability in a definition. Codex, Grok Build, and Antigravity have no `Skill` tool, so that mapping

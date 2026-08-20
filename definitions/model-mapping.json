@@ -5,19 +5,19 @@
       "claude": "haiku",
       "codex": "gpt-5.6-luna",
       "grok": "grok-4.6",
-      "antigravity": "gemini-3.7-flash-high"
+      "antigravity": "flash"
     },
     "balanced": {
       "claude": "sonnet",
       "codex": "gpt-5.6-terra",
       "grok": "grok-4.6",
-      "antigravity": "gemini-3.7-flash-high"
+      "antigravity": "flash"
     },
     "advanced": {
       "claude": "opus",
       "codex": "gpt-5.6-sol",
       "grok": "grok-4.6",
-      "antigravity": "claude-opus-4-6-thinking"
+      "antigravity": "flash"
     }
   }
 }

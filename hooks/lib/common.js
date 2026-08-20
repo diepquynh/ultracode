@@ -196,19 +196,31 @@ function hookAgentType(hookInput) {
 
 function bareAgentName(value) {
   if (typeof value !== "string") return "";
-  if (value.startsWith("ultracode:")) return value.slice("ultracode:".length);
-  if (value.startsWith("ultracode-")) return value.slice("ultracode-".length);
-  if (value.startsWith("ultracode_")) return value.slice("ultracode_".length);
-  return value;
+  let val = value.trim();
+  if (val.startsWith("ultracode:")) val = val.slice("ultracode:".length);
+  else if (val.startsWith("ultracode-")) val = val.slice("ultracode-".length);
+  else if (val.startsWith("ultracode_")) val = val.slice("ultracode_".length);
+  val = val.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return val;
 }
 
 function agentFromToolInput(toolInput) {
   if (toolInput && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
     const first = toolInput.Subagents[0];
-    const name = first.TypeName || first.typeName || first.Role || first.role || "";
-    if (name) return bareAgentName(name);
+    const role = first.Role || first.role || "";
+    const type = first.TypeName || first.typeName || "";
+    const cleanRole = bareAgentName(role);
+    const cleanType = bareAgentName(type);
+    if (cleanRole && cleanRole !== "self" && cleanRole !== "research") {
+      return cleanRole;
+    }
+    if (cleanType && cleanType !== "self" && cleanType !== "research") {
+      return cleanType;
+    }
+    if (cleanRole) return cleanRole;
+    if (cleanType) return cleanType;
   }
-  const value = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "TypeName", "typeName", "Role", "role"]
+  const value = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "Role", "role", "TypeName", "typeName"]
     .map((key) => toolInput && toolInput[key])
     .find((v) => typeof v === "string");
   return bareAgentName(value || "");

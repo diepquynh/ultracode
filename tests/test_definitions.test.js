@@ -590,9 +590,9 @@ test("codex agents are valid TOML", () => {
 
 test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
-    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6", antigravity: "gemini-3.7-flash-high" },
-    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6", antigravity: "gemini-3.7-flash-high" },
-    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6", antigravity: "claude-opus-4-6-thinking" },
+    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6", antigravity: "flash" },
+    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6", antigravity: "flash" },
+    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6", antigravity: "flash" },
   });
   for (const [, definition] of sourceDefinitions()) {
     if (definition.kind === "agent") {
@@ -2791,7 +2791,7 @@ test("antigravity generation uses antigravity plugin layout and validation", () 
 
   const explore = fs.readFileSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "explore.md"), "utf-8");
   assert.match(explore, /^---\nname: explore\n/);
-  assert.match(explore, /^model: claude-opus-4-6-thinking$/m);
+  assert.match(explore, /^model: flash$/m);
   assert.match(explore, /^effort: high$/m);
   assert.match(explore, /tools: view_file, write_to_file, run_command, grep_search, find_by_name, search_web, read_url_content/);
 

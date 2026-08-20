@@ -18,7 +18,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { denyPreToolUse } = require("./lib/common.js");
+const { denyPreToolUse, bareAgentName, agentFromToolInput } = require("./lib/common.js");
 const { augmentPrompt } = require("./lib/context-brief.js");
 const { resolveRepoRoot } = require("./lib/session.js");
 
@@ -202,20 +202,13 @@ async function main() {
     return 0;
   }
 
-  let agentValue = "";
-  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
-    const first = toolInput.Subagents[0];
-    agentValue = first.TypeName || first.typeName || first.Role || first.role || "";
-  }
-  if (!agentValue) {
-    agentValue = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "TypeName", "typeName", "Role", "role"]
+  let agent = agentFromToolInput(toolInput);
+  if (!agent) {
+    const agentValue = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "Role", "role", "TypeName", "typeName"]
       .map((key) => toolInput[key])
       .find((value) => typeof value === "string") || "";
+    agent = bareAgentName(agentValue);
   }
-  let agent = agentValue;
-  if (agent.startsWith("ultracode:")) agent = agent.slice("ultracode:".length);
-  else if (agent.startsWith("ultracode-")) agent = agent.slice("ultracode-".length);
-  else if (agent.startsWith("ultracode_")) agent = agent.slice("ultracode_".length);
   if (!routing.defaults || !(agent in routing.defaults)) return 0;
 
   let prompt = "";
@@ -235,9 +228,14 @@ async function main() {
 
   const isExemptFromRoute = agent === "initializer" || agent === "fact-check";
 
+  let callerRawModel = toolInput.model || toolInput.Model;
+  if (!callerRawModel && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    callerRawModel = toolInput.Subagents[0].Model || toolInput.Subagents[0].model;
+  }
+
   let route;
   if (!isFile(profilePath)) {
-    route = isExemptFromRoute ? toolInput.model || "default" : "default";
+    route = isExemptFromRoute ? callerRawModel || "default" : "default";
   } else {
     let profile;
     try {
@@ -264,7 +262,7 @@ async function main() {
       // fact-check is exempted the same way: it is now a mandatory gate on every spec/plan, so an
       // existing repo-profile.json written before this agent existed must not start hard-failing
       // every approval until the user (or a re-run of /init-kit) adds an explicit route.
-      route = toolInput.model || "default";
+      route = callerRawModel || "default";
     } else {
       route = computedRoute;
     }
@@ -289,13 +287,22 @@ async function main() {
 
   const [action, model] = resolveModel(route, routing, agent);
   if (action === "inherit") {
-    if (briefedPrompt && promptKey) {
-      if (routing.target === "antigravity") {
+    if (briefedPrompt) {
+      if (routing.target === "antigravity" && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+        const subagents = toolInput.Subagents.map((sub, idx) => {
+          if (idx === 0) return { ...sub, Prompt: briefedPrompt };
+          return sub;
+        });
+        emit({
+          decision: "allow",
+          overwrite: { ...toolInput, Subagents: subagents },
+        });
+      } else if (routing.target === "antigravity" && promptKey) {
         emit({
           decision: "allow",
           overwrite: withBrief(toolInput),
         });
-      } else {
+      } else if (promptKey) {
         emit({
           hookSpecificOutput: { hookEventName: "PreToolUse", updatedInput: withBrief(toolInput) },
         });
@@ -308,23 +315,41 @@ async function main() {
     return 0;
   }
 
-  const callerModel = canonicalizeCallerModel(toolInput.model, routing);
-  if (callerModel && callerModel !== model) {
+  const callerModel = canonicalizeCallerModel(callerRawModel, routing);
+  if (callerModel && callerModel !== "inherit" && callerModel !== model) {
     denyPreToolUse(
-      `ultracode: spawn model "${toolInput.model}" does not match the routed model ` +
+      `ultracode: spawn model "${callerRawModel}" does not match the routed model ` +
       `"${model}" for ${agent}. Omit model, or re-spawn with model: ${model} — ` +
       "the profile owns this route and a caller override is not applied.",
     );
     return 0;
   }
 
-  const updated = withBrief({ ...toolInput, model });
-  if (routing.target === "antigravity") {
+  let updated;
+  if (routing.target === "antigravity" && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    const subagents = toolInput.Subagents.map((sub, idx) => {
+      if (idx === 0) {
+        return {
+          ...sub,
+          Model: model,
+          ...(briefedPrompt ? { Prompt: briefedPrompt } : {}),
+        };
+      }
+      return sub;
+    });
+    updated = { ...toolInput, Subagents: subagents };
+    emit({
+      decision: "allow",
+      overwrite: updated,
+    });
+  } else if (routing.target === "antigravity") {
+    updated = withBrief({ ...toolInput, model, Model: model });
     emit({
       decision: "allow",
       overwrite: updated,
     });
   } else {
+    updated = withBrief({ ...toolInput, model });
     const output = {
       hookEventName: "PreToolUse",
       updatedInput: updated,
