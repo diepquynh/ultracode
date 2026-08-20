@@ -97,10 +97,13 @@ no test file exists, mark all paths **NEW**.
 **Thoroughness:** try ≥3 term variations before concluding a symbol or test is absent; never group paths under
 one ID; missing a path means a missing test downstream.
 
-## Step 4 — {{tool_write}} the EPA report
+## Step 4 — Write the EPA report
 
-{{tool_write}} to `{session-dir}/ultracode-epa-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md` (per-phase), or without
-`-phase-{N}` if the implement report has no `**Phase:**` field. Use this template:
+Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent`
+(`ultracode:execution-path-analyzer`), and `content` (the markdown below). It writes to the path the
+orchestrator declared for this spawn, so **do not choose a filename and do not {{tool_write}} the report
+yourself** — the write-test agent reads that declared path. If no path was declared, say so in your return
+summary and ask the orchestrator for a `Report file:` line rather than guessing. Use this template:
 
 ```markdown
 # Execution Path Analysis: {Topic}

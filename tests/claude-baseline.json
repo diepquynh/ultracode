@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "39d31ebb3c3c90ff19027988fdff7a10aa7fdd3a2cfd73cc5973982c40fbc9ec"
+      "body_sha256": "2acb0c1d9fc62921ea0a63aa6237986fbaae40821a86bab058c349acaaa063ea"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "b4584dabef6a918afbe66ed26737f6f186b5933cc68b7c3a21b64c7b9adcbd51"
+      "body_sha256": "8343b11a916dfd3cf7dc4fb82324a02b9ea66280bf2df253cafb365a61f1271e"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "ac40a567238e0de0122f6656ea6ba9591554975e04339e68ab441f751f376a07"
+      "body_sha256": "98c5d3be7648fac140249443beffc5f24845c152a426fa43f3cab4b6f00d91dc"
     },
     "generate-spec": {
       "frontmatter": {
@@ -92,7 +92,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "99793d7122026a205c3c904c6d45c01c2e88854ce68288cf7661d0310ee24dca"
+      "body_sha256": "f5d510ea5292d331e73d11228d6fb473ae60dec598066a45c4a727bd491f6e24"
     },
     "initializer": {
       "frontmatter": {
@@ -130,7 +130,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "af47a42e4883b6532c2269375d7fd555f2fd039b2991f0aa32e493aff869a810"
+      "body_sha256": "4a81266fa6eb7822324894cd43c42cd6b129305ab2f78df862b971bf0de394ab"
     },
     "plan": {
       "frontmatter": {
@@ -187,7 +187,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "8adb8ce594530ded213e1a6434caa034f2a560851c2a106daf05beeb4ee5a500"
+      "body_sha256": "dccb1f22f7439a5b0fd57d05aa7318e18381b0c2db7569fceaed64679bf51e3e"
     },
     "fact-check": {
       "frontmatter": {
@@ -215,13 +215,6 @@
         "description": "Authoring standard for any instruction file — SKILL.md skills, subagent markdown files, and LLM system prompts. ACTIVATE when creating or editing a skill, an agent definition, or an AI prompt. Encodes the 15 Writing Laws, Chain-of-Thought structure, and a mandatory self-review checklist so the output is executable by any model on the first pass without re-reading or guessing."
       },
       "body_sha256": "0f772a424b1646dae88b15d97837db64da12372f161788e73cfaac1b8e5302ff"
-    },
-    "orchestrate": {
-      "frontmatter": {
-        "name": "orchestrate",
-        "description": "Orchestrator operating procedure for ultracode. Defines the role, the subagent pipeline, session isolation, request classification, delegation rules, the code-review loop, the closing gate that makes test writing and module documentation optional user-requested stages after all coding phases, multi-repo scheduling, and hard rules. Repo-agnostic: all stack-specific facts (skills, commands, review rules, module map) are read at run time from each repo's .claude/ultracode/INVENTORY.md and repo-profile.json. Sessions spanning multiple repos fan read-only work out in parallel and queue work blocked across repo boundaries. Manually invoked only: the user turns it on explicitly — by typing `/ultracode:orchestrate` or by clearly asking for the ultracode pipeline/orchestrator. It does not self-activate, and it does not activate at session start. Subagents do not use this skill."
-      },
-      "body_sha256": "68491e2c24da711bdccb612ea6b2dfa11376fb6e50aa3e6363b8a49c4399cb73"
     }
   }
 }

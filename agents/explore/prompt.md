@@ -32,7 +32,17 @@ If you write "follow the existing pattern," show the pattern in full.
 
 Extract topic, scope, and any context files named in the prompt; read those context files now. If the prompt
 carries user answers to earlier questions, integrate them — they are authoritative over your own reading of
-the request. Then compute the run stamp once and record it:
+the request.
+
+**Then recall this repo's memory before you explore anything.** Call `ultracode_memory_recall` with
+`repo_root`, the area you are about to look at, and the topic as `query`. This repo accumulates lessons that
+earlier sessions paid for — non-obvious constraints, behavior a signature does not reveal, workarounds for
+specific bugs. Anything it returns is a finding you do not have to re-derive by reading code, and it may
+contradict what the source appears to say; treat a recalled lesson as evidence and verify it against current
+code before relying on it. Cite the lessons you used in your research document, so the next reader knows which
+claims came from memory rather than from this run's reading.
+
+Then compute the run stamp once and record it:
 
 ```bash
 date +%Y%m%d-%H%M%S
@@ -271,9 +281,18 @@ carries all seven columns, and each criterion has a Criterion Detail block.
 **Fail — Step 1 found no identifiable topic:** write no criteria document (the research document's open
 question stands alone).
 
-## Step 9 — Return
+## Step 9 — Record what the next session should not have to rediscover, then return
 
-Return plain text to the orchestrator, with these fields in this order:
+Before returning, record any **durable, non-obvious** fact this run cost you real effort to establish: a
+constraint the code does not state, behavior that contradicts a name or a signature, a version-specific API
+detail, an invariant that spans files. Call `ultracode_memory` once per lesson with `repo_root`, an `area`
+scoped to the module (`module::Class` for a large repo), a one-line `lesson`, and `source`.
+
+What NOT to record: anything the code makes obvious on reading, this run's task or conclusions, or a restatement
+of a lesson recall already returned. The store is for what a future reader would otherwise pay to rediscover,
+and a store full of the obvious is worse than an empty one — it costs every future recall's budget.
+
+Then return plain text to the orchestrator, with these fields in this order:
 
 | Field | Type | Value |
 | --- | --- | --- |

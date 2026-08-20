@@ -20,8 +20,8 @@ never paste a ready-made secure replacement (Step 2.5).
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all git/build commands with it as the working directory (e.g. `git -C {repo-root} status`) so change detection targets the right repo. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. |
-| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map, review rules. {{tool_read}} it first. |
-| **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Its **Review Rule Set** table is the source of truth for rule IDs, severity, and which rules are auto-fixable. Its **Skill Application Mapping** says which conventions apply to a file type. |
+| **repo brief** | A `## Repo brief — resolved for ultracode:code-reviewer` section at the end of your prompt, resolved for you from this repo's profile and inventory. It carries the **complete Review Rule Set** (every ID, rule text, severity, auto-fixable flag), the exact command strings, this repo's conventions, and the convention skill paths. It is your rule catalog. |
+| **repo profile / inventory** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries the rule set and commands; open them only if the brief is absent or a rule you need is missing from it. |
 | **review ledger** | `{session-dir}/ultracode-review-ledger.md` — prior findings and fix rationale across passes. |
 | **changed file** | A source file appearing in the Step 1 detection output, after context filtering. |
 | **diff** | `git diff` output for a tracked file; for untracked files, the full file content is the diff. |
@@ -33,17 +33,23 @@ never paste a ready-made secure replacement (Step 2.5).
 | **implementation file** | A changed source file (not a test). Test files live under the repo's test roots. |
 | **test file** | A changed file under the repo's test root/glob (per the profile's module map / conventions). |
 
-## Step 0 — Load the inventory and profile
+## Step 0 — Load your rule catalog
 
-{{tool_read}} `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md` now.
+Take it from your **repo brief**, which already carries it — do not open the profile or the inventory to
+re-read what the brief states.
 
-- From the inventory's **Review Rule Set**, load every rule: its **ID**, **rule text**, **severity**, and
-  **auto-fixable** flag. This is your rule catalog — apply these IDs and severities, not any hardcoded list.
-- From the profile, note the source/test roots (module map, conventions) and the exact command strings; if
-  you must build or run anything, use the profile's command verbatim — never assume a build tool.
-- From the **Skill Application Mapping**, note which convention rules apply to which file types.
+- The brief's **Review Rule Set** is your complete catalog: every rule's **ID**, **rule text**, **severity**,
+  and **auto-fixable** flag. Apply these IDs and severities, not any hardcoded list. It is the whole set, not
+  a summary, so do not go looking for additional rules elsewhere.
+- The brief's **Commands** are exact; if you must build or run anything, use them verbatim — never assume a
+  build tool.
+- The brief's **Conventions** and skill paths say which conventions apply. Read a convention skill by its path
+  if you need its detail; per-repo skills are files, so never pass one to {{tool_skill}} by name.
 
-**Pass:** both files read and the Review Rule Set parsed. **Fail:** inventory missing → still run Step 1
+If — and only if — the brief is missing, {{tool_read}} `{repo-root}/{{runtime_dir}}/INVENTORY.md` and
+`{repo-root}/{{runtime_dir}}/repo-profile.json` and parse the Review Rule Set from there.
+
+**Pass:** the Review Rule Set is loaded. **Fail:** inventory missing → still run Step 1
 (detect changes) and Step 2.5 (security scan — it does not depend on the inventory) before returning; the
 missing rule set skips Step 3 only. Return the "no rule set" JSON in Step 5 with
 `systemMessage: "Code review: no inventory rule set found"` unless Step 2.5 found `BLOCKER` findings, in which

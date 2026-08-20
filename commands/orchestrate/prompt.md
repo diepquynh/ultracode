@@ -192,6 +192,14 @@ its 3-iteration cap with findings open, or an agent returns `STUCK:` you cannot 
 phase that depends on it, directly or transitively. Report the blocked phase and its deliverable to the user
 with the open findings and ask how to proceed. Independent phases in other repos keep running (Rule M6).
 
+A `STUCK:` return means the agent hit its enforced retry ceiling on the same build/test failure, so it is
+carrying a diagnostic and a specific question, not a vague difficulty. Read its escalation request before
+deciding. When you **can** resolve it — you know the missing fact, or a targeted `ultracode:explore` can find
+it — re-spawn the same agent with that fact stated explicitly in the spawn prompt, quoting the diagnostic
+verbatim and naming what changed since the last attempt. Never re-spawn with the original prompt and an
+instruction to try again: the agent will reproduce the identical failure and burn the same budget twice.
+Escalate to the user only once you have no fact left to supply.
+
 **Rule D10 — Requirement changes after planning restart at the spec.** If the user changes a requirement after
 the plan exists, re-spawn `ultracode:generate-spec` with their change, get the updated spec approved, then
 re-spawn `ultracode:plan` on the updated spec file. Never patch a plan file to match a new requirement and never
@@ -348,10 +356,29 @@ staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` 
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}` (the agent works from that
 directory — Hard rule 3), the phase/plan file path, prior
-reports, the resolved command strings from that repo's repo-profile, and (for `ultracode:implement` /
-`ultracode:write-test`) the `Required skills:` line plus a `Phase file: {absolute path}` line whenever a plan
-exists (Hard rule 13). The one exception to "include prior reports" is `ultracode:plan`: it gets the spec file
-path **only** (Rule D4).
+reports, and (for `ultracode:implement` / `ultracode:write-test`) the `Required skills:` line plus a
+`Phase file: {absolute path}` line whenever a plan exists (Hard rule 13). The one exception to "include prior
+reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
+
+You do **not** need to copy that repo's command strings into the prompt: every subagent is handed a resolved
+repo brief automatically, carrying the exact `build`/`test`/`format` strings, the skill file paths, the repo's
+conventions, and the module-map rows for the paths your prompt names. Restating them wastes your output budget
+and risks disagreeing with the profile. Name the *paths* the task concerns and the brief resolves the rest.
+
+**An `ultracode:implement` spawn must declare its plan.** Pass either `Phase file: {absolute path}` — the
+normal path once the plan is approved — or, for a genuinely small inline change, `No plan: {one line saying
+why}`. A spawn with neither is refused. Beyond gating, a `Phase file:` also confines that agent's writes to the
+files the phase declares, so prefer it: a planned spawn is both gated and scoped, and a bare one is neither.
+
+**You name each report, not the agent.** For `ultracode:implement`, `ultracode:write-test`,
+`ultracode:execution-path-analyzer` and `ultracode:module-documentation`, add a
+`Report file: {session-dir}/{name}.md` line; those agents write it through `ultracode_report`, which uses that
+exact path. Choose a name the next stage can predict from the phase — e.g.
+`ultracode-implement-phase-3.md`, `ultracode-epa-phase-3.md`, `ultracode-write-test-phase-3.md` — and reuse
+the same stem across a phase's stages. Agents naming their own reports is why the same output has appeared as
+`ultracode-implement-phase-3.md`, `ultracode-implement-20260818-125425-lambda-yaml-phase-2.md` and
+`ultracode-implement-credentials-uri.md`, and why downstream reads have missed. When you pass a report path
+downstream, pass the one you declared.
 
 ### The closing gate — optional tests, optional docs
 

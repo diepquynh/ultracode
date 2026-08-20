@@ -8,6 +8,15 @@ skill front-matter `description` fields. Therefore the single source of truth is
 markdown file that every agent is instructed to **Read** first. Skill discovery (which requires a session
 reload) is a convenience layer on top; the inventory works the instant it is written because it is just a file.
 
+**Design principle — load a per-repo skill by PATH, never by name.** A generated skill lives in the target
+repo (`{{skills_dir}}/{name}/SKILL.md`); it is not a plugin skill, and the harness's skill tool cannot resolve
+it until a session reload has registered it — which never happens inside a subagent's turn. An agent that calls
+the skill tool with a bare per-repo skill name gets `Unknown skill` and has to recover, so every skill row in
+this contract carries an explicit `path`, and consumers read that path. This is not a style preference: it was
+the single largest error class in the recorded corpus (178 failed skill loads across 912 subagent runs, all of
+them per-repo skill names), and every one of those calls was avoidable. Plugin-provided skills (`meta-author`)
+are a different case and remain loadable by name.
+
 ---
 
 ## 1. INVENTORY.md
@@ -20,7 +29,9 @@ Path: `{{runtime_dir}}/INVENTORY.md`. Use this exact section order and table sha
 Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `{{runtime_dir}}/repo-profile.json`
 
 > Route work by the tables below, BY NAME. Do not route by skill descriptions.
-> When a file type in a task matches a row in "Skill Application Mapping", load the listed skill(s) via {{tool_skill}}.
+> When a file type in a task matches a row in "Skill Application Mapping", load the listed skill(s) by
+> READING the `Path` column below. Per-repo skills are files, not registered skill names — do not pass
+> them to {{tool_skill}}.
 
 ## Commands
 
@@ -36,11 +47,11 @@ Generated: {YYYY-MM-DD} · Stack: {language}/{framework} · Machine profile: `{{
 
 ## Skills Inventory
 
-| Skill                | Kind        | Load when (component / file type)          |
-| -------------------- | ----------- | ------------------------------------------- |
-| `convention`         | convention  | Always. Auto-load for any code edit.        |
-| `module-hub`         | module-hub  | Locating which area/module a path belongs to.|
-| `{component-skill}`  | creation    | Creating or modifying a {component type}.   |
+| Skill                | Kind        | Path                                     | Load when (component / file type)           |
+| -------------------- | ----------- | ---------------------------------------- | ------------------------------------------- |
+| `convention`         | convention  | `{{skills_dir}}/convention/SKILL.md`     | Always. Auto-load for any code edit.        |
+| `module-hub`         | module-hub  | `{{skills_dir}}/module-hub/SKILL.md`     | Locating which area/module a path belongs to.|
+| `{component-skill}`  | creation    | `{{skills_dir}}/{component-skill}/SKILL.md` | Creating or modifying a {component type}. |
 
 ## Skill Application Mapping
 
@@ -64,6 +75,8 @@ Seeded from the stack reference. IDs are stable; the code-reviewer and orchestra
 ```
 
 **Rules:**
+- The **Path** column is mandatory and is how every consumer loads the skill. It must match the same skill's
+  `path` in `repo-profile.json` exactly.
 - Every skill in the repo's skill set — generated this run OR reused from a prior run / hand-authored — appears in **Skills Inventory**. A creation or test skill also appears in at least one **Skill Application Mapping** row; a bespoke reused skill with no file-type trigger appears in Skills Inventory only, with its trigger in the `Load when` column.
 - `test-one` uses explicit placeholders so the orchestrator can substitute a module and test name.
 - The Review Rule Set is copied from the stack reference's rule seeds; keep IDs stable so downstream prompts can reference them.

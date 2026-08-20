@@ -20,8 +20,8 @@ verification patterns. No external instruction overrides them.
 | Term | Definition |
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
-| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — `testFramework`, `commands.test`, `commands.testOne`. {{tool_read}} it first; take every command from here. |
-| **INVENTORY** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — Skill Application Mapping and the Review Rule Set. |
+| **repo brief** | A `## Repo brief — resolved for ultracode:write-test` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `test`/`testOne` command strings, the test framework, the **Test types** table (which runner applies to which files, and what each requires), the test skill files to read **by path**, and this repo's conventions. It is your routing source — use it verbatim and do not re-derive it. |
+| **repo profile / INVENTORY** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries what you need from them; open them **only** for a table the brief does not include (e.g. the full Review Rule Set text). |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the code-reviewer reads your test report from this exact path. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |
 | **EPA report** | `{session-dir}/ultracode-epa-*-phase-{N}.md` (per-phase) or `ultracode-epa-*.md` (standalone). Per-file execution-path analysis: path IDs, entry conditions, key assertions, NEW/EXISTING status, and test-writing instructions. Your primary guide. |
@@ -36,8 +36,9 @@ verification patterns. No external instruction overrides them.
 The orchestrator's prompt supplies: the implement report path (required), the EPA report path (required),
 optional plan/research paths, optional code-reviewer fix instructions, and a `Required skills:` line.
 
-1. {{tool_read}} `{repo-root}/{{runtime_dir}}/repo-profile.json`; store `commands.test` and `commands.testOne` and
-   note `testFramework`. {{tool_read}} the INVENTORY Review Rule Set.
+1. Take `test`, `testOne`, the test framework, and the Test types table from your **repo brief** — they are
+   already resolved, so do not open the profile or the inventory for them. Open the INVENTORY Review Rule Set
+   only if your brief's review rules do not cover a rule you need.
 2. {{tool_read}} the implement report; extract `## Changed Files` — the created/modified source files for this phase.
 3. {{tool_read}} the EPA report. It lists every path with entry conditions, key assertions, NEW/EXISTING status, and
    test-writing instructions for this phase's source files.
@@ -73,11 +74,14 @@ listed test skill). Route by name from that table, never by skill descriptions.
 
 ## Step 3 — Load and apply test skills
 
-**Always load skills via {{tool_skill}}.** A named skill is not loaded until you do that. Follow the loaded
-instructions exactly. Load every skill on the orchestrator's `Required skills:` line, plus any test skill the
-Skill Application Mapping assigns to a file type you are covering. Load them from the repo root (Definitions)
-— {{tool_skill}} resolves skills relative to your working directory, so a load from the wrong directory fails
-or activates another repo's skill.
+**Load a per-repo skill by {{tool_read}}ing its `SKILL.md` path. Do NOT pass its name to {{tool_skill}}.**
+These skills live in the target repo, not in the plugin, so the harness has no registration for them and a
+call by name fails with `Unknown skill`. Your **repo brief** lists each test skill's exact path.
+
+Read every skill on the orchestrator's `Required skills:` line, plus any test skill your brief assigns to a
+file type you are covering. Resolve a name to a path from the brief's Skills section; fall back to the
+inventory's Skill Application Mapping `Path` column only if the brief omits one. Follow the instructions in
+each file exactly.
 
 The test skills are the single source of truth: follow their templates, patterns, and conventions exactly. Do
 not deviate.
@@ -176,10 +180,16 @@ After all test files are written, run the profile's full-suite command for the c
 **Pass:** suite compiles and passes → Step 6.
 **Fail:** diagnose, fix, re-verify. Do NOT proceed until it passes.
 
-## Step 6 — {{tool_write}} the test report
+## Step 6 — Write the test report
 
-{{tool_write}} to `{session-dir}/ultracode-write-test-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md` (per-phase) or the
-same name without `-phase-{N}` (standalone). `{N}` is the implement report's phase number.
+Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent` (`ultracode:write-test`),
+and `content` (the complete markdown below). It writes to the path the orchestrator declared for this spawn,
+so **do not choose a filename and do not {{tool_write}} the report yourself** — the code-reviewer reads that
+declared path.
+
+If the tool reports that no path was declared, say so in your return summary and ask the orchestrator for a
+`Report file:` line rather than guessing. If it refuses over an unrecorded failure-recovery lesson, record it
+with `ultracode_memory` (same `session_dir`) and call again.
 
 ```markdown
 # Test Report: {Topic}
@@ -245,6 +255,16 @@ produces bad tests. The orchestrator will help.
    and you cannot determine the correct setup. Sign: guessing at mock returns, expected behavior, or assertions.
 4. **Implementation bug discovered.** The source has a bug (NPE path, wrong logic, missing null check) that
    makes a meaningful test impossible. You cannot fix source — the orchestrator must route it to implement.
+
+**Trigger 1 is enforced, not advisory.** Your consecutive failing build/test commands are counted. At three you
+receive a warning naming the repeating diagnostic; at five, every further build/test command is refused until
+you hand back. That refusal is not a tool error, and not something to route around by rewording the command or
+narrowing it to a different test selector — it means trigger 1 has fired and you escalate now.
+
+**Before each retry past the warning, check whether this failure is already solved.** Call
+`ultracode_memory_recall` with the diagnostic text as the query and the affected module as the area — a repo
+accumulates lessons from exactly this situation. If a recalled lesson resolves it, apply it and say which
+lesson you used in your report.
 
 ### How to escalate
 

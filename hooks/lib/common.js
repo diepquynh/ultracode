@@ -39,6 +39,14 @@ function denyUserPromptExpansion(reason) {
   emit({ decision: "block", reason });
 }
 
+// Feeds text back into the model's context without blocking anything. Used by
+// PostToolUse hooks that need to say something to the agent mid-turn (e.g.
+// build-streak.js warning that a failure streak is building). PostToolUse cannot
+// deny, so additionalContext is the only channel it has.
+function emitAdditionalContext(hookEventName, additionalContext) {
+  emit({ hookSpecificOutput: { hookEventName, additionalContext } });
+}
+
 function field(text, label) {
   const pattern = new RegExp(
     `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*(.*?)\\s*\\.?$`,
@@ -227,6 +235,7 @@ module.exports = {
   emit,
   denyPreToolUse,
   denyUserPromptExpansion,
+  emitAdditionalContext,
   field,
   readTextIfFile,
   isDirectory,

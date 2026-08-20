@@ -33,9 +33,15 @@ const COMMON_HOOK_FILES = [
   "security-block.js",
   "factcheck-record.js",
   "skill-init-guard.js",
+  "build-streak.js",
+  "build-streak-gate.js",
+  "spawn-scope.js",
+  "lib/build-signal.js",
   "lib/common.js",
   "lib/session.js",
   "lib/scope-policy.js",
+  "lib/ledger-policy.js",
+  "lib/context-brief.js",
   "lib/shell-paths.js",
 ];
 
@@ -536,7 +542,9 @@ function renderClaude(definition, mapping, modelMapping) {
   return claudeFrontmatter(definition, mapping, modelMapping) + definition.prompt;
 }
 
-function renderClaudeCommand(definition) {
+// `body` defaults to the neutral prompt. Grok passes a notes-prefixed body so a
+// command carries its capability notes the same way a skill does — see renderGrok.
+function renderClaudeCommand(definition, body = definition.prompt) {
   const argumentHint = JSON.stringify(definition.data.config.argument_hint);
   return [
     "---",
@@ -544,7 +552,7 @@ function renderClaudeCommand(definition) {
     `argument-hint: ${argumentHint}`,
     "---",
     "",
-    definition.prompt,
+    body,
   ].join("\n");
 }
 
@@ -766,7 +774,7 @@ function renderGrok(definition, mapping, modelMapping, harnessLayout) {
   const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
   const source =
     definition.data.kind === "command"
-      ? renderClaudeCommand(definition)
+      ? renderClaudeCommand(definition, body)
       : grokFrontmatter(definition, mapping) + body;
   return renderHarnessTemplate(source, "grok", harnessLayout, modelMapping, mapping);
 }

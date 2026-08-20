@@ -19,6 +19,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { denyPreToolUse } = require("./lib/common.js")
+// Brief injection lives here, not in its own hook, because a PreToolUse
+// `updatedInput` does NOT merge across hooks: with two hooks on one matcher both
+// see the original input and only one hook's updatedInput survives. A separate
+// brief hook would therefore clobber the routed `model` (or lose its own edit).
+// See hooks/lib/context-brief.js for the measurement and the rest of the design.
+const { augmentPrompt } = require("./lib/context-brief.js")
 
 function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
@@ -248,8 +254,35 @@ async function main() {
     }
   }
 
+  // Never allowed to break a spawn: any failure building the brief leaves the
+  // prompt exactly as the caller wrote it.
+  let briefedPrompt = null;
+  try {
+    briefedPrompt = augmentPrompt({
+      agent,
+      prompt,
+      repoRoot: repo,
+      runtimeDir: routing.runtime_dir,
+    });
+  } catch {
+    briefedPrompt = null;
+  }
+  const promptKey = ["prompt", "message"].find((key) => typeof toolInput[key] === "string");
+  const withBrief = (input) =>
+    briefedPrompt && promptKey ? { ...input, [promptKey]: briefedPrompt } : input;
+
   const [action, model] = resolveModel(route, routing, agent);
-  if (action === "inherit") return 0;
+  if (action === "inherit") {
+    // Model untouched, but the brief still applies — emit updatedInput only when
+    // there is actually a brief to add, so an inherit spawn with no profile-backed
+    // brief keeps its previous "no output at all" behavior.
+    if (briefedPrompt && promptKey) {
+      emit({
+        hookSpecificOutput: { hookEventName: "PreToolUse", updatedInput: withBrief(toolInput) },
+      });
+    }
+    return 0;
+  }
   if (action === "error" || !model) {
     denyPreToolUse("ultracode: invalid model route for " + agent + "; refusing an unenforced spawn.");
     return 0;
@@ -267,7 +300,7 @@ async function main() {
 
   const output = {
     hookEventName: "PreToolUse",
-    updatedInput: { ...toolInput, model },
+    updatedInput: withBrief({ ...toolInput, model }),
   };
   if (routing.target === "codex") output.permissionDecision = "allow";
   emit({ hookSpecificOutput: output });

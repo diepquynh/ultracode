@@ -43,7 +43,7 @@ const HARNESS_LAYOUT = JSON.parse(
 
 const LAYOUT_TOKEN_PATTERN = /\{\{[a-z][a-z0-9_]*\}\}/g;
 
-const COMMAND_NAMES = new Set(["init-kit"]);
+const COMMAND_NAMES = new Set(["init-kit", "orchestrate"]);
 
 let WORKSPACE = null;
 let GENERATED_SOURCE_ROOT = null;
@@ -385,7 +385,10 @@ test("claude generation matches pre-refactor behavior", () => {
     assert.deepEqual(
       metadata,
       {
-        description: definition.description,
+        // A command's description carries harness layout tokens too (orchestrate
+        // names {{runtime_dir}}/INVENTORY.md), so it goes through the same
+        // adaptation the body does.
+        description: adaptForTarget(definition.description, "claude"),
         "argument-hint": definition.config.argument_hint,
       },
       generated,
@@ -683,7 +686,7 @@ test("check mode detects stale output", () => {
     "ultracode",
   );
   runGenerator("claude", output);
-  const stale = path.join(output, "skills", "orchestrate", "SKILL.md");
+  const stale = path.join(output, "skills", "meta-author", "SKILL.md");
   fs.appendFileSync(stale, "drift\n", "utf-8");
   assert.throws(
     () => runGenerator("claude", output, { check: true }),
@@ -956,6 +959,121 @@ test("model router rewrites and honors explicit fallbacks", () => {
   routeProfileTest("grok");
 });
 
+// The brief is injected by model-router.js rather than by its own hook because a
+// PreToolUse `updatedInput` does not merge across hooks: measured directly, both
+// hooks see the original input and only one hook's updatedInput survives. A
+// separate brief hook would clobber the routed model. These tests pin the two
+// properties that matter: routing still wins, and a brief failure is never fatal.
+function contextBriefTest(target) {
+  const pluginRoot = pluginRootFor(target);
+  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
+  const skillsDir = HARNESS_LAYOUT.layouts[target].skills_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-brief-${target}-`));
+  fs.mkdirSync(path.join(repo, runtimeDir), { recursive: true });
+
+  const profile = {
+    schemaVersion: 1,
+    stack: { language: "java", frameworks: ["spring-boot"], buildTool: "maven-wrapper" },
+    commands: { build: "./mvnw -q compile", test: "./mvnw test", lint: null },
+    testFramework: "junit5+mockito",
+    moduleMap: [
+      { glob: "core/**", area: "Core domain", reference: null },
+      { glob: "web/**", area: "Web layer", reference: null },
+    ],
+    skills: [
+      { name: "convention", kind: "convention", path: `${skillsDir}/convention/SKILL.md` },
+      { name: "entity", kind: "creation", path: `${skillsDir}/entity/SKILL.md`, componentType: "entity" },
+    ],
+    conventions: { naming: "SuffixedClassNames", immutabilityKeyword: "final", notes: ["always use LogUtils"] },
+    reviewRules: [
+      { id: "C1", rule: "constructor injection only", severity: "H", autoFixable: false },
+      { id: "C2", rule: "one timestamp per method", severity: "M", autoFixable: true },
+    ],
+    models: { byAgent: { explore: "advanced", "code-reviewer": "balanced" }, byPhaseComplexity: {} },
+  };
+  fs.writeFileSync(path.join(repo, runtimeDir, "repo-profile.json"), JSON.stringify(profile), "utf-8");
+  // The inventory already states the build command and the module map, so the
+  // containment test must not restate them; it does NOT state the conventions.
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "INVENTORY.md"),
+    [
+      "# demo — ultracode Inventory",
+      "| build | `./mvnw -q compile` |",
+      "| `core/**` | Core domain |",
+      "| C1 | constructor injection only | H |",
+    ].join("\n"),
+    "utf-8",
+  );
+
+  const route = (toolInput) =>
+    runHook(path.join(pluginRoot, "hooks", "model-router.js"), { cwd: repo, tool_input: toolInput }, {
+      PLUGIN_ROOT: pluginRoot,
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      GROK_PLUGIN_ROOT: pluginRoot,
+    });
+
+  const explorePrompt = `Repo root: ${repo}\nExplore core/src/main/java/Foo.java`;
+  const parsed = JSON.parse(route({ subagent_type: "ultracode:explore", prompt: explorePrompt }));
+  const updated = parsed.hookSpecificOutput.updatedInput;
+
+  // Routing still applies — the whole reason this lives in model-router.
+  assert.equal(updated.model, expectedModel(target, "advanced"), `${target}: routed model preserved`);
+
+  const brief = updated.prompt;
+  assert.match(brief, /## Repo brief — resolved for ultracode:explore/);
+  assert.ok(brief.startsWith(explorePrompt), `${target}: brief appends, never replaces the prompt`);
+  // Profile-only facts are carried, by path for skills.
+  assert.ok(
+    brief.includes(`${skillsDir}/convention/SKILL.md`),
+    `${target}: brief carries the convention skill's path`,
+  );
+  assert.match(brief, /does NOT resolve per-repo skill names/);
+  assert.match(brief, /maven-wrapper/);
+  // Module map is narrowed to the path the prompt names.
+  assert.match(brief, /Core domain/);
+  assert.ok(!brief.includes("Web layer"), `${target}: unrelated module rows are excluded`);
+  // Routing config is never leaked into a subagent's context.
+  assert.ok(!brief.includes("byPhaseComplexity"), `${target}: models block excluded`);
+  assert.ok(!brief.includes("balanced"), `${target}: model tiers excluded`);
+
+  // Idempotent: re-spawning with an already-briefed prompt must not stack briefs.
+  const second = JSON.parse(route({ subagent_type: "ultracode:explore", prompt: brief }));
+  const secondPrompt = second.hookSpecificOutput.updatedInput.prompt;
+  assert.equal(
+    (secondPrompt.match(/## Repo brief — resolved for/g) || []).length,
+    1,
+    `${target}: brief is not applied twice`,
+  );
+
+  // code-reviewer gets the COMPLETE rule set, including rules the inventory
+  // already states — a partial catalog would silently narrow what gets reviewed.
+  const reviewer = JSON.parse(
+    route({ subagent_type: "ultracode:code-reviewer", prompt: `Repo root: ${repo}` }),
+  ).hookSpecificOutput.updatedInput.prompt;
+  assert.match(reviewer, /\*\*C1\*\*/);
+  assert.match(reviewer, /\*\*C2\*\*/);
+  // Conventions are absent from the inventory, so they must appear.
+  assert.match(reviewer, /always use LogUtils/);
+
+  // No profile at all: routing behavior is unchanged and no brief is invented.
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-brief-bare-${target}-`));
+  const bareOut = runHook(
+    path.join(pluginRoot, "hooks", "model-router.js"),
+    { cwd: bare, tool_input: { subagent_type: "ultracode:explore", prompt: `Repo root: ${bare}` } },
+    { PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_ROOT: pluginRoot, GROK_PLUGIN_ROOT: pluginRoot },
+  );
+  if (bareOut.trim()) {
+    const bareInput = JSON.parse(bareOut).hookSpecificOutput.updatedInput;
+    assert.ok(!String(bareInput.prompt || "").includes("Repo brief"), `${target}: no brief without a profile`);
+  }
+}
+
+test("context brief is injected with the routed model and never overrides it", () => {
+  contextBriefTest("claude");
+  contextBriefTest("codex");
+  contextBriefTest("grok");
+});
+
 function routeInitializerTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-init-${target}-`));
   const repo = tempDir;
@@ -1187,11 +1305,16 @@ function artifactGuardTest(target) {
       ...(agentType ? { agent_type: agentType } : {}),
     });
 
+  // Filenames here are the shapes the pipeline actually writes on disk. An
+  // earlier `/^phase-\d+.*\.md$/` pattern matched only a bare "phase-N-...md",
+  // which the plan agent never produces (it writes "ultracode-phase-N-...md"),
+  // so the rule silently enforced nothing for phase files.
   for (const name of [
     "ultracode-spec-2026-01-01-topic.md",
     "ultracode-plan-2026-01-01-topic.md",
     "plan.md",
-    "phase-2-service-layer.md",
+    "ultracode-phase-2-service-layer.md",
+    "ultracode-phase-10-d6-wire-envs-migrate-tests.md",
   ]) {
     const denied = JSON.parse(run(`/repo/.claude/ultracode/session/x/${name}`)).hookSpecificOutput;
     assert.equal(denied.permissionDecision, "deny", name);
@@ -1203,12 +1326,508 @@ function artifactGuardTest(target) {
     run("/repo/.claude/ultracode/session/x/ultracode-spec-2026-01-01-topic.md", "ultracode:generate-spec"),
     "",
   );
+
+  // Ledger ownership (hooks/lib/ledger-policy.js) binds every writer, unlike the
+  // spec/plan rule above which exempts the owning subagent.
+  const ledgerDenied = (name, agentType) => {
+    const raw = run(`/repo/.claude/ultracode/session/x/${name}`, agentType);
+    assert.notEqual(raw, "", `${name} as ${agentType || "orchestrator"} should be denied`);
+    return JSON.parse(raw).hookSpecificOutput.permissionDecisionReason;
+  };
+  const ledgerAllowed = (name, agentType) =>
+    assert.equal(
+      run(`/repo/.claude/ultracode/session/x/${name}`, agentType),
+      "",
+      `${name} as ${agentType || "orchestrator"} should be allowed`,
+    );
+
+  // Hook-owned: no model-issued write is ever legitimate. factcheck.json is the
+  // sharp case — mcp/gate-server.js honors an "approved" decision only when this
+  // file already carries a fact-check PASS, so a hand-written value forges the gate.
+  for (const writer of [undefined, "ultracode:fact-check", "ultracode:implement"]) {
+    assert.match(ledgerDenied("factcheck.json", writer), /never written by hand/);
+    assert.match(ledgerDenied("progress.json", writer), /never written by hand/);
+    assert.match(ledgerDenied("build-streak.json", writer), /never written by hand/);
+  }
+
+  // Agent-owned: only the role that did the work may write its ledger.
+  assert.match(ledgerDenied("ultracode-review-ledger.md"), /not the orchestrator/);
+  ledgerAllowed("ultracode-review-ledger.md", "ultracode:code-reviewer");
+  ledgerAllowed("ultracode-review-ledger.md", "ultracode:implement");
+  ledgerAllowed("ultracode-review-ledger-phase-12.md", "ultracode:write-test");
+  assert.match(ledgerDenied("ultracode-review-ledger.md", "ultracode:explore"), /not ultracode:explore/);
+
+  assert.match(ledgerDenied("ultracode-security-block.json"), /not the orchestrator/);
+  ledgerAllowed("ultracode-security-block.json", "ultracode:code-reviewer");
+  assert.match(
+    ledgerDenied("ultracode-security-block.json", "ultracode:implement"),
+    /not ultracode:implement/,
+  );
+
+  assert.match(ledgerDenied("ultracode-implement-progress.md"), /not the orchestrator/);
+  ledgerAllowed("ultracode-implement-progress.md", "ultracode:implement");
+  assert.match(
+    ledgerDenied("ultracode-implement-progress.md", "ultracode:write-test"),
+    /not ultracode:write-test/,
+  );
+
+  // A ledger is protected by name wherever it sits, and ordinary reports are not.
+  assert.notEqual(run("/tmp/elsewhere/factcheck.json"), "");
+  ledgerAllowed("ultracode-implement-phase-3.md", "ultracode:implement");
 }
 
 test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts subagents", () => {
   artifactGuardTest("claude");
   artifactGuardTest("codex");
   artifactGuardTest("grok");
+});
+
+// A failing Bash call reaches a PostToolUse hook with its result text prefixed
+// "Exit code N" — the harness's own report, and the only exit status available
+// (a successful call's tool_response is { stdout, stderr, interrupted, ... } with
+// no code at all). build-signal.js keys off that prefix.
+const BUILD_FAIL_OUTPUT = [
+  "Exit code 1",
+  "[ERROR] /r/src/main/java/Foo.java:[11,2] cannot find symbol",
+  "[ERROR] Failed to execute goal maven-compiler-plugin:3.14.1:compile (default-compile) on project core: Compilation failure",
+].join("\n");
+
+function buildStreakTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-streak",
+  );
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      commands: {
+        build: "./mvnw -q -T1C compile",
+        test: "./mvnw test -Ptest",
+        testOne: "./mvnw test -Ptest -pl {MODULE} -am -Dtest={TEST}",
+      },
+    }),
+    "utf-8",
+  );
+  const counter = path.join(pluginRoot, "hooks", "build-streak.js");
+  const gate = path.join(pluginRoot, "hooks", "build-streak-gate.js");
+  const statePath = path.join(sessionDir, "build-streak.json");
+  const base = { cwd: repo, session_id: sessionId, sessionId };
+
+  const post = (command, result, agentType = "ultracode:implement", extra = {}) =>
+    runHook(
+      counter,
+      {
+        ...base,
+        ...(agentType ? { agent_type: agentType } : {}),
+        tool_name: "Bash",
+        tool_input: { command },
+        tool_response: { result, stdout: result, stderr: "", interrupted: false, ...extra },
+      },
+      env,
+    );
+  const pre = (command, agentType = "ultracode:implement") =>
+    runHook(
+      gate,
+      {
+        ...base,
+        ...(agentType ? { agent_type: agentType } : {}),
+        tool_name: "Bash",
+        tool_input: { command },
+      },
+      env,
+    );
+  const streakOf = (agent) =>
+    (JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks[agent] || {}).consecutiveFailures || 0;
+
+  // A non-build command is never counted, so no state file is even created.
+  assert.equal(post("ls -la src", "Exit code 0\nsrc"), "");
+  assert.equal(fs.existsSync(statePath), false, `${target}: ls must not create streak state`);
+
+  // Failures accumulate; the warn threshold speaks up without blocking.
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    assert.equal(pre("./mvnw -q -T1C compile"), "", `${target}: attempt ${attempt} must be allowed`);
+    const out = post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
+    assert.equal(streakOf("implement"), attempt, `${target}: streak after ${attempt}`);
+    if (attempt < 3) {
+      // Below the warn threshold the hook is silent unless this repo has a
+      // recorded lesson for the diagnostic — this fixture has none.
+      assert.equal(out, "", `${target}: no warning before the third failure`);
+    } else {
+      const context = JSON.parse(out).hookSpecificOutput.additionalContext;
+      assert.match(context, /consecutive failing build\/test commands/);
+      assert.match(context, /same diagnostic is repeating/);
+      assert.match(context, /STUCK:/);
+    }
+  }
+
+  // The fifth failure reaches the deny threshold; the sixth build call is refused.
+  assert.equal(pre("./mvnw -q -T1C compile"), "");
+  post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
+  assert.equal(streakOf("implement"), 5);
+  const denied = JSON.parse(pre("./mvnw -q -T1C compile")).hookSpecificOutput;
+  assert.equal(denied.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /5 consecutive build\/test failures/);
+  assert.match(denied.permissionDecisionReason, /STUCK: /);
+  // A test command is the same loop and is refused too, but reading is not.
+  assert.match(
+    JSON.parse(pre("./mvnw test -Ptest -pl core -am -Dtest=FooTest")).hookSpecificOutput
+      .permissionDecision,
+    /deny/,
+  );
+  assert.equal(pre("cat src/main/java/Foo.java"), "");
+
+  // A pass clears the streak, re-opens the gate, and records the recovery for
+  // the failure-lesson stage to convert into a durable lesson.
+  post("./mvnw -q -T1C compile", "BUILD SUCCESS");
+  assert.equal(streakOf("implement"), 0);
+  assert.equal(pre("./mvnw -q -T1C compile"), "");
+  const recovered = JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implement
+    .recoveredSignatures;
+  assert.equal(recovered.length, 1);
+  assert.match(recovered[0].signature, /cannot find symbol/);
+  assert.equal(recovered[0].streak, 5);
+  assert.equal(recovered[0].lessonRecorded, false);
+
+  // An interrupted call is not evidence either way: it must not count, and must
+  // not clear an existing streak.
+  post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
+  assert.equal(streakOf("implement"), 1);
+  post("./mvnw -q -T1C compile", "", { interrupted: true });
+  assert.equal(streakOf("implement"), 1, `${target}: interrupted must not change the streak`);
+
+  // Streaks are per agent, and the orchestrator is exempt entirely — escalation
+  // means handing back to the orchestrator, which it cannot do to itself.
+  post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT, "ultracode:write-test");
+  assert.equal(streakOf("write-test"), 1);
+  assert.equal(streakOf("implement"), 1);
+  assert.equal(post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT, null), "");
+  const streaks = JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks;
+  assert.deepEqual(Object.keys(streaks).sort(), ["implement", "write-test"]);
+  assert.equal(pre("./mvnw -q -T1C compile", null), "");
+}
+
+test("build-streak counts consecutive failures and the gate forces escalation at five", () => {
+  buildStreakTest("claude");
+  buildStreakTest("codex");
+  buildStreakTest("grok");
+});
+
+// The failure→recovery→lesson loop. 42.9% of diagnostic occurrences in the
+// recorded corpus were repeats of a signature already seen, and 12% of distinct
+// signatures recurred across separate SESSIONS — recurrence a recorded lesson
+// could have prevented. The recall side is done by the hook rather than asked of
+// the agent, so it costs no tool call and cannot be skipped.
+function failureLessonTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-lesson",
+  );
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "./mvnw -q compile" } }),
+    "utf-8",
+  );
+  const { recordLesson } = require(path.join(pluginRoot, "mcp", "lib", "memory.js"));
+  const dbPath = path.join(repo, runtimeDir, "memory", "knowledge.sqlite3");
+  recordLesson(dbPath, {
+    area: "core",
+    lesson:
+      "AutoConfigureTestDatabase lives at org.springframework.boot.test.autoconfigure.jdbc, not under boot.data.jpa.*",
+    source: "ultracode:implement",
+  });
+
+  const failure = [
+    "Exit code 1",
+    "[ERROR] /r/src/Foo.java:[11,63] package AutoConfigureTestDatabase does not exist",
+  ].join("\n");
+  const post = (result) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "build-streak.js"),
+      {
+        cwd: repo,
+        session_id: sessionId,
+        sessionId,
+        agent_type: "ultracode:implement",
+        tool_name: "Bash",
+        tool_input: { command: "./mvnw -q compile" },
+        tool_response: { result, stdout: result, stderr: "", interrupted: false },
+      },
+      env,
+    );
+  const contextOf = (out) => (out.trim() ? JSON.parse(out).hookSpecificOutput.additionalContext : null);
+
+  // One failure is not yet a pattern; the hook stays quiet.
+  assert.equal(contextOf(post(failure)), null, `${target}: silent on the first failure`);
+  // The second hands the recorded lesson over unprompted.
+  const recalled = contextOf(post(failure));
+  assert.match(recalled, /already recorded a lesson/, `${target}: lesson recalled at the second failure`);
+  assert.match(recalled, /boot\.test\.autoconfigure\.jdbc/);
+  assert.match(recalled, /\[core\]/);
+
+  // A verified pass after a real streak asks for the fix to be recorded, and
+  // leaves the pending flag behind so the omission is visible.
+  post(failure);
+  const recovery = contextOf(post("BUILD SUCCESS"));
+  assert.match(recovery, /that passed after 3 consecutive failures/);
+  assert.match(recovery, /ultracode_memory/);
+  const recovered = JSON.parse(fs.readFileSync(path.join(sessionDir, "build-streak.json"), "utf-8"))
+    .streaks.implement.recoveredSignatures;
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].lessonRecorded, false);
+  assert.match(recovered[0].signature, /AutoConfigureTestDatabase does not exist/);
+
+  // A pass that never had a streak is not a "recovery" and must not manufacture
+  // a lesson to record.
+  post("BUILD SUCCESS");
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(sessionDir, "build-streak.json"), "utf-8")).streaks.implement
+      .recoveredSignatures.length,
+    1,
+    `${target}: a plain success records no lesson`,
+  );
+}
+
+test("failure lessons are recalled on repeat and requested on verified recovery", () => {
+  failureLessonTest("claude");
+  failureLessonTest("codex");
+  failureLessonTest("grok");
+});
+
+// ultracode_report exists because agents naming their own reports produced 27
+// distinct filename shapes across 1,864 artifacts, and the next stage then had to
+// guess (32 hard read failures on pipeline artifacts in the Grok corpus alone).
+// The orchestrator declares the path; the tool writes it.
+function reportToolTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-report",
+  );
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "./mvnw compile" } }),
+    "utf-8",
+  );
+  const { writeReport, pendingLessons, markLessonsRecorded } = require(
+    path.join(pluginRoot, "mcp", "lib", "report.js"),
+  );
+  const reportPath = path.join(sessionDir, "ultracode-implement-phase-3.md");
+  const spawnHook = (prompt) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "spawn-scope.js"),
+      { cwd: repo, session_id: sessionId, sessionId, tool_input: { subagent_type: "ultracode:implement", prompt } },
+      env,
+    );
+
+  // Without a declared path the tool refuses rather than inventing a name.
+  const undeclared = writeReport(sessionDir, "ultracode:implement", "# Report");
+  assert.equal(undeclared.ok, false);
+  assert.match(undeclared.message, /no report path was declared/);
+
+  spawnHook(
+    `Repo root: ${repo}\nSession dir: ${sessionDir}\nNo plan: demo.\nReport file: ${reportPath}`,
+  );
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"),
+  ).agents.implement;
+  assert.equal(recorded.reportFile, reportPath);
+
+  const written = writeReport(sessionDir, "ultracode:implement", "# Change Report\nDid the thing.");
+  assert.equal(written.ok, true);
+  assert.equal(written.path, reportPath);
+  assert.match(fs.readFileSync(reportPath, "utf-8"), /Did the thing/);
+  assert.equal(writeReport(sessionDir, "ultracode:implement", "   ").ok, false, `${target}: empty refused`);
+
+  // The declared path is orchestrator-supplied but the tool writes with the MCP
+  // server's own privileges, so it is confined to the session dir regardless.
+  const state = JSON.parse(fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"));
+  state.agents.implement.reportFile = path.join(os.tmpdir(), "ultracode-escape.md");
+  fs.writeFileSync(path.join(sessionDir, "spawn-scope.json"), JSON.stringify(state), "utf-8");
+  const escaped = writeReport(sessionDir, "ultracode:implement", "x");
+  assert.equal(escaped.ok, false);
+  assert.match(escaped.message, /outside the session dir/);
+  state.agents.implement.reportFile = reportPath;
+  fs.writeFileSync(path.join(sessionDir, "spawn-scope.json"), JSON.stringify(state), "utf-8");
+
+  // A verified failure→recovery that was never turned into a lesson blocks the
+  // report — this is the moment the fix is still in the agent's context.
+  const failure = "Exit code 1\n[ERROR] /r/Foo.java:[11,2] cannot find symbol";
+  const build = (result) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "build-streak.js"),
+      {
+        cwd: repo,
+        session_id: sessionId,
+        sessionId,
+        agent_type: "ultracode:implement",
+        tool_name: "Bash",
+        tool_input: { command: "./mvnw compile" },
+        tool_response: { result, stdout: result, stderr: "", interrupted: false },
+      },
+      env,
+    );
+  for (let i = 0; i < 3; i += 1) build(failure);
+  build("BUILD SUCCESS");
+  assert.equal(pendingLessons(sessionDir, "implement").length, 1);
+  const blocked = writeReport(sessionDir, "ultracode:implement", "# Report");
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.message, /ultracode_memory/);
+  assert.match(blocked.message, /cannot find symbol/);
+
+  // Recording the lesson clears it. The flag is cleared by a lesson landing in
+  // the store, never by an agent asserting it recorded one.
+  assert.equal(markLessonsRecorded(sessionDir, "implement"), 1);
+  assert.equal(writeReport(sessionDir, "ultracode:implement", "# Report\nfinal").ok, true);
+
+  // An explicitly stated reason overrides, and the override is surfaced rather
+  // than silently honored.
+  for (let i = 0; i < 3; i += 1) build(failure);
+  build("BUILD SUCCESS");
+  const forced = writeReport(sessionDir, "ultracode:implement", "# Report", {
+    allowUnrecordedLesson: true,
+  });
+  assert.equal(forced.ok, true);
+  assert.match(forced.message, /unrecorded lesson, as stated/);
+}
+
+test("ultracode_report writes the declared path and gates on unrecorded lessons", () => {
+  reportToolTest("claude");
+  reportToolTest("codex");
+  reportToolTest("grok");
+});
+
+// A Write/Edit inside a subagent's turn carries no spawn prompt, so the phase
+// file's declared file set has to be captured at spawn time (spawn-scope.js) and
+// read back by the guards. Measured justification: of implement runs whose phase
+// file survived on disk, 100% of written paths were derivable from it, while 71%
+// were NOT derivable from the spawn prompt alone.
+function phaseScopeTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-phasescope",
+  );
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "./mvnw compile" } }),
+    "utf-8",
+  );
+  const phaseFile = path.join(sessionDir, "ultracode-phase-3-order-service.md");
+  fs.writeFileSync(
+    phaseFile,
+    [
+      "# Phase 3 — order service",
+      "Modify `core/src/main/java/com/example/order/OrderService.java` to add cancellation.",
+      "Create `core/src/main/java/com/example/order/CancelOrderCommand.java`.",
+      "Record state in ultracode-implement-progress.md and read INVENTORY.md if needed.",
+    ].join("\n\n"),
+    "utf-8",
+  );
+  const base = { cwd: repo, session_id: sessionId, sessionId };
+  const hook = (name) => path.join(pluginRoot, "hooks", name);
+  const reasonOf = (out) => (out.trim() ? JSON.parse(out).hookSpecificOutput.permissionDecisionReason : null);
+
+  // An implement spawn must declare a plan one way or the other.
+  const bare = reasonOf(
+    runHook(hook("pipeline-gate.js"), {
+      ...base,
+      tool_input: {
+        subagent_type: "ultracode:implement",
+        prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nDo the thing.`,
+      },
+    }, env),
+  );
+  assert.match(bare, /without a plan/, `${target}: bare implement spawn is refused`);
+  assert.match(bare, /No plan:/);
+  assert.equal(
+    reasonOf(
+      runHook(hook("pipeline-gate.js"), {
+        ...base,
+        tool_input: {
+          subagent_type: "ultracode:implement",
+          prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nNo plan: one-line typo fix.`,
+        },
+      }, env),
+    ),
+    null,
+    `${target}: an explicit No plan: is accepted`,
+  );
+
+  // Recording the scope, then holding the agent to it.
+  runHook(hook("spawn-scope.js"), {
+    ...base,
+    tool_input: {
+      subagent_type: "ultracode:implement",
+      prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nPhase file: ${phaseFile}`,
+    },
+  }, env);
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"),
+  ).agents.implement;
+  assert.equal(recorded.phaseFileFound, true);
+  assert.deepEqual(recorded.files.sort(), [
+    "core/src/main/java/com/example/order/CancelOrderCommand.java",
+    "core/src/main/java/com/example/order/OrderService.java",
+  ]);
+  // ultracode's own artifacts are governed by ledger-policy, not by this scope.
+  assert.ok(!JSON.stringify(recorded).includes("implement-progress"));
+  assert.ok(!JSON.stringify(recorded).includes("INVENTORY"));
+
+  const write = (filePath) =>
+    reasonOf(
+      runHook(hook("scope-guard.js"), {
+        ...base,
+        agent_type: "ultracode:implement",
+        tool_input: { file_path: filePath },
+      }, env),
+    );
+  assert.equal(write(path.join(repo, "core/src/main/java/com/example/order/OrderService.java")), null);
+  // A sibling in a declared directory is allowed: implementing a named service
+  // legitimately adds types no plan enumerates line by line.
+  assert.equal(write(path.join(repo, "core/src/main/java/com/example/order/OrderStatus.java")), null);
+  assert.match(
+    write(path.join(repo, "billing/src/main/java/com/example/billing/Invoice.java")),
+    /outside the file set this phase declares/,
+    `${target}: an unrelated module is refused`,
+  );
+  // Its own session report stays writable.
+  assert.equal(write(path.join(sessionDir, "ultracode-implement-phase-3.md")), null);
+
+  // Shell writes are confined identically, so Bash is not an escape hatch.
+  const bash = (command) =>
+    reasonOf(
+      runHook(hook("bash-scope-guard.js"), {
+        ...base,
+        agent_type: "ultracode:implement",
+        tool_input: { command },
+      }, env),
+    );
+  assert.equal(bash(`echo x > ${repo}/core/src/main/java/com/example/order/Foo.java`), null);
+  assert.match(bash(`echo x > ${repo}/billing/src/Evil.java`), /outside the file set/);
+
+  // No phase file = nothing to scope to, so behavior stays as it was. A guard
+  // that denied here would break every legitimate inline task.
+  fs.rmSync(path.join(sessionDir, "spawn-scope.json"));
+  runHook(hook("spawn-scope.js"), {
+    ...base,
+    tool_input: {
+      subagent_type: "ultracode:implement",
+      prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nNo plan: tiny fix.`,
+    },
+  }, env);
+  assert.equal(write(path.join(repo, "billing/src/main/java/com/example/billing/Invoice.java")), null);
+
+  // And Constraint 6 still outranks all of it.
+  assert.match(
+    write(path.join(repo, "core/src/test/java/com/example/order/OrderServiceTest.java")),
+    /test file/,
+    `${target}: implement still cannot write tests`,
+  );
+}
+
+test("phase-scoped allowlist confines implement to the files its phase declares", () => {
+  phaseScopeTest("claude");
+  phaseScopeTest("codex");
+  phaseScopeTest("grok");
 });
 
 function scopeGuardFixture(target, prefix) {
@@ -1383,8 +2002,14 @@ function pipelineGateTest(target) {
   );
   assert.equal(run("plan"), "");
 
-  // An inline no-plan implement spawn (no Phase file:) is exempt from the plan gate.
-  assert.equal(run("implement"), "");
+  // An inline no-plan implement spawn is still exempt from the PLAN gate, but it
+  // must now say it is one. Omitting Phase file: used to be a silent exemption,
+  // and 96% of recorded implement spawns took it — so a bare spawn is refused and
+  // an explicit "No plan:" is what carries the exemption.
+  const noDeclaration = JSON.parse(run("implement")).hookSpecificOutput;
+  assert.equal(noDeclaration.permissionDecision, "deny");
+  assert.match(noDeclaration.permissionDecisionReason, /without a plan/);
+  assert.equal(run("implement", "\nNo plan: one-line typo fix."), "");
 
   const phaseLine = `\nPhase file: ${path.join(sessionDir, "phase-1.md")}.`;
   const implementDenied = JSON.parse(run("implement", phaseLine)).hookSpecificOutput;
@@ -1700,6 +2325,8 @@ test("every plugin distribution includes target hooks", () => {
       "artifact-guard.js",
       "bash-guard.js",
       "bash-scope-guard.js",
+      "build-streak-gate.js",
+      "build-streak.js",
       "factcheck-record.js",
       "hooks.json",
       "model-router.js",
@@ -1712,11 +2339,19 @@ test("every plugin distribution includes target hooks", () => {
       "session-resume.js",
       "skill-init-guard.js",
       "spawn-log.js",
+      "spawn-scope.js",
     ]);
-    assert.ok(fs.statSync(path.join(hookDir, "lib", "common.js")).isFile());
-    assert.ok(fs.statSync(path.join(hookDir, "lib", "session.js")).isFile());
-    assert.ok(fs.statSync(path.join(hookDir, "lib", "scope-policy.js")).isFile());
-    assert.ok(fs.statSync(path.join(hookDir, "lib", "shell-paths.js")).isFile());
+    for (const lib of [
+      "common.js",
+      "session.js",
+      "scope-policy.js",
+      "ledger-policy.js",
+      "build-signal.js",
+      "context-brief.js",
+      "shell-paths.js",
+    ]) {
+      assert.ok(fs.statSync(path.join(hookDir, "lib", lib)).isFile(), `${target}: lib/${lib}`);
+    }
     const config = JSON.parse(
       fs.readFileSync(path.join(hookDir, "hooks.json"), "utf-8"),
     );
@@ -1901,7 +2536,7 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.ok(!explore.includes("CLAUDE_PLUGIN_ROOT"));
 
   const orchestrate = fs.readFileSync(
-    path.join(GROK_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+    path.join(GROK_PLUGIN_ROOT, "commands", "orchestrate.md"),
     "utf-8",
   );
   assert.match(orchestrate, /spawn_subagent/);
@@ -1951,7 +2586,11 @@ test("grok hooks accept camelCase payloads", () => {
       { GROK_PLUGIN_ROOT: GROK_PLUGIN_ROOT },
     ),
   );
-  assert.equal(denied.decision, "deny");
+  // A PreToolUse deny lives only in hookSpecificOutput.permissionDecision — the
+  // legacy top-level `decision` field accepts "approve"/"block" only, so emitting
+  // "deny" there fails the harness schema check and silently drops the whole
+  // payload (hooks/lib/common.js, denyPreToolUse).
+  assert.equal(denied.decision, undefined);
   assert.equal(denied.hookSpecificOutput.permissionDecision, "deny");
 
   const bashDenied = JSON.parse(
@@ -1961,5 +2600,6 @@ test("grok hooks accept camelCase payloads", () => {
       { GROK_PLUGIN_ROOT: GROK_PLUGIN_ROOT },
     ),
   );
-  assert.equal(bashDenied.decision, "deny");
+  assert.equal(bashDenied.decision, undefined);
+  assert.equal(bashDenied.hookSpecificOutput.permissionDecision, "deny");
 });

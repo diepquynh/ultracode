@@ -8,9 +8,16 @@
 // through a heredoc instead of the Write tool (agents/implement/prompt.md
 // Constraint 6).
 //
-// Reads a PreToolUse hook payload (matcher: Bash) from stdin. Scoped to
-// ultracode subagents (the `agent_type` field Claude Code adds inside a
-// subagent's own turn); the orchestrator's own Bash calls are unaffected.
+// Reads a PreToolUse hook payload (matcher: Bash) from stdin. The per-agent
+// scope check is scoped to ultracode subagents (the `agent_type` field Claude
+// Code adds inside a subagent's own turn); the orchestrator's own Bash calls are
+// unaffected by it.
+//
+// The ledger check (hooks/lib/ledger-policy.js) deliberately runs FIRST and for
+// every caller, orchestrator included. Otherwise the orchestrator — which has no
+// scope confinement here at all — could forge gated pipeline state with a plain
+// shell redirect (`echo '{"spec":{"verdict":"PASS"}}' > factcheck.json`) and
+// bypass both this hook and artifact-guard.js.
 //
 // Best-effort: hooks/lib/shell-paths.js pattern-matches common write/delete/
 // move idioms, not a full shell parser — see that file's header for exactly
@@ -26,20 +33,38 @@ const {
   bareAgentName,
   hookSessionId,
   resolvePathCandidate,
+  readJsonIfFile,
 } = require("./lib/common");
+const path = require("node:path");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 const { checkScope } = require("./lib/scope-policy");
+const { checkLedger } = require("./lib/ledger-policy");
 const { extractWriteTargets } = require("./lib/shell-paths");
 
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
   const agent = bareAgentName(hookAgentType(hookInput));
-  if (!agent) return 0;
 
   const toolInput = hookToolInput(hookInput);
   const command = toolInput && typeof toolInput.command === "string" ? toolInput.command : "";
   if (!command) return 0;
+
+  const writeTargets = extractWriteTargets(command);
+
+  // Ledger ownership first, for every caller including the orchestrator.
+  for (const candidate of writeTargets) {
+    const ledger = checkLedger(agent, candidate);
+    if (!ledger.allowed) {
+      denyPreToolUse(
+        `ultracode: refusing this Bash command — it writes, moves, or deletes "${candidate}". ` +
+          `${ledger.reason}`,
+      );
+      return 0;
+    }
+  }
+
+  if (!agent) return 0;
 
   const info = pluginTargetInfo();
   if (!info) return 0;
@@ -47,9 +72,17 @@ async function main() {
   const repoRoot = resolveRepoRoot(hookInput, "");
   const sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
 
-  for (const candidate of extractWriteTargets(command)) {
+  const state = readJsonIfFile(path.join(sessionDir, "spawn-scope.json"));
+  const declaredScope = (state && state.agents && state.agents[agent]) || null;
+
+  for (const candidate of writeTargets) {
     const target = resolvePathCandidate(repoRoot, candidate);
-    const { allowed, reason } = checkScope(agent, target, { repoRoot, sessionDir, info });
+    const { allowed, reason } = checkScope(agent, target, {
+      repoRoot,
+      sessionDir,
+      info,
+      declaredScope,
+    });
     if (!allowed) {
       denyPreToolUse(
         `ultracode: refusing this Bash command for ultracode:${agent} — it writes to, moves, or deletes ` +

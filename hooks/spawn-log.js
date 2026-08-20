@@ -56,7 +56,11 @@ function statusOf(toolResponse) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  if (hookAgentType(hookInput)) return 0;
+
+  // A spawn made from inside another agent's turn is still a spawn, and it is
+  // exactly the kind that goes missing from a post-compaction reconstruction.
+  // Recorded so the record is complete, tagged so it is distinguishable.
+  const parentAgent = hookAgentType(hookInput);
 
   const toolInput = hookToolInput(hookInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
@@ -81,6 +85,8 @@ async function main() {
     phase: phaseMatch ? `phase-${phaseMatch[1]}` : null,
     status: statusOf(hookToolResponse(hookInput)),
     summary: summarize(hookToolResponse(hookInput)),
+    ...(parentAgent ? { spawnedBy: parentAgent } : {}),
+    ...(field(prompt, "Report file") ? { reportFile: field(prompt, "Report file") } : {}),
   };
 
   try {

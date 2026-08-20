@@ -22,9 +22,17 @@ const {
   bareAgentName,
   hookSessionId,
   resolvePathCandidate,
+  readJsonIfFile,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 const { checkScope } = require("./lib/scope-policy");
+
+// The write scope hooks/spawn-scope.js captured for this agent at spawn time.
+// Absent record = unscoped, which keeps the pre-existing permissive behavior.
+function declaredScopeFor(sessionDir, agent) {
+  const state = readJsonIfFile(path.join(sessionDir, "spawn-scope.json"));
+  return (state && state.agents && state.agents[agent]) || null;
+}
 
 async function main() {
   const hookInput = await readHookInput();
@@ -46,7 +54,12 @@ async function main() {
   const sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   const target = resolvePathCandidate(repoRoot, filePath);
 
-  const { allowed, reason } = checkScope(agent, target, { repoRoot, sessionDir, info });
+  const { allowed, reason } = checkScope(agent, target, {
+    repoRoot,
+    sessionDir,
+    info,
+    declaredScope: declaredScopeFor(sessionDir, agent),
+  });
   if (!allowed) {
     denyPreToolUse(
       `ultracode: refusing to let ultracode:${agent} write "${filePath}" — ${reason}. ` +

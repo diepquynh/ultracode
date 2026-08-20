@@ -17,6 +17,7 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { pluginTargetInfo } = require("../hooks/lib/session");
 const { recordLesson, recallLessons, deleteLesson } = require("./lib/memory");
 const { recordGateDecision } = require("./lib/gate");
+const { writeReport, markLessonsRecorded } = require("./lib/report");
 
 const server = new McpServer({ name: "ultracode-gate", version: "1.0.0" });
 
@@ -90,13 +91,66 @@ server.tool(
       ),
     lesson: z.string().describe("The one-line lesson."),
     source: z.string().describe('Which agent recorded this, e.g. "ultracode:implement".'),
+    session_dir: z
+      .string()
+      .optional()
+      .describe(
+        "Pass the prompt's Session dir: value when this lesson comes from recovering a build failure — " +
+          "it clears the pending-lesson block on ultracode_report. Optional otherwise.",
+      ),
   },
-  async ({ repo_root, area, lesson, source }) => {
+  async ({ repo_root, area, lesson, source, session_dir }) => {
     const dbPath = resolveMemoryDbPath(repo_root);
     if (!dbPath) return missingRuntimeDirError();
     const total = recordLesson(dbPath, { area, lesson, source });
+    // Keeps ultracode_report's gate honest: the flag is cleared by a lesson
+    // actually landing in the store, never by an agent asserting it did.
+    const cleared = session_dir ? markLessonsRecorded(session_dir, source) : 0;
     return {
-      content: [{ type: "text", text: `Recorded lesson for [${area}] in ${dbPath} (${total} lessons total).` }],
+      content: [
+        {
+          type: "text",
+          text:
+            `Recorded lesson for [${area}] in ${dbPath} (${total} lessons total).` +
+            (cleared ? ` Cleared ${cleared} pending failure-recovery lesson(s).` : ""),
+        },
+      ],
+    };
+  },
+);
+
+// ultracode_report — the pipeline's stage-to-stage handoff. The orchestrator
+// declares the path; this tool writes it. See mcp/lib/report.js for why the agent
+// does not get to choose the filename.
+server.tool(
+  "ultracode_report",
+  "Write your stage's report to the exact path the orchestrator declared for this spawn. Use this instead " +
+    "of writing the report file yourself: the next stage reads the declared path, and a filename you invent " +
+    "is a filename it cannot find. Pass the full markdown body as `content`; the tool owns the location. It " +
+    "refuses if you recovered from a build-failure streak without recording what fixed it.",
+  {
+    session_dir: z
+      .string()
+      .describe("The exact Session dir: value from your prompt."),
+    agent: z
+      .string()
+      .describe('Your own agent name, e.g. "ultracode:implement" (the prefix is optional).'),
+    content: z.string().describe("The complete markdown body of the report."),
+    unrecorded_lesson_reason: z
+      .string()
+      .optional()
+      .describe(
+        "Only when the tool refused for an unrecorded failure-recovery lesson AND the fix genuinely " +
+          "teaches nothing reusable: one line saying why. Do not use this to skip recording a real lesson.",
+      ),
+  },
+  async ({ session_dir, agent, content, unrecorded_lesson_reason }) => {
+    const result = writeReport(session_dir, agent, content, {
+      allowUnrecordedLesson: Boolean(unrecorded_lesson_reason && unrecorded_lesson_reason.trim()),
+    });
+    return {
+      ...(result.ok ? {} : { isError: true }),
+      content: [{ type: "text", text: result.message }],
     };
   },
 );

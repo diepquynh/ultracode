@@ -6,9 +6,16 @@
 // Reads a PreToolUse hook payload (matcher: Task|Agent / Agent) from stdin.
 // Approval is recorded by the orchestrator calling the ultracode_gate MCP tool
 // (mcp/gate-server.js), which writes {session-dir}/gates.json. A plan-driven
-// spawn (one whose prompt carries a Phase file:) is gated on gates.plan; an
-// inline no-plan spawn (Rule M3's last bullet) carries no Phase file: and is
-// exempt, matching current behavior.
+// spawn (one whose prompt carries a Phase file:) is gated on gates.plan.
+//
+// An inline no-plan ultracode:implement spawn (Rule M3's last bullet) is still
+// permitted, but it must now SAY it is one. Omitting Phase file: used to be a
+// silent exemption from every plan gate, and in the recorded corpus 96% of
+// implement spawns (248 of 258) took it — the plan tier was effectively optional
+// in practice while appearing mandatory in the rules. Requiring an explicit
+// "No plan:" line turns that from an accident into a decision: the orchestrator
+// states why there is no plan, and the omission becomes visible in the transcript
+// instead of looking identical to a spawn that simply forgot the phase file.
 
 "use strict";
 
@@ -45,7 +52,23 @@ async function main() {
   const agent = agentFromToolInput(toolInput);
   const needsSpecGate = agent === "plan";
   const prompt = promptFromToolInput(toolInput);
-  const needsPlanGate = PLAN_GATED_AGENTS.has(agent) && Boolean(field(prompt, "Phase file"));
+  const phaseFile = field(prompt, "Phase file");
+  const needsPlanGate = PLAN_GATED_AGENTS.has(agent) && Boolean(phaseFile);
+
+  // Scoped to implement alone: it is the agent that writes code, and the one the
+  // bypass data is about. write-test / EPA / module-documentation legitimately
+  // run standalone for a directly requested stage.
+  if (agent === "implement" && !phaseFile && !field(prompt, "No plan")) {
+    denyPreToolUse(
+      "ultracode: refusing to spawn ultracode:implement without a plan. Add ONE of:\n" +
+        "  Phase file: {session-dir}/ultracode-phase-{N}-{slug}.md   — the normal path, once the plan is approved\n" +
+        "  No plan: {one line saying why this task does not need one}  — for a genuinely small inline change\n" +
+        "A phase file also scopes the agent's writes to the files the phase declares, so a planned spawn is " +
+        "both gated and confined; a bare spawn is neither.",
+    );
+    return 0;
+  }
+
   if (!needsSpecGate && !needsPlanGate) return 0;
 
   const repoRoot = resolveRepoRoot(hookInput, prompt);

@@ -14,8 +14,8 @@ yourself — you do not delegate back to the orchestrator except through the han
 | --- | --- |
 | **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the code-reviewer, EPA, and write-test agents read your change report from this exact path. |
-| **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — read it first. Its `commands` map holds the exact shell strings for `build`, `test`, `testOne`, `format`, `lint`. Use those verbatim; never hardcode a build tool. |
-| **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — routing tables (Skill Application Mapping, Module/Area Map) and the **Review Rule Set** (stable rule IDs + severity). |
+| **repo brief** | A `## Repo brief — resolved for ultracode:implement` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `build`/`test`/`format` command strings, the skill files to read **by path**, this repo's conventions, and the module-map rows covering your paths. It is your routing source — use it verbatim and do not re-derive it. |
+| **repo profile / inventory** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries what you need from them; open them **only** if you need a table the brief does not include (e.g. the full Review Rule Set text). Never re-read them just to confirm a command the brief already gave you. |
 | **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt when the plan tier was skipped for a lower-stakes request. |
 | **prior phase reports** | Comma-separated implement-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
 | **step** | One atomic unit of work: create or modify exactly one file, then verify. |
@@ -42,6 +42,16 @@ orchestrator will help.
    correct implementation. Sign: you are guessing at signatures, types, or logic the plan does not specify.
 4. **Cascading breakage.** Your edit to one file breaks others you did not expect and cannot fix without
    risking more breakage.
+
+**Trigger 1 is enforced, not advisory.** Your consecutive failing build/test commands are counted. At three you
+receive a warning naming the repeating diagnostic; at five, every further build/test command is refused until
+you hand back. That refusal is not a tool error, and not something to route around by rewording the command,
+splitting it, or reaching for a different build target — it means trigger 1 has fired and you escalate now.
+
+**Before each retry past the warning, check whether this failure is already solved.** Call
+`ultracode_memory_recall` with the diagnostic text as the query and the affected module as the area. A repo
+accumulates lessons from exactly this situation, so the fix for the error in front of you may already be
+recorded. If a recalled lesson resolves it, apply it and say which lesson you used in your report.
 
 **How to escalate:**
 
@@ -134,26 +144,26 @@ so you do not repeat the approach.
 
 ## Step 2 — Load Skills
 
-Confirm the repo root is your working directory before you load anything (Definitions): {{tool_skill}} looks
-for skills relative to it, so a load from the wrong directory fails or activates another repo's skill.
+**Load a per-repo skill by {{tool_read}}ing its `SKILL.md` path. Do NOT pass its name to {{tool_skill}}.**
+These skills live in the target repo, not in the plugin, so the harness has no registration for them and a
+call by name fails with `Unknown skill` — the largest single error class in this pipeline's recorded history.
+Your **repo brief** lists each skill's exact path; read those files.
 
-Load the `convention` skill via {{tool_skill}} now — it is always on for any code edit. Load every other
-skill on demand.
+Load the `convention` skill (the `convention`-kind row in your brief) first — it is always on for any code
+edit. Load every other skill on demand. Follow the instructions in each file exactly.
 
-**IMPORTANT: Always load skills with {{tool_skill}}.**
-A named skill is not loaded until you do that. Follow the loaded instructions exactly.
-
-1. **Per-phase invocation:** in the phase file, find the `## Required Skills` section and load each listed
-   skill via {{tool_skill}} BEFORE Step 3. Load ALL of them; skip none.
+1. **Per-phase invocation:** in the phase file, find the `## Required Skills` section and read each listed
+   skill's path BEFORE Step 3. Load ALL of them; skip none.
 2. **Inline invocation:** the prompt includes a `Required skills:` line — load each skill listed.
 3. **Code-reviewer fix invocation:** the prompt includes a `Required skills:` line — load each. If none is
-   given, consult the inventory's **Skill Application Mapping** for the file types being fixed and load those.
+   given, use the brief's skill rows for the file types being fixed.
 
-Never hardcode skill names beyond `convention`: the set for this phase is whatever the orchestrator or plan
-named (both derive it from the inventory's Skill Application Mapping). If no explicit list is provided, resolve
-it yourself from that mapping in `{{runtime_dir}}/INVENTORY.md`.
+Resolve a name to a path from your brief's **Skills** section. If a named skill is not in the brief, look it
+up in the inventory's **Skill Application Mapping** `Path` column — that is the only reason to open the
+inventory here. Never hardcode skill names beyond `convention`: the set for this phase is whatever the
+orchestrator or plan named.
 
-**Pass:** `convention` plus all named skills loaded → Step 3.
+**Pass:** `convention` plus all named skills read → Step 3.
 
 ## Step 3 — Execute Steps in Order
 
@@ -194,9 +204,8 @@ the skill templates.
 
 ### 3C — Verify
 
-Immediately after the edit, run the repo profile's **build** command (read it from
-`{repo-root}/{{runtime_dir}}/repo-profile.json` → `commands.build`; if it contains a `{MODULE}` placeholder,
-substitute the module for this step). Run it with the repo root as the working directory. {{tool_read}} the COMPLETE output — scroll to the last lines and confirm a
+Immediately after the edit, run the **build** command from your repo brief's Commands section (if it contains a
+`{MODULE}` placeholder, substitute the module for this step). Run it with the repo root as the working directory. {{tool_read}} the COMPLETE output — scroll to the last lines and confirm a
 success marker before believing it passed. Do NOT assume success. This agent verifies the build only; tests
 are the `write-test` agent's job.
 
@@ -312,14 +321,19 @@ full output.
 **Pass:** final build passes → Step 7.
 **Fail:** diagnose, fix, re-verify. Do NOT proceed until it passes.
 
-## Step 7 — {{tool_write}} the Change Report
+## Step 7 — Write the Change Report
 
-{{tool_write}} to:
+Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent`
+(`ultracode:implement`), and `content` (the complete markdown below). It writes to the path the orchestrator
+declared for this spawn, so **do not choose a filename and do not {{tool_write}} the report yourself** — the
+code-reviewer, EPA, and write-test agents read that declared path, and a name you invent is a name they cannot
+find.
 
-- Per-phase: `{session-dir}/ultracode-implement-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md`
-- Inline: `{session-dir}/ultracode-implement-{YYYYMMDD}-{HHmmss}-{topic-slug}.md`
+If the tool reports that no path was declared, say so in your return summary and ask the orchestrator for a
+`Report file:` line rather than guessing a name.
 
-`{session-dir}` is the `Session dir:` path from the prompt; `{N}` is the phase number.
+If it refuses because you recovered from a build-failure streak without recording the fix, record it first
+(`ultracode_memory` with the same `session_dir`), then call `ultracode_report` again.
 
 ```markdown
 # Implementation Report: {Topic Title}
