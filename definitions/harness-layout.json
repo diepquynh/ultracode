@@ -39,6 +39,19 @@
       "session_id_agent_names": "`GROK_SESSION_ID`, or `CLAUDE_CODE_SESSION_ID` under Claude Code compatibility",
       "session_id_inheritance": "`GROK_SESSION_ID` is the harness's own session identifier — under Claude Code compatibility `CLAUDE_CODE_SESSION_ID` may also be set — and **every subagent inherits it unchanged**",
       "session_id_unavailable": "If neither `GROK_SESSION_ID` nor `CLAUDE_CODE_SESSION_ID` is set,"
+    },
+    "antigravity": {
+      "state_dir": ".agents",
+      "runtime_dir": ".agents/ultracode",
+      "skills_dir": ".agents/skills",
+      "agents_dir": ".agents/agents",
+      "plugin_root_env": "ANTIGRAVITY_PLUGIN_ROOT",
+      "session_id_expr": "${ANTIGRAVITY_CONVERSATION_ID:-${CONVERSATION_ID:-no-session-id}}",
+      "session_id_source": "`ANTIGRAVITY_CONVERSATION_ID`, else `conversationId` in hook payload (inherited unchanged)",
+      "session_id_names": "`ANTIGRAVITY_CONVERSATION_ID`, else `conversationId`",
+      "session_id_agent_names": "`ANTIGRAVITY_CONVERSATION_ID`, or `conversationId` under Antigravity",
+      "session_id_inheritance": "`ANTIGRAVITY_CONVERSATION_ID` is the harness's conversation identifier, and **every subagent inherits it unchanged**",
+      "session_id_unavailable": "If `ANTIGRAVITY_CONVERSATION_ID` is not set,"
     }
   }
 }

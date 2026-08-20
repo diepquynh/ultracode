@@ -15,19 +15,38 @@ function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
 }
 
+function isAntigravity() {
+  if (
+    process.env.CLAUDE_PLUGIN_ROOT ||
+    process.env.GROK_PLUGIN_ROOT ||
+    process.env.CLAUDE_CODE_SESSION_ID ||
+    process.env.GROK_SESSION_ID ||
+    process.env.CODEX_THREAD_ID
+  ) {
+    return false;
+  }
+  return Boolean(
+    process.env.ANTIGRAVITY_PLUGIN_ROOT ||
+    process.env.AGY_PLUGIN_ROOT ||
+    __dirname.includes("/antigravity/ultracode/hooks") ||
+    __dirname.includes("/.gemini/config/plugins/ultracode/hooks")
+  );
+}
+
 function denyPreToolUse(reason) {
-  // Top-level `decision` is a legacy field that only accepts "approve" | "block" —
-  // "deny" is not a valid value there and fails the harness's JSON schema check,
-  // which silently discards the entire payload (and the deny with it). The only
-  // field that actually blocks a PreToolUse call is hookSpecificOutput.permissionDecision.
-  emit({
+  if (isAntigravity()) {
+    emit({ decision: "deny", reason });
+    return;
+  }
+  const payload = {
     reason,
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
       permissionDecisionReason: reason,
     },
-  });
+  };
+  emit(payload);
 }
 
 // Blocks a UserPromptExpansion (a user typing a skill/command's slash form
@@ -44,6 +63,10 @@ function denyUserPromptExpansion(reason) {
 // build-streak.js warning that a failure streak is building). PostToolUse cannot
 // deny, so additionalContext is the only channel it has.
 function emitAdditionalContext(hookEventName, additionalContext) {
+  if (isAntigravity()) {
+    emit({});
+    return;
+  }
   emit({ hookSpecificOutput: { hookEventName, additionalContext } });
 }
 
@@ -126,7 +149,9 @@ async function readHookInput() {
 
 function pluginRootFromEnv() {
   return path.resolve(
-    process.env.GROK_PLUGIN_ROOT ||
+    process.env.ANTIGRAVITY_PLUGIN_ROOT ||
+      process.env.AGY_PLUGIN_ROOT ||
+      process.env.GROK_PLUGIN_ROOT ||
       process.env.PLUGIN_ROOT ||
       process.env.CLAUDE_PLUGIN_ROOT ||
       path.join(__dirname, "..", ".."),
@@ -142,6 +167,9 @@ function pick(obj, ...keys) {
 }
 
 function hookToolInput(hookInput) {
+  if (hookInput && hookInput.toolCall && typeof hookInput.toolCall === "object") {
+    return hookInput.toolCall.args || hookInput.toolCall.input || null;
+  }
   return pick(hookInput, "tool_input", "toolInput") || null;
 }
 
@@ -152,7 +180,9 @@ function hookToolResponse(hookInput) {
 
 function hookSessionId(hookInput) {
   return (
-    pick(hookInput, "session_id", "sessionId") ||
+    pick(hookInput, "conversationId", "conversation_id", "session_id", "sessionId") ||
+    process.env.ANTIGRAVITY_CONVERSATION_ID ||
+    process.env.AGY_CONVERSATION_ID ||
     process.env.GROK_SESSION_ID ||
     process.env.CLAUDE_CODE_SESSION_ID ||
     process.env.CODEX_THREAD_ID ||
@@ -166,19 +196,33 @@ function hookAgentType(hookInput) {
 
 function bareAgentName(value) {
   if (typeof value !== "string") return "";
-  return value.startsWith("ultracode:") ? value.slice("ultracode:".length) : value;
+  if (value.startsWith("ultracode:")) return value.slice("ultracode:".length);
+  if (value.startsWith("ultracode-")) return value.slice("ultracode-".length);
+  if (value.startsWith("ultracode_")) return value.slice("ultracode_".length);
+  return value;
 }
 
 function agentFromToolInput(toolInput) {
-  const value = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName"]
-    .map((key) => toolInput[key])
+  if (toolInput && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    const first = toolInput.Subagents[0];
+    const name = first.TypeName || first.typeName || first.Role || first.role || "";
+    if (name) return bareAgentName(name);
+  }
+  const value = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "TypeName", "typeName", "Role", "role"]
+    .map((key) => toolInput && toolInput[key])
     .find((v) => typeof v === "string");
   return bareAgentName(value || "");
 }
 
 function promptFromToolInput(toolInput) {
+  if (!toolInput || typeof toolInput !== "object") return "";
+  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    const first = toolInput.Subagents[0];
+    if (typeof first.Prompt === "string") return first.Prompt;
+    if (typeof first.prompt === "string") return first.prompt;
+  }
   return (
-    ["prompt", "message"].map((key) => toolInput[key]).find((v) => typeof v === "string") || ""
+    ["prompt", "Prompt", "message", "Message"].map((key) => toolInput[key]).find((v) => typeof v === "string") || ""
   );
 }
 

@@ -162,7 +162,7 @@ function validateMapping(filePath, mapping) {
       `${filePath}: capability IDs must be lower-case snake_case`,
     );
     require_(typeof entry === "object" && entry !== null, `${filePath}: ${capabilityId} must be an object`);
-    for (const target of ["claude", "codex", "grok"]) {
+    for (const target of ["claude", "codex", "grok", "antigravity"]) {
       require_(
         typeof entry[target] === "string" && entry[target].length > 0,
         `${filePath}: ${capabilityId}.${target} must be a non-empty string`,
@@ -180,7 +180,21 @@ function validateMapping(filePath, mapping) {
         `${filePath}: ${capabilityId}.grok_strategy must be a non-empty string when present`,
       );
     }
-    const allowedFields = new Set(["claude", "codex", "grok", "codex_strategy", "grok_strategy"]);
+    if (entry.antigravity_strategy !== undefined) {
+      require_(
+        typeof entry.antigravity_strategy === "string" && entry.antigravity_strategy.length > 0,
+        `${filePath}: ${capabilityId}.antigravity_strategy must be a non-empty string when present`,
+      );
+    }
+    const allowedFields = new Set([
+      "claude",
+      "codex",
+      "grok",
+      "antigravity",
+      "codex_strategy",
+      "grok_strategy",
+      "antigravity_strategy",
+    ]);
     const extraFields = Object.keys(entry).filter((k) => !allowedFields.has(k));
     require_(
       extraFields.length === 0,
@@ -198,10 +212,11 @@ function validateModelMapping(filePath, mapping) {
     require_(typeof models === "object" && models !== null, `${filePath}: tier ${tier} must be an object`);
     const keys = Object.keys(models).sort();
     require_(
-      keys.length === 3 &&
+      keys.length === 4 &&
         keys.includes("claude") &&
         keys.includes("codex") &&
-        keys.includes("grok"),
+        keys.includes("grok") &&
+        keys.includes("antigravity"),
       `${filePath}: tier ${tier} must map every harness`,
     );
     for (const model of Object.values(models)) {
@@ -235,11 +250,12 @@ function validateHarnessLayout(filePath, layout) {
   require_(
     typeof layouts === "object" &&
       layouts !== null &&
-      layoutKeys.length === 3 &&
+      layoutKeys.length === 4 &&
       layoutKeys.includes("claude") &&
       layoutKeys.includes("codex") &&
-      layoutKeys.includes("grok"),
-    `${filePath}: layouts must map claude, grok, and codex`,
+      layoutKeys.includes("grok") &&
+      layoutKeys.includes("antigravity"),
+    `${filePath}: layouts must map claude, grok, codex, and antigravity`,
   );
   for (const [target, values] of Object.entries(layouts)) {
     const valueKeys = Object.keys(values).sort();
@@ -272,6 +288,7 @@ const PLUGIN_METADATA_REQUIRED = [
   "claude",
   "codex",
   "grok",
+  "antigravity",
 ];
 
 function validatePluginMetadata(filePath, metadata) {
@@ -328,6 +345,13 @@ function validatePluginMetadata(filePath, metadata) {
       typeof metadata.grok.category === "string" &&
       metadata.grok.category.trim().length > 0,
     `${filePath}: grok.category must be set`,
+  );
+  require_(
+    typeof metadata.antigravity === "object" &&
+      metadata.antigravity !== null &&
+      typeof metadata.antigravity.category === "string" &&
+      metadata.antigravity.category.trim().length > 0,
+    `${filePath}: antigravity.category must be set`,
   );
 }
 
@@ -398,11 +422,14 @@ function validateDefinition(filePath, data, toolIds, modelTiers) {
     require_(
       typeof effort === "object" &&
         effort !== null &&
-        Object.keys(effort).every((k) => k === "claude" || k === "codex" || k === "grok") &&
+        Object.keys(effort).every(
+          (k) => k === "claude" || k === "codex" || k === "grok" || k === "antigravity",
+        ) &&
         ["low", "medium", "high", "max"].includes(effort.claude) &&
         ["low", "medium", "high", "xhigh", "max"].includes(effort.codex) &&
-        ["low", "medium", "high", "xhigh", "max"].includes(effort.grok),
-      `${filePath}: config.reasoning_effort must set claude, codex, and grok`,
+        ["low", "medium", "high", "xhigh", "max"].includes(effort.grok) &&
+        ["low", "medium", "high", "max"].includes(effort.antigravity),
+      `${filePath}: config.reasoning_effort must set claude, codex, grok, and antigravity`,
     );
     require_(
       Number.isInteger(config.timeout_seconds) && config.timeout_seconds > 0,
@@ -630,7 +657,9 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
         ? "running `/reload-plugins` or restarting the session"
         : target === "grok"
           ? "pressing `r` in the Plugins tab or starting a new session"
-          : "starting a new Codex session",
+          : target === "antigravity"
+            ? "restarting the agy session or starting a new session"
+            : "starting a new Codex session",
     "{{balanced_model}}": modelMapping.tiers.balanced[target],
     "{{advanced_model}}": modelMapping.tiers.advanced[target],
   };
@@ -779,12 +808,57 @@ function renderGrok(definition, mapping, modelMapping, harnessLayout) {
   return renderHarnessTemplate(source, "grok", harnessLayout, modelMapping, mapping);
 }
 
+function antigravityCapabilityNotes(promptRaw, mapping) {
+  const notes = [];
+  for (const [id, entry] of Object.entries(mapping.capabilities)) {
+    if (!entry.antigravity_strategy) continue;
+    if (promptRaw.includes(`{{tool_${id}}}`) && !notes.includes(entry.antigravity_strategy)) {
+      notes.push(entry.antigravity_strategy);
+    }
+  }
+  if (notes.length === 0) return "";
+  return ["# Antigravity Notes", "", ...notes].join("\n");
+}
+
+function antigravityFrontmatter(definition, mapping, modelMapping) {
+  const data = definition.data;
+  const lines = [
+    "---",
+    `name: ${definition.data.name}`,
+    ...foldedYaml("description", data.description),
+  ];
+  if (definition.data.kind === "agent") {
+    const translatedTools = data.config.tools
+      .map((toolId) => mapping.capabilities[toolId].antigravity)
+      .filter((tool) => tool && !tool.includes(" "));
+    const model = modelMapping.tiers[data.config.model_tier].antigravity;
+    const effort =
+      data.config.reasoning_effort.antigravity ?? data.config.reasoning_effort.claude;
+    lines.push(
+      `model: ${model}`,
+      `effort: ${effort}`,
+      `tools: ${translatedTools.join(", ")}`,
+      `timeout: ${data.config.timeout_seconds}`,
+      `context: ${data.config.context}`,
+    );
+  }
+  lines.push("---");
+  return lines.join("\n") + "\n\n";
+}
+
+function renderAntigravity(definition, mapping, modelMapping, harnessLayout) {
+  const notes = antigravityCapabilityNotes(definition.prompt, mapping);
+  const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
+  const source = antigravityFrontmatter(definition, mapping, modelMapping) + body;
+  return renderHarnessTemplate(source, "antigravity", harnessLayout, modelMapping, mapping);
+}
+
 function outputPath(target, outputRoot, definition) {
   if (definition.data.kind === "agent") {
     const suffix = target === "codex" ? ".toml" : ".md";
     return path.join(outputRoot, "agents", `${definition.data.name}${suffix}`);
   }
-  if (definition.data.kind === "skill" || target === "codex") {
+  if (definition.data.kind === "skill" || target === "codex" || target === "antigravity") {
     return path.join(outputRoot, "skills", definition.data.name, "SKILL.md");
   }
   return path.join(outputRoot, "commands", `${definition.data.name}.md`);
@@ -889,6 +963,31 @@ function pluginMetadataFiles(target, metadata, harnessLayout) {
       ".grok-plugin/plugin.json": jsonDocument(plugin),
       ".grok-plugin/marketplace.json": jsonDocument(marketplace),
       ".mcp.json": jsonDocument({ mcpServers: gateMcpServers(target, harnessLayout) }),
+    };
+  }
+  if (target === "antigravity") {
+    const plugin = {
+      name: metadata.name,
+      displayName: metadata.display_name,
+      version: metadata.version,
+      description: metadata.description,
+      author: metadata.author,
+      license: metadata.license,
+      keywords: metadata.keywords,
+      category: metadata.antigravity.category || "Productivity",
+    };
+    if (metadata.antigravity.homepage) plugin.homepage = metadata.antigravity.homepage;
+    return {
+      "plugin.json": jsonDocument(plugin),
+      "mcp_config.json": jsonDocument({ mcpServers: gateMcpServers(target, harnessLayout) }),
+      "rules/AGENTS.md": Buffer.from(
+        "# Ultracode Agent Rules\n\n" +
+        "When using Ultracode:\n" +
+        "- Initialize a repository using `/init-kit`.\n" +
+        "- Run the engineering pipeline router with `/ultracode:orchestrate`.\n" +
+        "- Adhere to the session-isolated pipeline artifacts under `.agents/ultracode/`.\n",
+        "utf-8",
+      ),
     };
   }
   const interfaceObj = {
@@ -1010,6 +1109,9 @@ function pluginStaticFiles(
     `missing plugin input: ${hookConfig}`,
   );
   files.set("hooks/hooks.json", fs.readFileSync(hookConfig));
+  if (target === "antigravity") {
+    files.set("hooks.json", fs.readFileSync(hookConfig));
+  }
   for (const filename of COMMON_HOOK_FILES) {
     const source = path.join(sourceRoot, "hooks", filename);
     require_(
@@ -1035,6 +1137,9 @@ function render(target, definition, mapping, modelMapping, harnessLayout) {
   }
   if (target === "grok") {
     return renderGrok(definition, mapping, modelMapping, harnessLayout);
+  }
+  if (target === "antigravity") {
+    return renderAntigravity(definition, mapping, modelMapping, harnessLayout);
   }
   if (definition.data.kind === "command") {
     return renderCodexCommand(definition, mapping, modelMapping, harnessLayout);
@@ -1173,8 +1278,9 @@ function parseArgs(argv) {
       throw new DefinitionError(`unknown argument: ${arg}`);
     }
   }
-  if (!args.target || !["claude", "codex", "grok"].includes(args.target)) {
-    throw new DefinitionError("--target must be 'claude', 'codex', or 'grok'");
+  if (args.target === "agy") args.target = "antigravity";
+  if (!args.target || !["claude", "codex", "grok", "antigravity"].includes(args.target)) {
+    throw new DefinitionError("--target must be 'claude', 'codex', 'grok', or 'antigravity'");
   }
   return args;
 }
@@ -1189,7 +1295,7 @@ function main() {
   }
   if (args.help) {
     process.stdout.write(
-      "Usage: node generate_definitions.js --target <claude|grok|codex> [--output-dir DIR] [--source-root DIR] [--check]\n",
+      "Usage: node generate_definitions.js --target <claude|grok|codex|antigravity> [--output-dir DIR] [--source-root DIR] [--check]\n",
     );
     return 0;
   }

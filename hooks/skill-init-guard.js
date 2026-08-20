@@ -38,13 +38,18 @@ function targetsOrchestrateSkill(toolInput) {
   if (skillField) return bareAgentName(skillField) === "orchestrate";
 
   const pathField =
+    (typeof toolInput.TargetFile === "string" && toolInput.TargetFile) ||
+    (typeof toolInput.AbsolutePath === "string" && toolInput.AbsolutePath) ||
     (typeof toolInput.file_path === "string" && toolInput.file_path) ||
     (typeof toolInput.filePath === "string" && toolInput.filePath) ||
     (typeof toolInput.path === "string" && toolInput.path) ||
     "";
   if (pathField && ORCHESTRATE_SKILL_PATH.test(pathField)) return true;
 
-  const command = typeof toolInput.command === "string" ? toolInput.command : "";
+  const command =
+    (typeof toolInput.CommandLine === "string" && toolInput.CommandLine) ||
+    (typeof toolInput.command === "string" && toolInput.command) ||
+    "";
   return Boolean(command) && ORCHESTRATE_SKILL_PATH.test(command);
 }
 

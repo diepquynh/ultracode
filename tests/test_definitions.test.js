@@ -51,6 +51,7 @@ let GENERATED_SOURCE_ROOT = null;
 let CLAUDE_PLUGIN_ROOT = null;
 let CODEX_PLUGIN_ROOT = null;
 let GROK_PLUGIN_ROOT = null;
+let ANTIGRAVITY_PLUGIN_ROOT = null;
 const GENERATOR_STDOUT = {};
 
 // Minimal TOML reader — the generator emits only basic strings and a flat
@@ -116,7 +117,9 @@ function adaptForTarget(text, targetName) {
         ? "running `/reload-plugins` or restarting the session"
         : targetName === "grok"
           ? "pressing `r` in the Plugins tab or starting a new session"
-          : "starting a new Codex session",
+          : targetName === "antigravity"
+            ? "restarting the agy session or starting a new session"
+            : "starting a new Codex session",
     "{{balanced_model}}": MODEL_MAPPING.tiers.balanced[targetName],
     "{{advanced_model}}": MODEL_MAPPING.tiers.advanced[targetName],
   };
@@ -186,7 +189,7 @@ before(() => {
   WORKSPACE = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-tests-"));
   GENERATED_SOURCE_ROOT = path.join(WORKSPACE, "checkout");
   copyTreeFiltered(ROOT, GENERATED_SOURCE_ROOT, IGNORED_SOURCE_ENTRIES);
-  for (const target of ["claude", "codex", "grok"]) {
+  for (const target of ["claude", "codex", "grok", "antigravity"]) {
     const stdout = runGeneratorWithDefaultOutput(target, {
       sourceRoot: GENERATED_SOURCE_ROOT,
     });
@@ -208,6 +211,12 @@ before(() => {
     GENERATED_SOURCE_ROOT,
     "dist",
     "grok",
+    "ultracode",
+  );
+  ANTIGRAVITY_PLUGIN_ROOT = path.join(
+    GENERATED_SOURCE_ROOT,
+    "dist",
+    "antigravity",
     "ultracode",
   );
 });
@@ -351,7 +360,7 @@ test("every definition was migrated", () => {
     if (data.kind === "agent") {
       assert.deepEqual(
         Object.keys(data.config.reasoning_effort).sort(),
-        ["claude", "codex", "grok"],
+        ["antigravity", "claude", "codex", "grok"],
         filePath,
       );
     }
@@ -368,8 +377,8 @@ test("claude generation matches pre-refactor behavior", () => {
     for (const [name, expected] of Object.entries(BASELINE[kind])) {
       const filePath =
         kind === "agents"
-          ? path.join(output, relativeParent, `${name}.md`)
-          : path.join(output, relativeParent, name, "SKILL.md");
+          ? path.join(output, "agents", `${name}.md`)
+          : path.join(output, "skills", name, "SKILL.md");
       const [metadata, body] = splitFrontmatter(filePath);
       assert.deepEqual(metadata, expected.frontmatter, filePath);
       assert.equal(
@@ -404,7 +413,7 @@ test("claude generation matches pre-refactor behavior", () => {
 });
 
 test("generation is deterministic for every target", () => {
-  for (const target of ["claude", "codex", "grok"]) {
+  for (const target of ["claude", "codex", "grok", "antigravity"]) {
     const first = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-${target}-a-`));
     const second = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-${target}-b-`));
     runGenerator(target, first);
@@ -431,12 +440,17 @@ test("neutral sources do not hardcode a harness layout", () => {
     ".claude/",
     ".codex/",
     ".grok/",
+    ".agents/",
     "${CLAUDE_PLUGIN_ROOT}",
     "${GROK_PLUGIN_ROOT}",
+    "${ANTIGRAVITY_PLUGIN_ROOT}",
+    "${AGY_PLUGIN_ROOT}",
     "${PLUGIN_ROOT}",
     "CLAUDE_CODE_SESSION_ID",
     "GROK_SESSION_ID",
     "CODEX_THREAD_ID",
+    "ANTIGRAVITY_CONVERSATION_ID",
+    "AGY_CONVERSATION_ID",
   ];
   for (const filePath of neutralFiles) {
     const content = fs.readFileSync(filePath, "utf-8");
@@ -473,6 +487,7 @@ test("generated text resolves all layout tokens", () => {
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
     ["grok", GROK_PLUGIN_ROOT],
+    ["antigravity", ANTIGRAVITY_PLUGIN_ROOT],
   ]) {
     const stack = [root];
     const textFiles = [];
@@ -574,9 +589,9 @@ test("codex agents are valid TOML", () => {
 
 test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
-    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6" },
-    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6" },
-    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6" },
+    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6", antigravity: "gemini-3.7-flash-high" },
+    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6", antigravity: "gemini-3.7-flash-high" },
+    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6", antigravity: "claude-opus-4-6-thinking" },
   });
   for (const [, definition] of sourceDefinitions()) {
     if (definition.kind === "agent") {
@@ -601,6 +616,7 @@ test("tool mapping covers declared and referenced tools", () => {
       assert.ok(entry.claude);
       assert.ok(entry.codex);
       assert.ok(entry.grok);
+      assert.ok(entry.antigravity);
       declaredClaudeTools.add(entry.claude);
     }
   }
@@ -617,6 +633,9 @@ test("tool mapping covers declared and referenced tools", () => {
   assert.equal(capabilities.delegate.claude, "Agent");
   assert.equal(capabilities.ask_user.claude, "AskUserQuestion");
   assert.equal(capabilities.plan.claude, "EnterPlanMode");
+  assert.equal(capabilities.delegate.antigravity, "invoke_subagent");
+  assert.equal(capabilities.ask_user.antigravity, "ask_question");
+  assert.equal(capabilities.plan.antigravity, "present the plan");
 });
 
 test("{{tool_*}} placeholders resolve to the correct harness-native name", () => {
@@ -625,6 +644,7 @@ test("{{tool_*}} placeholders resolve to the correct harness-native name", () =>
     assert.equal(adaptForTarget(token, "claude"), entry.claude);
     assert.equal(adaptForTarget(token, "codex"), entry.codex);
     assert.equal(adaptForTarget(token, "grok"), entry.grok);
+    assert.equal(adaptForTarget(token, "antigravity"), entry.antigravity);
   }
 });
 
@@ -676,6 +696,7 @@ test("generated output passes check mode", () => {
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
     ["grok", GROK_PLUGIN_ROOT],
+    ["antigravity", ANTIGRAVITY_PLUGIN_ROOT],
   ]) {
     runGenerator(target, root, { check: true, sourceRoot: GENERATED_SOURCE_ROOT });
   }
@@ -700,6 +721,7 @@ test("default output uses nested harness plugin root", () => {
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
     ["grok", GROK_PLUGIN_ROOT],
+    ["antigravity", ANTIGRAVITY_PLUGIN_ROOT],
   ]) {
     assert.equal(
       expectedRoot,
@@ -764,6 +786,7 @@ function pluginRootFor(target) {
   if (target === "claude") return CLAUDE_PLUGIN_ROOT;
   if (target === "codex") return CODEX_PLUGIN_ROOT;
   if (target === "grok") return GROK_PLUGIN_ROOT;
+  if (target === "antigravity") return ANTIGRAVITY_PLUGIN_ROOT;
   throw new Error(`unknown target: ${target}`);
 }
 
@@ -772,7 +795,7 @@ function expectedModel(target, tier) {
 }
 
 test("installer dry run covers every harness", () => {
-  for (const target of ["claude", "codex", "grok"]) {
+  for (const target of ["claude", "codex", "grok", "antigravity"]) {
     const result = execFileSync(
       "bash",
       [INSTALLER, target, "--dry-run"],
@@ -788,7 +811,7 @@ test("installer dry run covers every harness", () => {
     [INSTALLER, "--dry-run"],
     { cwd: ROOT, encoding: "utf-8" },
   );
-  assert.ok(all.includes("for claude grok codex"));
+  assert.ok(all.includes("for claude grok codex antigravity"));
   assert.ok(!all.includes("Would register the Grok fast-tier model"));
 });
 
@@ -829,6 +852,7 @@ test("uninstaller unregisters each harness plugin and marketplace install.sh con
   assert.match(script, /claude plugin uninstall ultracode@ultracode/);
   assert.match(script, /claude plugin marketplace remove ultracode/);
   assert.match(script, /grok plugin uninstall ultracode --confirm/);
+  assert.match(script, /agy plugin uninstall ultracode/);
   assert.match(script, /codex plugin remove ultracode@ultracode-local/);
   assert.match(script, /codex plugin marketplace remove ultracode-local/);
   assert.match(script, /MARKETPLACE_ROOT="\$\{INSTALL_DIR\}-marketplace\/codex"/);
@@ -842,7 +866,7 @@ test("uninstaller unregisters each harness plugin and marketplace install.sh con
 });
 
 test("uninstaller dry run covers every harness", () => {
-  for (const target of ["claude", "codex", "grok"]) {
+  for (const target of ["claude", "codex", "grok", "antigravity"]) {
     const result = execFileSync(
       "bash",
       [UNINSTALLER, target, "--dry-run"],
@@ -858,7 +882,7 @@ test("uninstaller dry run covers every harness", () => {
     [UNINSTALLER, "--dry-run"],
     { cwd: ROOT, encoding: "utf-8" },
   );
-  assert.ok(all.includes("for claude grok codex"));
+  assert.ok(all.includes("for claude grok codex antigravity"));
 });
 
 test("uninstaller reports missing harness before uninstalling", () => {
@@ -2179,6 +2203,7 @@ test("every plugin distribution bundles the ultracode_gate MCP server", () => {
     ["claude", CLAUDE_PLUGIN_ROOT, "CLAUDE_PLUGIN_ROOT"],
     ["codex", CODEX_PLUGIN_ROOT, "PLUGIN_ROOT"],
     ["grok", GROK_PLUGIN_ROOT, "GROK_PLUGIN_ROOT"],
+    ["antigravity", ANTIGRAVITY_PLUGIN_ROOT, "ANTIGRAVITY_PLUGIN_ROOT"],
   ]) {
     assert.ok(fs.statSync(path.join(root, "mcp", "gate-server.js")).isFile());
     assert.ok(fs.statSync(path.join(root, "package.json")).isFile());
@@ -2186,16 +2211,18 @@ test("every plugin distribution bundles the ultracode_gate MCP server", () => {
     const servers =
       target === "grok"
         ? JSON.parse(fs.readFileSync(path.join(root, ".mcp.json"), "utf-8")).mcpServers
-        : JSON.parse(
-            fs.readFileSync(
-              path.join(
-                root,
-                target === "claude" ? ".claude-plugin" : ".codex-plugin",
-                "plugin.json",
+        : target === "antigravity"
+          ? JSON.parse(fs.readFileSync(path.join(root, "mcp_config.json"), "utf-8")).mcpServers
+          : JSON.parse(
+              fs.readFileSync(
+                path.join(
+                  root,
+                  target === "claude" ? ".claude-plugin" : ".codex-plugin",
+                  "plugin.json",
+                ),
+                "utf-8",
               ),
-              "utf-8",
-            ),
-          ).mcpServers;
+            ).mcpServers;
     assert.deepEqual(servers, {
       "ultracode-gate": {
         command: "node",
@@ -2403,6 +2430,7 @@ test("every plugin distribution includes target hooks", () => {
     ["claude", CLAUDE_PLUGIN_ROOT],
     ["codex", CODEX_PLUGIN_ROOT],
     ["grok", GROK_PLUGIN_ROOT],
+    ["antigravity", ANTIGRAVITY_PLUGIN_ROOT],
   ]) {
     const hookDir = path.join(root, "hooks");
     const files = fs
@@ -2443,12 +2471,20 @@ test("every plugin distribution includes target hooks", () => {
     const config = JSON.parse(
       fs.readFileSync(path.join(hookDir, "hooks.json"), "utf-8"),
     );
-    assert.ok(config.hooks.PreToolUse);
-    assert.ok(config.hooks.PostToolUse);
-    assert.equal(config.hooks.SessionStart.length, 1);
-    assert.equal(config.hooks.SessionStart[0].matcher, "compact");
-    const compactCommand = config.hooks.SessionStart[0].hooks[0].command;
-    assert.match(compactCommand, /session-resume\.js/);
+    if (target === "antigravity") {
+      assert.ok(config.ultracode.PreToolUse);
+      assert.ok(config.ultracode.PostToolUse);
+      assert.ok(config.ultracode.PreInvocation);
+      const compactCommand = config.ultracode.PreInvocation[0].command;
+      assert.match(compactCommand, /session-resume\.js/);
+    } else {
+      assert.ok(config.hooks.PreToolUse);
+      assert.ok(config.hooks.PostToolUse);
+      assert.equal(config.hooks.SessionStart.length, 1);
+      assert.equal(config.hooks.SessionStart[0].matcher, "compact");
+      const compactCommand = config.hooks.SessionStart[0].hooks[0].command;
+      assert.match(compactCommand, /session-resume\.js/);
+    }
     const routing = JSON.parse(
       fs.readFileSync(path.join(hookDir, "model-routing.json"), "utf-8"),
     );
@@ -2690,4 +2726,98 @@ test("grok hooks accept camelCase payloads", () => {
   );
   assert.equal(bashDenied.decision, undefined);
   assert.equal(bashDenied.hookSpecificOutput.permissionDecision, "deny");
+});
+
+test("antigravity generation uses antigravity plugin layout and validation", () => {
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "plugin.json")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "mcp_config.json")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks.json")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "rules", "AGENTS.md")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "init-kit", "SKILL.md")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md")));
+  assert.ok(fs.existsSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "explore.md")));
+
+  const plugin = JSON.parse(
+    fs.readFileSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "plugin.json"), "utf-8"),
+  );
+  assert.equal(plugin.name, "ultracode");
+  assert.equal(plugin.displayName, "Ultracode");
+  assert.equal(plugin.category, "Productivity");
+
+  const mcpConfig = JSON.parse(
+    fs.readFileSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "mcp_config.json"), "utf-8"),
+  );
+  assert.ok(mcpConfig.mcpServers["ultracode-gate"]);
+
+  const explore = fs.readFileSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "explore.md"), "utf-8");
+  assert.match(explore, /^---\nname: explore\n/);
+  assert.match(explore, /^model: claude-opus-4-6-thinking$/m);
+  assert.match(explore, /^effort: high$/m);
+  assert.match(explore, /tools: view_file, write_to_file, run_command, grep_search, find_by_name, search_web, read_url_content/);
+
+  const orchestrate = fs.readFileSync(
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+    "utf-8",
+  );
+  assert.match(orchestrate, /invoke_subagent/);
+  assert.match(orchestrate, /# Antigravity Notes/);
+  assert.match(orchestrate, /Antigravity has no separate Skill tool/);
+});
+
+test("antigravity hooks accept structured payloads", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-test-"));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+
+  const allowed = runHook(
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "session-guard.js"),
+    {
+      cwd: repo,
+      conversationId: "testsess",
+      toolCall: {
+        args: {
+          Subagents: [{ TypeName: "ultracode:explore", Prompt: prompt }],
+        },
+      },
+    },
+    { ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT },
+  );
+  assert.equal(allowed, "");
+
+  const denied = JSON.parse(
+    runHook(
+      path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "session-guard.js"),
+      {
+        cwd: repo,
+        conversationId: "testsess",
+        toolCall: {
+          args: {
+            Subagents: [{ TypeName: "ultracode:explore", Prompt: `Repo root: ${repo}.` }],
+          },
+        },
+      },
+      { ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT },
+    ),
+  );
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.hookSpecificOutput, undefined);
+  assert.ok(denied.reason);
+
+  const bashDenied = JSON.parse(
+    runHook(
+      path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "bash-guard.js"),
+      {
+        toolCall: {
+          args: { CommandLine: "sleep 5" },
+        },
+      },
+      { ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT },
+    ),
+  );
+  assert.equal(bashDenied.decision, "deny");
+  assert.equal(bashDenied.hookSpecificOutput, undefined);
+  assert.ok(bashDenied.reason);
 });

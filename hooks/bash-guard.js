@@ -27,7 +27,10 @@ async function main() {
   if (hookAgentType(hookInput)) return 0;
 
   const toolInput = hookToolInput(hookInput);
-  const command = toolInput && typeof toolInput.command === "string" ? toolInput.command : "";
+  const command =
+    toolInput && typeof (toolInput.CommandLine || toolInput.command) === "string"
+      ? toolInput.CommandLine || toolInput.command
+      : "";
   if (!command) return 0;
 
   const hit = BANNED_PATTERNS.find(({ pattern }) => pattern.test(command));

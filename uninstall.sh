@@ -7,9 +7,9 @@ DRY_RUN=0
 
 for arg in "$@"; do
   case "$arg" in
-    claude|codex|grok|both|all) HARNESS="$arg" ;;
+    claude|codex|grok|antigravity|agy|both|all) HARNESS="$arg" ;;
     --dry-run) DRY_RUN=1 ;;
-    *) echo "Usage: uninstall.sh [claude|codex|grok|both|all] [--dry-run]" >&2; exit 2 ;;
+    *) echo "Usage: uninstall.sh [claude|codex|grok|antigravity|agy|both|all] [--dry-run]" >&2; exit 2 ;;
   esac
 done
 
@@ -21,7 +21,8 @@ esac
 SELECTION="$HARNESS"
 case "$HARNESS" in
   both) TARGETS="claude codex" ;;
-  all) TARGETS="claude grok codex" ;;
+  all) TARGETS="claude grok codex antigravity" ;;
+  agy) TARGETS="antigravity" ;;
   *) TARGETS="$HARNESS" ;;
 esac
 
@@ -37,7 +38,11 @@ fi
 
 missing=""
 for target in $TARGETS; do
-  command -v "$target" >/dev/null 2>&1 || missing="$missing $target"
+  cmd="$target"
+  if [ "$target" = antigravity ]; then
+    cmd="agy"
+  fi
+  command -v "$cmd" >/dev/null 2>&1 || missing="$missing $target"
 done
 if [ -n "$missing" ]; then
   echo "Missing harness CLI(s):$missing" >&2
@@ -46,6 +51,8 @@ if [ -n "$missing" ]; then
       echo "Install Claude Code first: npm install -g @anthropic-ai/claude-code" >&2
     elif [ "$target" = grok ]; then
       echo "Install Grok Build first: https://docs.x.ai/build" >&2
+    elif [ "$target" = antigravity ]; then
+      echo "Install Antigravity CLI (agy) first: https://github.com/google/antigravity" >&2
     else
       echo "Install Codex first: npm install -g @openai/codex" >&2
     fi
@@ -78,6 +85,12 @@ for HARNESS in $TARGETS; do
         || { echo "Failed to uninstall the Grok plugin ultracode." >&2; exit 1; }
     fi
     echo "Uninstalled Ultracode from Grok Build. Start a new Grok session."
+  elif [ "$HARNESS" = antigravity ]; then
+    if agy plugin list | grep -Fq '"name": "ultracode"'; then
+      agy plugin uninstall ultracode \
+        || { echo "Failed to uninstall the Antigravity plugin ultracode." >&2; exit 1; }
+    fi
+    echo "Uninstalled Ultracode from Antigravity. Start a new agy session."
   else
     if codex plugin list --json | grep -Fq '"pluginId": "ultracode@ultracode-local"'; then
       codex plugin remove ultracode@ultracode-local \

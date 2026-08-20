@@ -42,8 +42,8 @@ async function main() {
 
   const toolInput = hookToolInput(hookInput);
   const filePath =
-    toolInput && typeof (toolInput.file_path || toolInput.filePath || toolInput.path) === "string"
-      ? toolInput.file_path || toolInput.filePath || toolInput.path
+    toolInput && typeof (toolInput.TargetFile || toolInput.AbsolutePath || toolInput.file_path || toolInput.filePath || toolInput.path) === "string"
+      ? toolInput.TargetFile || toolInput.AbsolutePath || toolInput.file_path || toolInput.filePath || toolInput.path
       : "";
   if (!filePath) return 0;
 

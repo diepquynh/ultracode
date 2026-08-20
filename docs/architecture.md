@@ -23,7 +23,7 @@ The plugin is split into two layers:
 └───────────────────────────────────────────────────────┘
 ```
 
-Harness-ready plugins (`dist/claude/ultracode/`, `dist/grok/ultracode/`, `dist/codex/ultracode/`) are build
+Harness-ready plugins (`dist/claude/ultracode/`, `dist/grok/ultracode/`, `dist/codex/ultracode/`, `dist/antigravity/ultracode/`) are build
 output, not committed — `install.sh` regenerates them from the checkout on every install. Everything else
 (hook configs, shared hook scripts, refs, assets, neutral command definitions) lives at the root and is
 translated per target.
@@ -36,10 +36,11 @@ harness's inventory and profile:
 | Claude Code | `.claude/ultracode/` |
 | Grok Build | `.grok/ultracode/` |
 | Codex | `.codex/ultracode/` |
+| Antigravity | `.agents/ultracode/` |
 
 Generated project skills live in the matching skills dir (`.claude/skills/`, `.grok/skills/`,
 `.agents/skills/`). Agent/skill/command authoring is harness-neutral — each definition directory has
-`definition.json` + `prompt.md`, and all three distributions are generated from those sources. See
+`definition.json` + `prompt.md`, and all four distributions are generated from those sources. See
 [Definition authoring](definitions.md).
 
 ## Route by inventory, not by description
@@ -96,6 +97,7 @@ chose it:
 | Claude Code | `.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}` |
 | Grok Build | `.grok/ultracode/session/ultracode-session-${GROK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-no-session-id}}` |
 | Codex | `.codex/ultracode/session/ultracode-session-${CODEX_THREAD_ID:-no-session-id}` |
+| Antigravity | `.agents/ultracode/session/ultracode-session-${ANTIGRAVITY_CONVERSATION_ID:-${AGY_CONVERSATION_ID:-no-session-id}}` |
 
 The selected harness identifier passes unchanged to spawned agents; Grok also injects `GROK_SESSION_ID` into
 plugin hooks so a hook process that never saw the spawn prompt can still derive it.

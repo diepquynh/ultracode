@@ -9,7 +9,8 @@
     "reasoning_effort": {
       "claude": "max",
       "codex": "xhigh",
-      "grok": "xhigh"
+      "grok": "xhigh",
+      "antigravity": "max"
     },
     "tools": [
       "read",

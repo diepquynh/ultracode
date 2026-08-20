@@ -4,66 +4,80 @@
     "read": {
       "claude": "Read",
       "codex": "exec_command",
-      "grok": "read_file"
+      "grok": "read_file",
+      "antigravity": "view_file"
     },
     "edit": {
       "claude": "Edit",
       "codex": "apply_patch",
-      "grok": "search_replace"
+      "grok": "search_replace",
+      "antigravity": "replace_file_content"
     },
     "write": {
       "claude": "Write",
       "codex": "apply_patch",
-      "grok": "search_replace"
+      "grok": "search_replace",
+      "antigravity": "write_to_file"
     },
     "shell": {
       "claude": "Bash",
       "codex": "exec_command",
-      "grok": "run_terminal_command"
+      "grok": "run_terminal_command",
+      "antigravity": "run_command"
     },
     "search_text": {
       "claude": "Grep",
       "codex": "exec_command",
-      "grok": "grep"
+      "grok": "grep",
+      "antigravity": "grep_search"
     },
     "glob": {
       "claude": "Glob",
       "codex": "exec_command",
-      "grok": "list_dir"
+      "grok": "list_dir",
+      "antigravity": "find_by_name"
     },
     "skill": {
       "claude": "Skill",
       "codex": "exec_command on the skill's SKILL.md",
       "grok": "read_file on the skill's SKILL.md",
+      "antigravity": "view_file on the skill's SKILL.md",
       "codex_strategy": "Codex has no Skill tool. Load a named skill by reading its SKILL.md with exec_command and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills still need their SKILL.md opened the same way — a catalog listing does not load a skill.",
-      "grok_strategy": "Grok Build has no Skill tool. Load a named skill by reading its SKILL.md with read_file and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills appear in the session catalog with a path — read that path. A catalog listing or slash command does not load the skill for a spawned subagent."
+      "grok_strategy": "Grok Build has no Skill tool. Load a named skill by reading its SKILL.md with read_file and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills appear in the session catalog with a path — read that path. A catalog listing or slash command does not load the skill for a spawned subagent.",
+      "antigravity_strategy": "Antigravity has no separate Skill tool. Load a named skill by reading its SKILL.md with view_file and following those instructions. Project skills live at `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Plugin and bundled skills appear in the session catalog with a path — read that path."
     },
     "web_search": {
       "claude": "WebSearch",
       "codex": "web_search",
-      "grok": "web_search"
+      "grok": "web_search",
+      "antigravity": "search_web"
     },
     "web_fetch": {
       "claude": "WebFetch",
       "codex": "web_search",
-      "grok": "web_fetch"
+      "grok": "web_fetch",
+      "antigravity": "read_url_content"
     },
     "delegate": {
       "claude": "Agent",
       "codex": "spawn_agent",
-      "grok": "spawn_subagent"
+      "grok": "spawn_subagent",
+      "antigravity": "invoke_subagent"
     },
     "ask_user": {
       "claude": "AskUserQuestion",
       "codex": "request_user_input",
       "grok": "ask the user",
+      "antigravity": "ask_question",
       "grok_strategy": "There is no structured question tool. Ask the user in the conversation and wait for their reply."
     },
     "plan": {
       "claude": "EnterPlanMode",
       "codex": "update_plan",
       "grok": "present the plan",
-      "grok_strategy": "There is no plan-mode tool. Present the plan in the conversation and wait for approval before implementing."
+      "antigravity": "present the plan",
+      "grok_strategy": "There is no plan-mode tool. Present the plan in the conversation and wait for approval before implementing.",
+      "antigravity_strategy": "There is no modal plan tool. Present the plan in the conversation and use ask_question or prompt for approval before implementing."
     }
   }
 }

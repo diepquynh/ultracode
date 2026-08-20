@@ -8,9 +8,9 @@ DRY_RUN=0
 
 for arg in "$@"; do
   case "$arg" in
-    claude|codex|grok|both|all) HARNESS="$arg" ;;
+    claude|codex|grok|antigravity|agy|both|all) HARNESS="$arg" ;;
     --dry-run) DRY_RUN=1 ;;
-    *) echo "Usage: install.sh [claude|codex|grok|both|all] [--dry-run]" >&2; exit 2 ;;
+    *) echo "Usage: install.sh [claude|codex|grok|antigravity|agy|both|all] [--dry-run]" >&2; exit 2 ;;
   esac
 done
 
@@ -21,7 +21,8 @@ esac
 [ -n "$HARNESS" ] || HARNESS=all
 case "$HARNESS" in
   both) TARGETS="claude codex" ;;
-  all) TARGETS="claude grok codex" ;;
+  all) TARGETS="claude grok codex antigravity" ;;
+  agy) TARGETS="antigravity" ;;
   *) TARGETS="$HARNESS" ;;
 esac
 
@@ -54,7 +55,11 @@ command -v npm >/dev/null 2>&1 || {
 command -v git >/dev/null 2>&1 || { echo "git is required." >&2; exit 1; }
 missing=""
 for target in $TARGETS; do
-  command -v "$target" >/dev/null 2>&1 || missing="$missing $target"
+  cmd="$target"
+  if [ "$target" = antigravity ]; then
+    cmd="agy"
+  fi
+  command -v "$cmd" >/dev/null 2>&1 || missing="$missing $target"
 done
 if [ -n "$missing" ]; then
   echo "Missing harness CLI(s):$missing" >&2
@@ -63,6 +68,8 @@ if [ -n "$missing" ]; then
       echo "Install Claude Code first: npm install -g @anthropic-ai/claude-code" >&2
     elif [ "$target" = grok ]; then
       echo "Install Grok Build first: https://docs.x.ai/build" >&2
+    elif [ "$target" = antigravity ]; then
+      echo "Install Antigravity CLI (agy) first: https://github.com/google/antigravity" >&2
     else
       echo "Install Codex first: npm install -g @openai/codex" >&2
     fi
@@ -72,7 +79,9 @@ if [ -n "$missing" ]; then
 fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  git -C "$INSTALL_DIR" pull --rebase
+  if [ "${ULTRACODE_SKIP_PULL:-0}" -ne 1 ]; then
+    git -C "$INSTALL_DIR" pull --rebase
+  fi
 elif [ -e "$INSTALL_DIR" ]; then
   echo "$INSTALL_DIR exists but is not an Ultracode git checkout." >&2
   exit 1
@@ -126,6 +135,13 @@ for HARNESS in $TARGETS; do
     echo "If plugin hooks stay silent, run /hooks-trust or launch with --trust."
     echo "Grok also auto-loads Claude Code plugins. If Ultracode is already installed"
     echo "for Claude, disable one copy so skills and SessionStart hooks do not double-fire."
+  elif [ "$HARNESS" = antigravity ]; then
+    agy plugin validate "$PLUGIN_ROOT" \
+      || { echo "Generated Antigravity plugin failed validation: $PLUGIN_ROOT" >&2; exit 1; }
+    agy plugin install "$PLUGIN_ROOT" \
+      || { echo "Failed to install Antigravity plugin from $PLUGIN_ROOT." >&2; exit 1; }
+    agy plugin enable ultracode 2>/dev/null || true
+    echo "Installed Ultracode. Start a new agy session, then run /init-kit."
   else
     MARKETPLACE_ROOT="${INSTALL_DIR}-marketplace/codex"
     STAGED_PLUGIN="$MARKETPLACE_ROOT/plugins/ultracode"

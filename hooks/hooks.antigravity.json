@@ -1,0 +1,108 @@
+{
+  "ultracode": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node ./hooks/session-resume.js"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task|Agent|spawn_subagent|invoke_subagent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/model-router.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/review-cap.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/session-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/pipeline-gate.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/security-block.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/spawn-scope.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|run_terminal_command|run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/bash-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/bash-scope-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/build-streak-gate.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/skill-init-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|search_replace|write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/artifact-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/scope-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|read_file|view_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/skill-init-guard.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task|Agent|spawn_subagent|invoke_subagent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/spawn-log.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/factcheck-record.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|run_terminal_command|run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/build-streak.js"
+          }
+        ]
+      }
+    ]
+  }
+}

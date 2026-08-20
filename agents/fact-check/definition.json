@@ -9,7 +9,8 @@
     "reasoning_effort": {
       "claude": "high",
       "codex": "high",
-      "grok": "high"
+      "grok": "high",
+      "antigravity": "high"
     },
     "tools": [
       "read",

@@ -6,15 +6,12 @@ when you ask for it, trace execution paths, test, review again, and document —
 own conventions. One cheap prompt becomes many deliberate ones, and you trade tokens for correctness, coverage,
 and code that matches how your team already writes.
 
-Concretely, it's a portable Claude Code, Grok Build, and Codex plugin: a **repo-agnostic agentic engineering
+Concretely, it's a portable Claude Code, Grok Build, Codex, and Antigravity plugin: a **repo-agnostic agentic engineering
 pipeline** plus a **codebase-scouting initializer** that generates per-repo skills and a routing inventory for
-whatever language and framework a repo uses. Install it once; run `/init-kit` on Claude Code or Grok Build, or
+whatever language and framework a repo uses. Install it once; run `/init-kit` on Claude Code, Grok Build, or Antigravity, or
 `$init-kit` on Codex, to bootstrap any repo.
 
 ## Why burn more tokens?
-
-Cheap, single-shot answers are cheap for a reason: one model, one pass, no verification. Ultracode goes the
-other way on purpose. It spends tokens where they buy quality:
 
 - **Fan-out over one-shot.** Research, planning, implementation, and testing are separate subagents, each with a
   clean context window focused on one job — not one overloaded prompt juggling all of them. Separate stages also
@@ -80,6 +77,9 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh
 
 # Codex only
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- codex
+
+# Antigravity CLI only
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- antigravity
 ```
 
 Uninstall with the same harness argument (default `all` unregisters every harness and removes the checkout):
@@ -92,15 +92,15 @@ See [Installation](docs/installation.md) for manual installation and uninstall.
 
 ## Use
 
-| Action | Claude Code | Grok Build | Codex |
-| --- | --- | --- | --- |
-| Initialize the current repository | `/init-kit` | `/init-kit` | `$init-kit` |
-| Explicitly activate the pipeline router | `/ultracode:orchestrate` | `/ultracode:orchestrate` | `$orchestrate` |
-| Explicitly activate the prompt-authoring standard | `/ultracode:meta-author` | `/ultracode:meta-author` | `$meta-author` |
-| Invoke a generated project skill | `/<skill-name>` | `/<skill-name>` | `$<skill-name>` |
-| Reload newly generated project skills | `/reload-plugins` or restart | Press `r` in `/plugins` or start a new session | Start a new session |
-| Runtime inventory and profile | `.claude/ultracode/` | `.grok/ultracode/` | `.codex/ultracode/` |
-| Generated project skills | `.claude/skills/` | `.grok/skills/` | `.agents/skills/` |
+| Action | Claude Code | Grok Build | Codex | Antigravity |
+| --- | --- | --- | --- | --- |
+| Initialize the current repository | `/init-kit` | `/init-kit` | `$init-kit` | `/init-kit` |
+| Explicitly activate the pipeline router | `/ultracode:orchestrate` | `/ultracode:orchestrate` | `$orchestrate` | `/ultracode:orchestrate` |
+| Explicitly activate the prompt-authoring standard | `/ultracode:meta-author` | `/ultracode:meta-author` | `$meta-author` | `/ultracode:meta-author` |
+| Invoke a generated project skill | `/<skill-name>` | `/<skill-name>` | `$<skill-name>` | `/<skill-name>` |
+| Reload newly generated project skills | `/reload-plugins` or restart | Press `r` in `/plugins` or start a new session | Start a new session | Restart agy session |
+| Runtime inventory and profile | `.claude/ultracode/` | `.grok/ultracode/` | `.codex/ultracode/` | `.agents/ultracode/` |
+| Generated project skills | `.claude/skills/` | `.grok/skills/` | `.agents/skills/` | `.agents/skills/` |
 
 Run the initializer once per repository, reload the harness, then invoke the orchestrator yourself — it's the
 only entry point into the pipeline, and it only runs when you ask for it (there's no session-start nag and no
@@ -111,8 +111,8 @@ orchestrator spawns on your behalf; they aren't separate slash commands, so you 
 run.
 
 Commit the generated runtime files so your team shares them: `.claude/ultracode/` and `.claude/skills/` for
-Claude Code, `.grok/ultracode/` and `.grok/skills/` for Grok Build, or `.codex/ultracode/` and `.agents/skills/`
-for Codex. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
+Claude Code, `.grok/ultracode/` and `.grok/skills/` for Grok Build, `.codex/ultracode/` and `.agents/skills/`
+for Codex, or `.agents/ultracode/` and `.agents/skills/` for Antigravity. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
 one copy so skills and hooks do not double-fire.
 
 For the agent roster, architecture, model notes, and how to extend Ultracode to a new stack, see [`docs/`](docs/).

@@ -17,12 +17,13 @@ Select one harness explicitly:
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- claude
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- grok
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- codex
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- antigravity
 ```
 
-From a checkout, use `bash install.sh` for all three or pass `claude`/`grok`/`codex` for one. The script keeps
+From a checkout, use `bash install.sh` for all harnesses or pass `claude`/`grok`/`codex`/`antigravity` for one. The script keeps
 an updatable checkout under `${XDG_DATA_HOME:-$HOME/.local/share}/ultracode`; override it with
-`ULTRACODE_INSTALL_DIR`. Pass `--dry-run` when running the local script to preview the workflow. `both` still
-means Claude + Codex; `all` (the default) includes Grok.
+`ULTRACODE_INSTALL_DIR`. Pass `--dry-run` when running the local script to preview the workflow. `all` (the default) includes
+Claude, Grok, Codex, and Antigravity.
 
 The installer generates `dist/<harness>/ultracode` from that checkout's neutral sources on every run, after
 pulling. The distributions are build output rather than committed files, so an install always matches the
@@ -30,7 +31,8 @@ revision it just fetched and no plugin is ever shipped stale.
 
 After a Claude Code install, restart Claude Code. After a Grok install, start a new session and run
 `/init-kit`. Grok trusts plugins under `~/.grok/plugins/` automatically; a project-local copy in
-`.grok/plugins/` needs `/hooks-trust` or `--trust` first. After a Codex install, start a new session, open
+`.grok/plugins/` needs `/hooks-trust` or `--trust` first. After an Antigravity install, restart `agy` or start a new
+session and run `/init-kit`. After a Codex install, start a new session, open
 `/hooks`, and trust Ultracode's hooks; start one more session so they take effect. Codex intentionally does
 not trust plugin hooks automatically, so the model-routing and pipeline guard hooks remain inactive until then.
 
@@ -40,7 +42,7 @@ or disable one copy so skills and hooks do not double-fire.
 ## Uninstall
 
 Revert a matching `install.sh` run. The argument list is the same: omit it (or pass `all`) to unregister every
-harness and remove the checkout; pass `claude`/`grok`/`codex` to unregister one and leave the checkout for any
+harness and remove the checkout; pass `claude`/`grok`/`codex`/`antigravity` to unregister one and leave the checkout for any
 remaining targets. `ULTRACODE_INSTALL_DIR` must match the install.
 
 ```bash
@@ -48,10 +50,11 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- claude
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- grok
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- codex
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- antigravity
 ```
 
 From a checkout, use `bash uninstall.sh`. Pass `--dry-run` to preview. Repo-local files from `/init-kit`
-(`.claude/ultracode`, `.grok/ultracode`, `.codex/ultracode`, and generated skills) are not removed.
+(`.claude/ultracode`, `.grok/ultracode`, `.codex/ultracode`, `.agents/ultracode`, and generated skills) are not removed.
 
 ## Claude Code manual install
 
@@ -145,3 +148,18 @@ codex plugin add ultracode@ultracode-local
 For a published marketplace, replace the local marketplace path and name with the publisher's values. Codex
 plugins work in the CLI and the Codex surface in the ChatGPT desktop app; the Codex IDE extension does not
 currently load plugins.
+
+## Antigravity CLI manual install
+
+Generate the distribution first — `dist/` is not committed — then validate and install it via `agy`:
+
+```bash
+node scripts/generate_definitions.js --target antigravity
+cd dist/antigravity/ultracode && npm ci --omit=dev --ignore-scripts
+agy plugin validate dist/antigravity/ultracode
+agy plugin install dist/antigravity/ultracode
+agy plugin enable ultracode
+```
+
+Then start or restart `agy`, and run `/init-kit`.
+

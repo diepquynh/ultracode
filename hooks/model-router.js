@@ -176,10 +176,16 @@ async function main() {
   } catch {
     return 0;
   }
-  const toolInput = hookInput && (hookInput.tool_input || hookInput.toolInput);
+  const toolInput =
+    hookInput &&
+    (hookInput.toolCall && typeof hookInput.toolCall === "object"
+      ? hookInput.toolCall.args || hookInput.toolCall.input
+      : hookInput.tool_input || hookInput.toolInput);
   if (!toolInput || typeof toolInput !== "object") return 0;
 
   const pluginRoot = path.resolve(
+    process.env.ANTIGRAVITY_PLUGIN_ROOT ||
+    process.env.AGY_PLUGIN_ROOT ||
     process.env.GROK_PLUGIN_ROOT ||
     process.env.PLUGIN_ROOT ||
     process.env.CLAUDE_PLUGIN_ROOT ||
@@ -200,16 +206,33 @@ async function main() {
     return 0;
   }
 
-  const agentValue = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName"]
-    .map((key) => toolInput[key])
-    .find((value) => typeof value === "string") || "";
+  let agentValue = "";
+  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    const first = toolInput.Subagents[0];
+    agentValue = first.TypeName || first.typeName || first.Role || first.role || "";
+  }
+  if (!agentValue) {
+    agentValue = ["subagent_type", "subagentType", "agent_type", "agentType", "task_name", "taskName", "TypeName", "typeName", "Role", "role"]
+      .map((key) => toolInput[key])
+      .find((value) => typeof value === "string") || "";
+  }
   let agent = agentValue;
   if (agent.startsWith("ultracode:")) agent = agent.slice("ultracode:".length);
+  else if (agent.startsWith("ultracode-")) agent = agent.slice("ultracode-".length);
+  else if (agent.startsWith("ultracode_")) agent = agent.slice("ultracode_".length);
   if (!routing.defaults || !(agent in routing.defaults)) return 0;
 
-  const prompt = ["prompt", "message"]
-    .map((key) => toolInput[key])
-    .find((value) => typeof value === "string") || "";
+  let prompt = "";
+  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+    const first = toolInput.Subagents[0];
+    if (typeof first.Prompt === "string") prompt = first.Prompt;
+    else if (typeof first.prompt === "string") prompt = first.prompt;
+  }
+  if (!prompt) {
+    prompt = ["prompt", "Prompt", "message", "Message"]
+      .map((key) => toolInput[key])
+      .find((value) => typeof value === "string") || "";
+  }
 
   const repoValue = field(prompt, "Repo root");
   const cwd = hookInput.cwd || process.cwd();
@@ -273,13 +296,17 @@ async function main() {
 
   const [action, model] = resolveModel(route, routing, agent);
   if (action === "inherit") {
-    // Model untouched, but the brief still applies — emit updatedInput only when
-    // there is actually a brief to add, so an inherit spawn with no profile-backed
-    // brief keeps its previous "no output at all" behavior.
     if (briefedPrompt && promptKey) {
-      emit({
-        hookSpecificOutput: { hookEventName: "PreToolUse", updatedInput: withBrief(toolInput) },
-      });
+      if (routing.target === "antigravity") {
+        emit({
+          decision: "allow",
+          overwrite: withBrief(toolInput),
+        });
+      } else {
+        emit({
+          hookSpecificOutput: { hookEventName: "PreToolUse", updatedInput: withBrief(toolInput) },
+        });
+      }
     }
     return 0;
   }
@@ -298,12 +325,24 @@ async function main() {
     return 0;
   }
 
-  const output = {
-    hookEventName: "PreToolUse",
-    updatedInput: withBrief({ ...toolInput, model }),
-  };
-  if (routing.target === "codex") output.permissionDecision = "allow";
-  emit({ hookSpecificOutput: output });
+  const updated = withBrief({ ...toolInput, model });
+  if (routing.target === "antigravity") {
+    emit({
+      decision: "allow",
+      overwrite: updated,
+    });
+  } else {
+    const output = {
+      hookEventName: "PreToolUse",
+      updatedInput: updated,
+    };
+    if (routing.target === "codex") output.permissionDecision = "allow";
+    emit({
+      decision: "allow",
+      overwrite: updated,
+      hookSpecificOutput: output,
+    });
+  }
   return 0;
 }
 

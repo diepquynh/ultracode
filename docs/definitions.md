@@ -22,34 +22,35 @@ configuration records its argument hint. `prompt.md` contains only the large pro
 preserved by generation.
 
 The schema is `definitions/definition.schema.json`. Neutral model tiers resolve through
-`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.6`, and both `balanced` and
-`advanced` map to Sonnet-or-Opus/Terra-or-Sol/`grok-4.6` (every Grok tier currently resolves
+`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.6`/`gemini-3.7-flash-high`, `balanced` maps to
+Sonnet/Terra/`grok-4.6`/`gemini-3.7-flash-high`, and `advanced` maps to
+Opus/Sol/`grok-4.6`/`claude-opus-4-6-thinking` (every Grok tier currently resolves
 to the same model). Canonical capabilities and their
-Claude Code/Grok Build/Codex translations are explicit in `definitions/tool-mapping.json`. Add a mapping
-before using a new capability in a definition. Codex and Grok Build have no `Skill` tool, so that mapping
-emits an instruction to read the skill's `SKILL.md` with the harness read capability. Grok also has no
-structured question or plan-mode tool, so those mappings emit conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
-capabilities, and to Grok's `read_file` / `search_replace` / `grep` / `list_dir` / `run_terminal_command`.
+Claude Code/Grok Build/Codex/Antigravity translations are explicit in `definitions/tool-mapping.json`. Add a mapping
+before using a new capability in a definition. Codex, Grok Build, and Antigravity have no `Skill` tool, so that mapping
+emits an instruction to read the skill's `SKILL.md` with the harness read capability (`view_file` on Antigravity). Grok and Antigravity also have no
+dedicated plan-mode tool, so those mappings emit conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
+capabilities, to Grok's `read_file` / `search_replace` / `grep` / `list_dir` / `run_terminal_command`, and to Antigravity's `view_file` / `replace_file_content` / `write_to_file` / `run_command` / `grep_search` / `find_by_name`.
 
 Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Claude Code
 output uses `.claude/ultracode` for its inventory/profile and `.claude/skills` for generated project skills.
 Grok Build output uses `.grok/ultracode` and `.grok/skills`. Codex output uses `.codex/ultracode` and its
-native `.agents/skills` discovery directory. The generator translates these paths in prompts, descriptions,
+native `.agents/skills` discovery directory. Antigravity output uses `.agents/ultracode` and `.agents/skills`. The generator translates these paths in prompts, descriptions,
 references, session hooks, and the model router; do not hardcode a second harness path inside a definition.
 
 Use these tokens in neutral `prompt.md` files, definition descriptions, and shared Markdown references:
 
 | Token | Meaning |
 |---|---|
-| `{{state_dir}}` | Harness project-state parent (`.claude`, `.grok`, or `.codex`) |
+| `{{state_dir}}` | Harness project-state parent (`.claude`, `.grok`, `.codex`, or `.agents`) |
 | `{{runtime_dir}}` | Ultracode inventory, profile, and session directory |
 | `{{skills_dir}}` | Harness-native project skill discovery directory |
 | `{{agents_dir}}` | Harness-native project agent-definition directory |
 | `{{plugin_root}}` | Harness-provided environment expression for the installed plugin root |
-| `{{arguments}}` | Claude/Grok command arguments (`$ARGUMENTS`) or the request text following a Codex skill invocation |
-| `{{command_prefix}}` | Explicit invocation prefix (`/` for Claude and Grok, `$` for Codex) |
+| `{{arguments}}` | Claude/Grok/Antigravity command arguments (`$ARGUMENTS`) or the request text following a Codex skill invocation |
+| `{{command_prefix}}` | Explicit invocation prefix (`/` for Claude, Grok, and Antigravity, `$` for Codex) |
 | `{{agent_selector}}` | Agent-spawn selector field (`subagent_type` or `agent_type`) |
-| `{{agent_tool}}` | Agent-spawn tool name (`Agent`, `spawn_subagent`, or `spawn_agent`) |
+| `{{agent_tool}}` | Agent-spawn tool name (`Agent`, `spawn_subagent`, `spawn_agent`, or `invoke_subagent`) |
 | `{{session_id_expr}}` | Harness session expression configured by the selected layout |
 | `{{session_id_source}}` | Prose description of the harness session identifier |
 | `{{session_id_names}}` | Harness session identifier names and fallback behavior |
@@ -61,7 +62,7 @@ Use these tokens in neutral `prompt.md` files, definition descriptions, and shar
 
 For example, author the profile as `{repo-root}/{{runtime_dir}}/repo-profile.json` and a generated skill as
 `{repo-root}/{{skills_dir}}/{name}/SKILL.md`. Generation resolves the tokens to the selected harness. Validation
-rejects concrete `.claude/`, `.grok/`, or `.codex/` paths, harness-specific plugin-root variables, and concrete
+rejects concrete `.claude/`, `.grok/`, `.codex/`, or `.agents/` paths, harness-specific plugin-root variables, and concrete
 harness session identifier names in neutral sources. It also rejects unknown template tokens and unresolved
 template tokens in output.
 
@@ -90,6 +91,15 @@ Grok-adapted hooks under `hooks/`. Agent front matter uses Grok's `prompt_mode` 
 authoritative. `effort` is taken from `reasoning_effort.grok`, falling back to `reasoning_effort.claude`.
 Grok has no `Skill` / structured-question / plan-mode tools, so those capabilities emit a
 read-the-`SKILL.md` instruction or a conversation note the same way Codex does.
+
+Generate the Antigravity plugin distribution with:
+
+```bash
+node scripts/generate_definitions.js --target antigravity
+```
+
+This writes `plugin.json`, `mcp_config.json`, `hooks.json`, `rules/AGENTS.md`, `agents/<name>.md`, and `skills/<name>/SKILL.md`
+beneath `dist/antigravity/ultracode`. Agent front matter includes `name`, `model`, `effort`, and mapped Antigravity `tools`.
 
 Generate the Codex plugin distribution with:
 
@@ -132,6 +142,13 @@ Check a previously generated Grok output and validate its manifest:
 ```bash
 node scripts/generate_definitions.js --target grok --check
 grok plugin validate dist/grok/ultracode
+```
+
+Check a previously generated Antigravity output and validate its manifest:
+
+```bash
+node scripts/generate_definitions.js --target antigravity --check
+agy plugin validate dist/antigravity/ultracode
 ```
 
 Check a previously generated Codex plugin output and validate its manifest:
