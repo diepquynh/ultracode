@@ -2860,4 +2860,44 @@ test("antigravity hooks accept structured payloads", () => {
   assert.equal(bashDenied.decision, "deny");
   assert.equal(bashDenied.hookSpecificOutput, undefined);
   assert.ok(bashDenied.reason);
+
+  // skill-init-guard with Antigravity workspacePaths (uninitialized repo)
+  const uninitRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-uninit-"));
+  const skillPath = path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md");
+  const initGuardDenied = JSON.parse(
+    runHook(
+      path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "skill-init-guard.js"),
+      {
+        workspacePaths: [uninitRepo],
+        conversationId: "testsess",
+        toolCall: {
+          name: "view_file",
+          args: { AbsolutePath: skillPath },
+        },
+      },
+      { ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT },
+    ),
+  );
+  assert.equal(initGuardDenied.decision, "deny");
+  assert.match(initGuardDenied.reason, new RegExp(`repo \`${uninitRepo}\` has no ultracode inventory`));
+  assert.doesNotMatch(initGuardDenied.reason, new RegExp(ANTIGRAVITY_PLUGIN_ROOT));
+
+  // skill-init-guard with Antigravity workspacePaths (initialized repo)
+  const initRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-init-"));
+  fs.mkdirSync(path.join(initRepo, runtimeDir), { recursive: true });
+  fs.writeFileSync(path.join(initRepo, runtimeDir, "INVENTORY.md"), "# Inventory\n", "utf-8");
+  const initGuardAllowed = runHook(
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "skill-init-guard.js"),
+    {
+      workspacePaths: [initRepo],
+      conversationId: "testsess",
+      toolCall: {
+        name: "view_file",
+        args: { AbsolutePath: skillPath },
+      },
+    },
+    { ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT },
+  );
+  assert.equal(initGuardAllowed, "");
 });
+

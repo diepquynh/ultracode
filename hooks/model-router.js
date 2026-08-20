@@ -18,13 +18,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { denyPreToolUse } = require("./lib/common.js")
-// Brief injection lives here, not in its own hook, because a PreToolUse
-// `updatedInput` does NOT merge across hooks: with two hooks on one matcher both
-// see the original input and only one hook's updatedInput survives. A separate
-// brief hook would therefore clobber the routed `model` (or lose its own edit).
-// See hooks/lib/context-brief.js for the measurement and the rest of the design.
-const { augmentPrompt } = require("./lib/context-brief.js")
+const { denyPreToolUse } = require("./lib/common.js");
+const { augmentPrompt } = require("./lib/context-brief.js");
+const { resolveRepoRoot } = require("./lib/session.js");
 
 function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
@@ -234,10 +230,7 @@ async function main() {
       .find((value) => typeof value === "string") || "";
   }
 
-  const repoValue = field(prompt, "Repo root");
-  const cwd = hookInput.cwd || process.cwd();
-  const repo =
-    repoValue && isDirectory(repoValue) ? path.resolve(repoValue) : path.resolve(cwd);
+  const repo = resolveRepoRoot(hookInput, prompt);
   const profilePath = path.join(repo, routing.runtime_dir, "repo-profile.json");
 
   const isExemptFromRoute = agent === "initializer" || agent === "fact-check";

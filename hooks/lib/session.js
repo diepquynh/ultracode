@@ -8,6 +8,8 @@ const {
   field,
   isDirectory,
   isFile,
+  isInside,
+  hookToolInput,
   readTextIfFile,
   sanitizeSessionId,
   pluginRootFromEnv,
@@ -37,14 +39,92 @@ function pluginTargetInfo() {
   }
 }
 
+function extractCandidateRoots(hookInput) {
+  if (!hookInput || typeof hookInput !== "object") return [];
+  const candidates = [];
+
+  for (const key of [
+    "cwd",
+    "Cwd",
+    "workspaceRoot",
+    "workspace_root",
+    "workspacePath",
+    "workspace_path",
+  ]) {
+    if (typeof hookInput[key] === "string" && hookInput[key].trim()) {
+      candidates.push(hookInput[key].trim());
+    }
+  }
+
+  for (const key of [
+    "workspacePaths",
+    "workspace_paths",
+    "workspaceRoots",
+    "workspace_roots",
+  ]) {
+    if (Array.isArray(hookInput[key])) {
+      for (const item of hookInput[key]) {
+        if (typeof item === "string" && item.trim()) {
+          candidates.push(item.trim());
+        }
+      }
+    }
+  }
+
+  const toolInput = hookToolInput(hookInput);
+  if (toolInput && typeof toolInput === "object") {
+    for (const key of ["Cwd", "cwd", "SearchDirectory", "DirectoryPath", "SearchPath"]) {
+      if (typeof toolInput[key] === "string" && toolInput[key].trim()) {
+        candidates.push(toolInput[key].trim());
+      }
+    }
+  }
+
+  return candidates;
+}
+
 function resolveRepoRoot(hookInput, prompt) {
   const declared = field(prompt, "Repo root");
   if (declared && isDirectory(declared)) return path.resolve(declared);
-  const cwd =
-    (hookInput && (hookInput.cwd || hookInput.workspaceRoot || hookInput.workspace_root)) ||
+
+  const pluginRoot = pluginRootFromEnv();
+  const rawCandidates = extractCandidateRoots(hookInput);
+  const candidates = rawCandidates.map((c) => path.resolve(c)).filter(isDirectory);
+
+  const toolInput = hookToolInput(hookInput);
+  const targetFile =
+    toolInput && typeof toolInput === "object"
+      ? (typeof toolInput.TargetFile === "string" && toolInput.TargetFile) ||
+        (typeof toolInput.AbsolutePath === "string" && toolInput.AbsolutePath) ||
+        (typeof toolInput.file_path === "string" && toolInput.file_path) ||
+        (typeof toolInput.filePath === "string" && toolInput.filePath) ||
+        (typeof toolInput.path === "string" && toolInput.path) ||
+        ""
+      : "";
+
+  // If targetFile is given and is NOT in plugin root, check if a candidate contains it
+  if (targetFile && candidates.length > 1 && !isInside(pluginRoot, path.resolve(targetFile))) {
+    const matching = candidates.find(
+      (c) => !isInside(pluginRoot, c) && isInside(c, path.resolve(targetFile)),
+    );
+    if (matching) return matching;
+  }
+
+  // Pick first candidate that is not inside plugin root
+  const nonPluginCandidate = candidates.find((c) => !isInside(pluginRoot, c));
+  if (nonPluginCandidate) return nonPluginCandidate;
+
+  if (candidates.length > 0) return candidates[0];
+
+  const envVar =
     process.env.GROK_WORKSPACE_ROOT ||
-    process.cwd();
-  return path.resolve(cwd);
+    process.env.ANTIGRAVITY_WORKSPACE_ROOT ||
+    process.env.AGY_WORKSPACE_ROOT ||
+    process.env.WORKSPACE_ROOT ||
+    process.env.CLAUDE_PROJECT_DIR;
+  if (envVar && isDirectory(envVar)) return path.resolve(envVar);
+
+  return path.resolve(process.cwd());
 }
 
 // The session dir formula every prompt/agent already derives independently
