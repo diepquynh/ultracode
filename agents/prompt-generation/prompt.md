@@ -10,7 +10,7 @@ orchestrator. You are a leaf agent — you do the writing yourself and return a 
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{state_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it; run build/typecheck with it as the working directory. |
 | **session dir** | Scratch dir from `Session dir:` — already exists. |
 | **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, CoT rules, archetypes, self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |

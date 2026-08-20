@@ -3,7 +3,7 @@
   "layouts": {
     "claude": {
       "state_dir": ".claude",
-      "runtime_dir": ".claude/ultracode",
+      "runtime_dir": ".ultracode",
       "skills_dir": ".claude/skills",
       "agents_dir": ".claude/agents",
       "plugin_root_env": "CLAUDE_PLUGIN_ROOT",
@@ -16,7 +16,7 @@
     },
     "codex": {
       "state_dir": ".codex",
-      "runtime_dir": ".codex/ultracode",
+      "runtime_dir": ".ultracode",
       "skills_dir": ".agents/skills",
       "agents_dir": ".codex/agents",
       "plugin_root_env": "PLUGIN_ROOT",
@@ -29,7 +29,7 @@
     },
     "grok": {
       "state_dir": ".grok",
-      "runtime_dir": ".grok/ultracode",
+      "runtime_dir": ".ultracode",
       "skills_dir": ".grok/skills",
       "agents_dir": ".grok/agents",
       "plugin_root_env": "GROK_PLUGIN_ROOT",
@@ -42,7 +42,7 @@
     },
     "antigravity": {
       "state_dir": ".agents",
-      "runtime_dir": ".agents/ultracode",
+      "runtime_dir": ".ultracode",
       "skills_dir": ".agents/skills",
       "agents_dir": ".agents/agents",
       "plugin_root_env": "ANTIGRAVITY_PLUGIN_ROOT",

@@ -27,7 +27,7 @@ reads**. It never sees the criteria document, the research document, or this pro
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
 | **repos in scope** | The one or more repos this spec targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo request — a `Repos in scope:` list of `{repo key} → {absolute root}`. {{tool_read}} each repo's profile and inventory. |
 | **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt. Tag every deliverable with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the plan agent reads your spec file from this exact path. |

@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.
 ```
 
 From a checkout, use `bash uninstall.sh`. Pass `--dry-run` to preview. Repo-local files from `/init-kit`
-(`.claude/ultracode`, `.grok/ultracode`, `.codex/ultracode`, `.agents/ultracode`, and generated skills) are not removed.
+(`.ultracode` and the generated skills under each harness's skills dir) are not removed.
 
 ## Claude Code manual install
 

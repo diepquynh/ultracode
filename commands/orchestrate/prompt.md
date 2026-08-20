@@ -84,7 +84,7 @@ mkdir -p "$SESSION_DIR/{repo-key}"
 Every subagent prompt carries two lines that scope the agent to its repo:
 
 - `Repo root: {absolute repo root}` — the agent **changes its working directory to this root before its first
-  tool call** and stays there, then resolves every `{{state_dir}}/...` path (inventory, profile, skills) and every
+  tool call** and stays there, then resolves every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path (inventory, profile, skills) and every
   source path against it, and runs build/test/format/git there. This is how a subagent reads **that repo's**
   inventory and skills, so the pipeline runs on that repo. The working-directory move is not optional: the
   harness may start an agent above the repo or inside a different one, and {{tool_skill}} resolves skill names
@@ -299,7 +299,7 @@ verbatim, prefix included. Each writes a report into the session dir.
 
 **Repo scoping:** every spawn carries `Repo root: {absolute root}` and `Session dir: {SESSION_DIR}/{repo-key}`.
 The agent makes that root its working directory before its first tool call, then resolves every
-`{{state_dir}}/...` path and source path against it and reads **that repo's** inventory, skills, and profile — so
+`{{runtime_dir}}/...` and `{{skills_dir}}/...` path and source path against it and reads **that repo's** inventory, skills, and profile — so
 route each spawn to the repo whose files it will touch. Never spawn an agent without a `Repo root:` line and
 expect it to find the right tree: skills resolve against the working directory, so an agent that never moves
 there loads no skills.

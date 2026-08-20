@@ -16,7 +16,7 @@ If you write "follow the existing pattern," show the pattern in full.
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{state_dir}}/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
+| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and source path in this file resolves against it; run all commands with it as the working directory. You research **this one repo only**. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the generate-spec agent reads both your documents from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. {{tool_read}} it first. |
 | **module-hub** | `{repo-root}/{{skills_dir}}/module-hub/SKILL.md` + `references/` — the area routing tables. |

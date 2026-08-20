@@ -16,6 +16,4 @@ node_modules/
 /tmp/
 
 # Orchestrator / init-kit working session scratch (per-run subdirs)
-/.claude/ultracode/session/
-/.codex/ultracode/session/
-/.grok/ultracode/session/
+/.ultracode/session/

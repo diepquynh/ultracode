@@ -99,7 +99,7 @@ See [Installation](docs/installation.md) for manual installation and uninstall.
 | Explicitly activate the prompt-authoring standard | `/ultracode:meta-author` | `/ultracode:meta-author` | `$meta-author` | `/ultracode:meta-author` |
 | Invoke a generated project skill | `/<skill-name>` | `/<skill-name>` | `$<skill-name>` | `/<skill-name>` |
 | Reload newly generated project skills | `/reload-plugins` or restart | Press `r` in `/plugins` or start a new session | Start a new session | Restart agy session |
-| Runtime inventory and profile | `.claude/ultracode/` | `.grok/ultracode/` | `.codex/ultracode/` | `.agents/ultracode/` |
+| Runtime inventory and profile | `.ultracode/` | `.ultracode/` | `.ultracode/` | `.ultracode/` |
 | Generated project skills | `.claude/skills/` | `.grok/skills/` | `.agents/skills/` | `.agents/skills/` |
 
 Run the initializer once per repository, reload the harness, then invoke the orchestrator yourself — it's the
@@ -110,9 +110,10 @@ it in plain language, and it takes it from there. Individual stages (`explore`, 
 orchestrator spawns on your behalf; they aren't separate slash commands, so you never need to know which one to
 run.
 
-Commit the generated runtime files so your team shares them: `.claude/ultracode/` and `.claude/skills/` for
-Claude Code, `.grok/ultracode/` and `.grok/skills/` for Grok Build, `.codex/ultracode/` and `.agents/skills/`
-for Codex, or `.agents/ultracode/` and `.agents/skills/` for Antigravity. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
+Commit the generated runtime files so your team shares them: `.ultracode/` (the inventory, profile, and repo
+memory — shared by every harness) plus the generated skills, which stay in the harness's own discovery dir:
+`.claude/skills/` for Claude Code, `.grok/skills/` for Grok Build, `.agents/skills/` for Codex and
+Antigravity. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
 one copy so skills and hooks do not double-fire.
 
 For the agent roster, architecture, model notes, and how to extend Ultracode to a new stack, see [`docs/`](docs/).

@@ -274,6 +274,21 @@ function validateHarnessLayout(filePath, layout) {
       );
     }
   }
+  // The runtime dir (inventory, profile, session scratch, memory) lives at the
+  // project root, outside any harness's state dir, so one bootstrap serves every
+  // harness. Only the harness-native discovery dirs stay harness-specific.
+  const runtimeDirs = new Set(
+    Object.values(layouts).map((values) => values.runtime_dir),
+  );
+  require_(
+    runtimeDirs.size === 1,
+    `${filePath}: runtime_dir must be identical across harnesses (got ${[...runtimeDirs].sort().join(", ")})`,
+  );
+  const runtimeDir = [...runtimeDirs][0];
+  require_(
+    !runtimeDir.includes("/"),
+    `${filePath}: runtime_dir must be a project-root directory, not nested under a harness state dir`,
+  );
 }
 
 const PLUGIN_METADATA_REQUIRED = [
@@ -985,7 +1000,8 @@ function pluginMetadataFiles(target, metadata, harnessLayout) {
         "When using Ultracode:\n" +
         "- Initialize a repository using `/init-kit`.\n" +
         "- Run the engineering pipeline router with `/ultracode:orchestrate`.\n" +
-        "- Adhere to the session-isolated pipeline artifacts under `.agents/ultracode/`.\n",
+        "- Adhere to the session-isolated pipeline artifacts under " +
+        `\`${harnessLayout.layouts[target].runtime_dir}/\`.\n`,
         "utf-8",
       ),
     };

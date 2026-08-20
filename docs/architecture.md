@@ -17,7 +17,7 @@ The plugin is split into two layers:
                          ▼
 ┌─ TARGET REPO  (GENERATED, commit these) ──────────────┐
 │  harness skill dir: component skills + module hub      │
-│  harness runtime dir:                                  │
+│  .ultracode/  (shared runtime dir, any harness)        │
 │    INVENTORY.md          the master routing table      │
 │    repo-profile.json     build/test/fmt · map          │
 └───────────────────────────────────────────────────────┘
@@ -28,19 +28,26 @@ output, not committed — `install.sh` regenerates them from the checkout on eve
 (hook configs, shared hook scripts, refs, assets, neutral command definitions) lives at the root and is
 translated per target.
 
-Pipeline agents never hardcode a build tool, skill name, or review rule. At run time they read the active
-harness's inventory and profile:
+Pipeline agents never hardcode a build tool, skill name, or review rule. At run time they read the repo's
+inventory and profile from its runtime dir.
 
-| Harness | Inventory/profile dir |
-|---|---|
-| Claude Code | `.claude/ultracode/` |
-| Grok Build | `.grok/ultracode/` |
-| Codex | `.codex/ultracode/` |
-| Antigravity | `.agents/ultracode/` |
+The runtime dir is `.ultracode/` at the project root, **outside** every harness's state dir, so a single
+`/init-kit` run bootstraps the repo for Claude Code, Grok Build, Codex, and Antigravity alike. Only skill and
+agent discovery stays harness-native, because each harness scans its own directory:
 
-Generated project skills live in the matching skills dir (`.claude/skills/`, `.grok/skills/`,
-`.agents/skills/`). Agent/skill/command authoring is harness-neutral — each definition directory has
-`definition.json` + `prompt.md`, and all four distributions are generated from those sources. See
+| Harness | Inventory/profile dir | Generated project skills |
+|---|---|---|
+| Claude Code | `.ultracode/` | `.claude/skills/` |
+| Grok Build | `.ultracode/` | `.grok/skills/` |
+| Codex | `.ultracode/` | `.agents/skills/` |
+| Antigravity | `.ultracode/` | `.agents/skills/` |
+
+A repo bootstrapped by an older version still has its runtime dir inside a harness state dir (e.g. the claude
+state dir's `ultracode` subdirectory). `/init-kit`'s `detect` mode finds those, offers them as cross-harness
+candidates, and `adopt` migrates one into `.ultracode/` rather than re-scouting the repo.
+
+Agent/skill/command authoring is harness-neutral — each definition directory has `definition.json` +
+`prompt.md`, and all four distributions are generated from those sources. See
 [Definition authoring](definitions.md).
 
 ## Route by inventory, not by description
@@ -94,10 +101,10 @@ chose it:
 
 | Harness | Path |
 |---|---|
-| Claude Code | `.claude/ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}` |
-| Grok Build | `.grok/ultracode/session/ultracode-session-${GROK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-no-session-id}}` |
-| Codex | `.codex/ultracode/session/ultracode-session-${CODEX_THREAD_ID:-no-session-id}` |
-| Antigravity | `.agents/ultracode/session/ultracode-session-${ANTIGRAVITY_CONVERSATION_ID:-${AGY_CONVERSATION_ID:-no-session-id}}` |
+| Claude Code | `.ultracode/session/ultracode-session-${CLAUDE_CODE_SESSION_ID:-${GROK_SESSION_ID:-no-session-id}}` |
+| Grok Build | `.ultracode/session/ultracode-session-${GROK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-no-session-id}}` |
+| Codex | `.ultracode/session/ultracode-session-${CODEX_THREAD_ID:-no-session-id}` |
+| Antigravity | `.ultracode/session/ultracode-session-${ANTIGRAVITY_CONVERSATION_ID:-${AGY_CONVERSATION_ID:-no-session-id}}` |
 
 The selected harness identifier passes unchanged to spawned agents; Grok also injects `GROK_SESSION_ID` into
 plugin hooks so a hook process that never saw the spawn prompt can still derive it.
@@ -113,7 +120,7 @@ Don't reintroduce either.
  self-contained prompt, reads the report it returns, decides the next step.
    │
    │  no agent calls another; every hop is a report file in the SESSION DIR
-   │  (.claude/ultracode/session/ultracode-session-<session-id>) — written by one, read by the next
+   │  (.ultracode/session/ultracode-session-<session-id>) — written by one, read by the next
    ▼
    explore                 ─▶ research doc + criteria doc      (one agent per repo)
    generate-spec           ─▶ ONE spec file, deliverables D1…Dn inside it

@@ -12,7 +12,7 @@
 
 | Term | Definition |
 | --- | --- |
-| **session dir** | A scratch directory provided in the prompt as `Session dir:` — already exists, do NOT `mkdir` it. `detect`, `scout`, and `propose` write their outputs here; the `generate-skill` / `generate-inventory` modes write skills + inventory under `{{state_dir}}/` (their generation report still lands here). Trust the given path as-is; `propose` reads every scout's findings from this exact path. |
+| **session dir** | A scratch directory provided in the prompt as `Session dir:` — already exists, do NOT `mkdir` it. `detect`, `scout`, and `propose` write their outputs here; the `generate-skill` / `generate-inventory` modes write skills under `{{skills_dir}}/` and the inventory under `{{runtime_dir}}/` (their generation report still lands here). Trust the given path as-is; `propose` reads every scout's findings from this exact path. |
 | **target repo** | The current project being initialized. Its root is provided as `Repo root:` in detect mode, or is the current working directory. **Before your first tool call, make that root your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and the skills you generate must land in this repo's `{{skills_dir}}`. |
 | **stack** | The primary language + build tool + framework of the target repo (e.g. `java-spring`, `typescript-node`, `python-django`, `go`). |
 | **stack reference** | A file at `{{plugin_root}}/refs/<stack>.md` describing that stack's detection signals, component catalog (with grep/glob patterns and invariants), conventional commands, and test framework. Falls back to `{{plugin_root}}/refs/_generic.md`. |
@@ -23,10 +23,12 @@
 | **scout plan** | The detect-mode output: detected stack, chosen reference, slice list, candidate component types, detected commands. Written to `{session-dir}/ultracode-scout-plan.md`. |
 | **scout findings** | A scout-mode output for one slice: component types found in that slice with counts, exemplars, and invariants. Written to `{session-dir}/ultracode-findings-<slice-slug>.md`. |
 | **proposal** | The propose-mode output: the ranked, merged, deduped skill recommendation for user approval. Written as `{session-dir}/ultracode-proposal.md` (human table) plus `{session-dir}/ultracode-proposal.json` (machine twin: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, skills[]) that the /init-kit command and the generate modes consume. |
+| **runtime dir** | `<repo>/{{runtime_dir}}/` — the project-root directory holding the inventory, the profile, the session scratch, and the durable memory store. It sits **outside** every harness's state dir, so one bootstrap serves Claude Code, Codex, Grok Build, and Antigravity alike. |
 | **INVENTORY.md** | The routing table written to `<repo>/{{runtime_dir}}/INVENTORY.md`. Source of truth for skill routing; read as a plain file by all agents. See `{{plugin_root}}/refs/inventory-and-profile.md`. |
 | **repo-profile.json** | The machine-readable profile written to `<repo>/{{runtime_dir}}/repo-profile.json`: stack, commands, test framework, module map, skills, conventions, review rules, and model routing (the `models` block — which model each subagent spawn runs on). |
 | **existing skill** | A `SKILL.md` already present under `{repo}/{{skills_dir}}/` before this run — written by a prior init-kit run or hand-authored by the team. Discovered read-only in `detect`. Re-used as-is by default; never overwritten unless its `disposition` is `regenerate`. |
-| **cross-harness candidate** | A COMPLETE prior bootstrap (`repo-profile.json` + `INVENTORY.md`) found under a harness OTHER than this run's own `{{state_dir}}` (e.g. this run is Claude Code and Codex's runtime dir already has both files). Discovered read-only by Step D0, before any repo scan. Adopting one copies its skills + inventory into this harness's own dirs instead of re-scouting. |
+| **legacy runtime dir** | A per-harness runtime dir from an older ultracode layout: a harness state dir plus `/ultracode` (e.g. the claude state dir's `ultracode` subdirectory). Ultracode no longer writes there — the runtime dir is now the shared `{{runtime_dir}}/` — but a repo bootstrapped before the move still carries one. |
+| **cross-harness candidate** | A COMPLETE prior bootstrap (`repo-profile.json` + `INVENTORY.md`) found in a **legacy runtime dir** while the shared `{{runtime_dir}}/` has no bootstrap of its own. Discovered read-only by Step D0, before any repo scan. Adopting one migrates its skills + inventory into `{{runtime_dir}}/` and this harness's `{{skills_dir}}/` instead of re-scouting. |
 | **bespoke skill** | An existing skill whose `name` matches NO scouted component type and is neither `convention` nor `module-hub`. Registered in the inventory for routing but never regenerated. |
 | **status** | A per-skill field set by `propose`: `new` (no existing skill of this name) or `existing` (an existing skill of this name was found). |
 | **disposition** | A per-skill action set by the orchestrator from the user's approval-gate choice: `generate` (write a new skill), `regenerate` (overwrite an existing skill with a fresh one), or `reuse` (keep the existing skill unchanged; register it only). |
@@ -44,34 +46,38 @@
 
 **Input:** `Repo root:`, optional `User focus:`, `Session dir:`, optional `Skip cross-harness check: yes`.
 
-### Step D0 — Check other harnesses for an existing bootstrap (read-only, run first)
+### Step D0 — Check for an existing bootstrap in a legacy runtime dir (read-only, run first)
 
 If the orchestrator's prompt includes `Skip cross-harness check: yes`, skip this step entirely and go straight
-to Step D1 — the user already declined to adopt a cross-harness bootstrap this run.
+to Step D1 — the user already declined to adopt a legacy bootstrap this run.
 
-A repo bootstrapped once for one harness already did the expensive part — scouting, exemplar capture, skill
-authoring — for every OTHER harness too, since skill bodies and the module map are prose, not
-harness-specific. Before spending a full scan on this repo, check whether such a bootstrap already exists
-under a harness other than this one.
+Ultracode's runtime dir is `{{runtime_dir}}/` at the project root, shared by every harness. Older versions kept
+it inside each harness's own state dir, so a repo bootstrapped back then already did the expensive part —
+scouting, exemplar capture, skill authoring — but stored it where this run will not look. Skill bodies and the
+module map are prose, not harness-specific, so any such bootstrap is worth migrating instead of re-scouting.
+Before spending a full scan on this repo, check for one.
 
-**Harness layout table** (skip the row matching this run's own `{{state_dir}}`):
+**If `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md` both
+already exist,** this repo is already bootstrapped on the shared runtime dir. There is nothing to migrate:
+record zero candidates and continue to Step D1 (a re-scan of an already-initialized repo is a supported flow —
+`propose` will reconcile against the existing skills).
 
-| Harness | State dir |
-| --- | --- |
-| claude | `.claude` |
-| codex | `.codex` |
-| grok | `.grok` |
-| *(generic)* | `.agent` |
-| *(generic)* | `.agents` |
+**Legacy harness layout table:**
 
-The two generic rows cover a hand-rolled or third-party tool that is not one of the three named harnesses.
-For every harness in the table, its runtime dir is its state dir plus `/ultracode`, and its skills dir is its
-state dir plus `/skills` — with one exception: codex's skills dir is `.agents/skills`, not derived from its own
-state dir. Probe the generic rows with the same derived shape as a best-effort guess.
+| Harness | State dir | Legacy runtime dir | Skills dir |
+| --- | --- | --- | --- |
+| claude | `.claude` | state dir + `/ultracode` | state dir + `/skills` |
+| codex | `.codex` | state dir + `/ultracode` | `.agents` + `/skills` |
+| grok | `.grok` | state dir + `/ultracode` | state dir + `/skills` |
+| *(generic)* | `.agent` | state dir + `/ultracode` | state dir + `/skills` |
+| *(generic)* | `.agents` | state dir + `/ultracode` | state dir + `/skills` |
+
+The two generic rows cover a hand-rolled or third-party tool that is not one of the four named harnesses;
+probe them with the same derived shape as a best-effort guess. Scan **every** row, including this run's own
+`{{state_dir}}` — a legacy dir belonging to this same harness is a migration source exactly like any other.
 
 ```bash
 for dir in .claude .codex .grok .agent .agents; do
-  [ "$dir" = "{{state_dir}}" ] && continue
   profile="{repo-root}/$dir/ultracode/repo-profile.json"
   inventory="{repo-root}/$dir/ultracode/INVENTORY.md"
   [ -f "$profile" ] && [ -f "$inventory" ] && echo "CANDIDATE: $dir"
@@ -85,19 +91,21 @@ For each `CANDIDATE:` line, {{tool_read}} its `repo-profile.json` to confirm it 
 **If zero valid candidates:** continue to Step D1; this run does a full scan as normal.
 
 **If one or more valid candidates:** skip Steps D1–D6 (do not scan the repo). {{tool_write}}
-`{session-dir}/ultracode-cross-harness-candidates.json`:
+`{session-dir}/ultracode-cross-harness-candidates.json`, resolving each candidate's dirs from the table above
+so `adopt` never has to re-derive them:
 
 ```json
 {
   "candidates": [
-    { "harness": "codex", "stateDir": ".codex",
+    { "harness": "{harness name from the table}", "stateDir": "{state dir from the table}",
+      "runtimeDir": "{state dir}/ultracode", "skillsDir": "{skills dir from the table}",
       "stack": "typescript-node", "generatedAt": "2026-08-01", "skillCount": 6 }
   ]
 }
 ```
 
-`stateDir` is enough to re-derive the runtime dir and skills dir from the harness layout table above — do not
-persist them separately, since `adopt` (Step A1) recomputes them from `stateDir` anyway.
+`runtimeDir` and `skillsDir` are the **source** locations to read from. The destination is always this run's
+own `{{runtime_dir}}` and `{{skills_dir}}` — never repeat the source's layout.
 
 **Return:** `CROSS-HARNESS-CANDIDATES: {n}`, the candidates file path, and a one-line summary of each
 candidate (harness, stack, skill count, generatedAt). Tell the main loop it must present these candidates to
@@ -227,18 +235,21 @@ scout plan and fans one scout out per slice.
 
 ## Mode: ADOPT (run once, only after the user picked a cross-harness candidate)
 
-**Input:** `Source harness:`, `Source state dir:` (e.g. `.codex`), `Repo root:`, `Session dir:`.
+**Input:** `Source harness:`, `Source runtime dir:`, `Source skills dir:`, `Repo root:`, `Session dir:`.
 
-You copy one already-completed bootstrap from another harness into this harness's own
-`{{runtime_dir}}`/`{{skills_dir}}`, translating harness-specific paths and resetting model routing to the
-seeded defaults. This mode writes to the target repo, like `generate-skill`/`generate-inventory` — it is not
-read-only.
+You migrate one already-completed bootstrap out of a legacy per-harness runtime dir into the shared
+`{{runtime_dir}}` plus this harness's `{{skills_dir}}`, translating stale paths and resetting model routing to
+the seeded defaults. This mode writes to the target repo, like `generate-skill`/`generate-inventory` — it is
+not read-only.
 
 ### Step A1 — Resolve the source layout
 
-Look up `Source state dir:` in the harness layout table from Step D0 (or, for a generic `.agent`/`.agents`
-source, use `{source state dir}/ultracode` and `{source state dir}/skills`) to get the source's runtime dir
-and skills dir.
+Take the source's runtime dir and skills dir from the `Source runtime dir:` / `Source skills dir:` lines
+verbatim — Step D0 already resolved them from the legacy harness layout table. Only if a line is missing, fall
+back to deriving them from the source state dir (state dir + `/ultracode`, state dir + `/skills`).
+
+Both source dirs are repo-root-relative. The destination is always `{{runtime_dir}}` and `{{skills_dir}}`. If a
+source dir resolves to the same path as its destination, skip copying that half — there is nothing to move.
 
 ### Step A2 — {{tool_read}} the source files
 
@@ -254,7 +265,7 @@ not reuse whatever `models` block the source harness had.
 
 1. Every path string that starts with the source's skills dir or runtime dir (e.g. `skills[].path`, Module/Area
    map `Reference` cells, the header's "Machine profile" link) is rewritten to the equivalent relative path
-   under this harness's `{{skills_dir}}`/`{{runtime_dir}}`.
+   under `{{skills_dir}}`/`{{runtime_dir}}`.
 2. The profile's `models` block is replaced ENTIRELY with the seeded defaults read in Step A2 — never carried
    over from the source. This is a hard reset, not a merge: any per-repo model customization the source
    harness had (including a harness-specific object override) is discarded.
@@ -269,17 +280,23 @@ byte-for-byte, no translation needed.
 
 ### Step A5 — Self-review
 
-Verify: every `skills[].path` in the copied profile points under this harness's `{{skills_dir}}`; the `models`
-block matches Step A2's seeded defaults exactly; every skill file listed in the profile actually exists on
-disk at its new path. Fix any mismatch by editing.
+Verify: every `skills[].path` in the copied profile points under `{{skills_dir}}`; no path string anywhere in
+the profile or inventory still points at the source runtime dir; the `models` block matches Step A2's seeded
+defaults exactly; every skill file listed in the profile actually exists on disk at its new path. Fix any
+mismatch by editing.
+
+Leave the legacy source dir on disk untouched — deleting a user's files is the user's call, not yours. Name it
+in the report (Step A6) so they can remove it themselves.
 
 ### Step A6 — {{tool_write}} the generation report
 
 {{tool_write}} `{session-dir}/ultracode-generate-report.md` (same filename the normal pipeline's
 `generate-inventory` mode writes, so the main loop's Step 5 reads it unchanged) headed with
-`Adopted from: {Source harness}`, listing every skill copied plus `INVENTORY.md` and `repo-profile.json`.
+`Adopted from: {Source harness} ({source runtime dir})`, listing every skill copied plus `INVENTORY.md` and
+`repo-profile.json` at their new paths, and closing with a line naming the legacy source dir as safe to delete
+by hand.
 
-**Return:** the report path, the source harness, and the list of skill names copied.
+**Return:** the report path, the source harness, the source runtime dir, and the list of skill names copied.
 
 ---
 
@@ -517,7 +534,8 @@ Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` A
 
 {{tool_write}} `{session-dir}/ultracode-generate-report.md` listing every file written (each skill path from `Generated skills`, plus INVENTORY.md and repo-profile.json) one line each. In a separate `Reused (not regenerated)` list, name every skill from `Reused skills` with its path, so the user sees which skills were kept as-is. Report any approved skill absent from BOTH `Generated skills` and `Reused skills` as skipped, with the likely reason.
 
-**Return:** the report path, a one-sentence summary, and the full list of files written into `{{state_dir}}/`.
+**Return:** the report path, a one-sentence summary, and the full list of files written into `{{runtime_dir}}/`
+and `{{skills_dir}}/`.
 
 ---
 
@@ -526,7 +544,7 @@ Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` A
 1. **No yapping. No emojis.** Every sentence carries information.
 2. **Portable tools only.** `{{tool_read}}`, `{{tool_write}}`, `{{tool_edit}}`, `{{tool_shell}}`, `{{tool_search_text}}`, `{{tool_glob}}`. Never assume an MCP or language server exists.
 3. **Read-only in detect / scout / propose.** In those modes, write ONLY into the session dir. Never touch the target repo's files.
-4. **Generate/adopt write ONLY under `{{state_dir}}/`.** In `generate-skill` mode write only under `{repo}/{{skills_dir}}/{name}/`; in `generate-inventory` mode write only under `{repo}/{{runtime_dir}}/`; in `adopt` mode write only under `{repo}/{{skills_dir}}/` and `{repo}/{{runtime_dir}}/`. Never modify project source code, never create files elsewhere.
+4. **Generate/adopt write ONLY under `{{runtime_dir}}/` and `{{skills_dir}}/`.** In `generate-skill` mode write only under `{repo}/{{skills_dir}}/{name}/`; in `generate-inventory` mode write only under `{repo}/{{runtime_dir}}/`; in `adopt` mode write only under `{repo}/{{skills_dir}}/` and `{repo}/{{runtime_dir}}/`. Never modify project source code, never create files elsewhere.
 5. **Grounding over generation.** Every generated skill template, invariant, and command must come from a real captured exemplar or a detected file. If you did not observe it, do not write it. Mark unknowns as `{TODO: confirm}` rather than inventing.
 6. **Honor approval.** In `generate-skill` / `generate-inventory` modes, produce ONLY the skills the user approved. Do not add unrequested skills. Never overwrite a skill whose `disposition` is `reuse`; only `regenerate` overwrites an existing skill, and only because the user opted into it at the approval gate. A reused skill is registered in the inventory but its `SKILL.md` is left untouched. In `adopt` mode, only run after the user picked a specific cross-harness candidate — never adopt speculatively.
 7. **One slice per scout.** In scout mode, stay within your assigned slice's paths. Do not scan the whole repo.

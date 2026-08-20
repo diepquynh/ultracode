@@ -18,10 +18,12 @@ detect (1) → scout (N, parallel) → propose (1)
             (re)generate-skill (N, parallel) → generate-inventory (1)
 ```
 
-**Cross-harness shortcut.** Before it scans anything, `detect` checks whether another harness
-(`.claude`/`.codex`/`.grok`/`.agent`/`.agents`) already has a COMPLETE bootstrap for this exact repo. If it
-finds one or more, it skips straight past scout/propose/generate and instead returns a list of candidates for
-YOU to present to the user (see Step 1). Adopting a candidate runs a single `adopt` spawn instead of the
+**Cross-harness shortcut.** Ultracode's runtime dir is `{{runtime_dir}}/` at the project root — shared by every
+harness — but older versions kept a per-harness one inside `.claude`/`.codex`/`.grok`/`.agent`/`.agents`.
+Before it scans anything, `detect` checks whether one of those legacy dirs already holds a COMPLETE bootstrap
+for this exact repo while `{{runtime_dir}}/` does not. If it finds one or more, it skips straight past
+scout/propose/generate and instead returns a list of candidates for YOU to present to the user (see Step 1).
+Adopting a candidate runs a single `adopt` spawn — which migrates it into `{{runtime_dir}}/` — instead of the
 scout → propose → generate chain:
 
 ```
@@ -98,26 +100,28 @@ description) so propose can re-use it. Return the scout-plan path, the stack, th
 structured slice list (descriptor, paths, slug), and the count of existing skills discovered."
 ```
 
-**If detect returns `CROSS-HARNESS-CANDIDATES: {n}`** (n ≥ 1) instead of a scout plan, it found another
-harness's complete bootstrap and wrote `{ULTRACODE_SESSION}/ultracode-cross-harness-candidates.json` instead of
+**If detect returns `CROSS-HARNESS-CANDIDATES: {n}`** (n ≥ 1) instead of a scout plan, it found a legacy
+per-harness bootstrap and wrote `{ULTRACODE_SESSION}/ultracode-cross-harness-candidates.json` instead of
 scanning. {{tool_read}} that file and handle it before touching Steps 2–4:
 
-- **Present every candidate** to the user: harness, stack, skill count, and `generatedAt`. When `n > 1`, ask
-  the user to pick exactly one (or decline all and run a full scan instead). When `n == 1`, still show it and
-  ask the user to confirm adopting it or to run a full scan instead — do not adopt silently. **STOP and wait
-  for the user's decision.**
+- **Present every candidate** to the user: harness, its legacy `runtimeDir`, stack, skill count, and
+  `generatedAt`. When `n > 1`, ask the user to pick exactly one (or decline all and run a full scan instead).
+  When `n == 1`, still show it and ask the user to confirm adopting it or to run a full scan instead — do not
+  adopt silently. **STOP and wait for the user's decision.**
   - **If the user picks a candidate:** spawn ONE `ultracode:initializer` agent:
     ```
     {{agent_selector}}: ultracode:initializer
     model: {{balanced_model}}
     prompt: "Mode: adopt.
     Source harness: {chosen candidate.harness}.
-    Source state dir: {chosen candidate.stateDir}.
+    Source runtime dir: {chosen candidate.runtimeDir}.
+    Source skills dir: {chosen candidate.skillsDir}.
     Repo root: {absolute repo root}.
     Session dir: {ULTRACODE_SESSION}.
-    Copy the source harness's repo-profile.json, INVENTORY.md, and every skill into this harness's own
-    {{runtime_dir}}/{{skills_dir}}, translating harness-specific paths and resetting the models block to the
-    seeded defaults. Return the report path, the source harness, and the list of skill names copied."
+    Migrate the source's repo-profile.json, INVENTORY.md, and every skill into {{runtime_dir}} and
+    {{skills_dir}}, translating stale paths and resetting the models block to the seeded defaults. Leave the
+    legacy source dir on disk. Return the report path, the source harness, the source runtime dir, and the
+    list of skill names copied."
     ```
     Then skip Steps 2–4 entirely and go straight to Step 5 — `adopt` writes the same
     `ultracode-generate-report.md` the normal pipeline's Step 5 already reads.
@@ -268,8 +272,9 @@ per-mode models you set on the spawns above (which are the initializer's own).
 whether it came from `generate-inventory` (normal pipeline) or `adopt` (cross-harness shortcut). Tell the user:
 1. Which files were written. For the normal pipeline: per-skill SKILL.md files, INVENTORY.md,
    repo-profile.json, which existing skills were reused (kept as-is and registered without regeneration), and
-   any approved skill the report lists as skipped. For the cross-harness shortcut: which harness it was
-   adopted from and which skills were copied.
+   any approved skill the report lists as skipped. For the cross-harness shortcut: which harness's legacy
+   runtime dir it was migrated from, which skills were copied, and that the legacy dir is still on disk and
+   safe to delete by hand.
 2. That newly generated skills register on the next session — advise {{reload_action}} so
    `{{skills_dir}}/*` are discovered. (The INVENTORY.md routing works immediately because
    agents read it as a file.)

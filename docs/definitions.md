@@ -32,18 +32,20 @@ emits an instruction to read the skill's `SKILL.md` with the harness read capabi
 dedicated plan-mode tool, so those mappings emit conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
 capabilities, to Grok's `read_file` / `search_replace` / `grep` / `list_dir` / `run_terminal_command`, and to Antigravity's `view_file` / `replace_file_content` / `write_to_file` / `run_command` / `grep_search` / `find_by_name`.
 
-Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Claude Code
-output uses `.claude/ultracode` for its inventory/profile and `.claude/skills` for generated project skills.
-Grok Build output uses `.grok/ultracode` and `.grok/skills`. Codex output uses `.codex/ultracode` and its
-native `.agents/skills` discovery directory. Antigravity output uses `.agents/ultracode` and `.agents/skills`. The generator translates these paths in prompts, descriptions,
-references, session hooks, and the model router; do not hardcode a second harness path inside a definition.
+Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Every
+harness shares one runtime dir for its inventory/profile/session scratch — `.ultracode` at the project root,
+outside any harness state dir — and the generator enforces that: `runtime_dir` must be identical across all
+four layouts and must not be nested. Only skill discovery stays harness-native: Claude Code output uses
+`.claude/skills` for generated project skills, Grok Build `.grok/skills`, and Codex and Antigravity the native
+`.agents/skills` directory. The generator translates these paths in prompts, descriptions, references, session
+hooks, and the model router; do not hardcode a second harness path inside a definition.
 
 Use these tokens in neutral `prompt.md` files, definition descriptions, and shared Markdown references:
 
 | Token | Meaning |
 |---|---|
 | `{{state_dir}}` | Harness project-state parent (`.claude`, `.grok`, `.codex`, or `.agents`) |
-| `{{runtime_dir}}` | Ultracode inventory, profile, and session directory |
+| `{{runtime_dir}}` | Ultracode inventory, profile, memory, and session directory — `.ultracode` for every harness |
 | `{{skills_dir}}` | Harness-native project skill discovery directory |
 | `{{agents_dir}}` | Harness-native project agent-definition directory |
 | `{{plugin_root}}` | Harness-provided environment expression for the installed plugin root |

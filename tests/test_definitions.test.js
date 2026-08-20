@@ -23,6 +23,7 @@ const IGNORED_SOURCE_ENTRIES = [
   ".claude",
   ".codex",
   ".grok",
+  ".ultracode",
   ".code-review-graph",
   "dist",
   "tmp",
@@ -1428,27 +1429,27 @@ function artifactGuardTest(target) {
     "ultracode-phase-2-service-layer.md",
     "ultracode-phase-10-d6-wire-envs-migrate-tests.md",
   ]) {
-    const denied = JSON.parse(run(`/repo/.claude/ultracode/session/x/${name}`)).hookSpecificOutput;
+    const denied = JSON.parse(run(`/repo/.ultracode/session/x/${name}`)).hookSpecificOutput;
     assert.equal(denied.permissionDecision, "deny", name);
     assert.match(denied.permissionDecisionReason, /Rules D3\/D10\/D17/);
   }
 
   assert.equal(run("/repo/src/App.ts"), "");
   assert.equal(
-    run("/repo/.claude/ultracode/session/x/ultracode-spec-2026-01-01-topic.md", "ultracode:generate-spec"),
+    run("/repo/.ultracode/session/x/ultracode-spec-2026-01-01-topic.md", "ultracode:generate-spec"),
     "",
   );
 
   // Ledger ownership (hooks/lib/ledger-policy.js) binds every writer, unlike the
   // spec/plan rule above which exempts the owning subagent.
   const ledgerDenied = (name, agentType) => {
-    const raw = run(`/repo/.claude/ultracode/session/x/${name}`, agentType);
+    const raw = run(`/repo/.ultracode/session/x/${name}`, agentType);
     assert.notEqual(raw, "", `${name} as ${agentType || "orchestrator"} should be denied`);
     return JSON.parse(raw).hookSpecificOutput.permissionDecisionReason;
   };
   const ledgerAllowed = (name, agentType) =>
     assert.equal(
-      run(`/repo/.claude/ultracode/session/x/${name}`, agentType),
+      run(`/repo/.ultracode/session/x/${name}`, agentType),
       "",
       `${name} as ${agentType || "orchestrator"} should be allowed`,
     );
@@ -2500,6 +2501,44 @@ test("every plugin distribution includes target hooks", () => {
   }
 });
 
+test("runtime dir is shared across harnesses at the project root", () => {
+  const layouts = Object.entries(HARNESS_LAYOUT.layouts);
+  assert.equal(layouts.length, 4);
+  for (const [target, layout] of layouts) {
+    assert.equal(layout.runtime_dir, ".ultracode", target);
+    // The point of the move: the runtime dir must not sit under any harness's
+    // state dir, so one bootstrap serves every harness.
+    assert.ok(!layout.runtime_dir.includes("/"), target);
+    assert.ok(
+      !layout.runtime_dir.startsWith(`${layout.state_dir}/`),
+      `${target} runtime_dir must live outside ${layout.state_dir}`,
+    );
+  }
+  // Skill/agent discovery stays harness-native — only the runtime dir moved.
+  assert.equal(HARNESS_LAYOUT.layouts.claude.skills_dir, ".claude/skills");
+  assert.equal(HARNESS_LAYOUT.layouts.codex.skills_dir, ".agents/skills");
+  assert.equal(HARNESS_LAYOUT.layouts.grok.skills_dir, ".grok/skills");
+  assert.equal(HARNESS_LAYOUT.layouts.antigravity.skills_dir, ".agents/skills");
+});
+
+test("generator rejects a harness-nested runtime dir", () => {
+  const sourceRoot = path.join(WORKSPACE, "nested-runtime-dir");
+  copyTreeFiltered(GENERATED_SOURCE_ROOT, sourceRoot, ["dist"]);
+  const layoutPath = path.join(sourceRoot, "definitions", "harness-layout.json");
+  const layout = JSON.parse(fs.readFileSync(layoutPath, "utf-8"));
+  layout.layouts.claude.runtime_dir = ".claude/ultracode";
+  fs.writeFileSync(layoutPath, JSON.stringify(layout, null, 2), "utf-8");
+  let stderr = "";
+  try {
+    runGenerator("claude", path.join(sourceRoot, "out"), { sourceRoot });
+    assert.fail("generator should have rejected a harness-nested runtime dir");
+  } catch (err) {
+    stderr = err.stderr || "";
+    assert.equal(err.status, 2);
+  }
+  assert.match(stderr, /runtime_dir must be identical across harnesses/);
+});
+
 test("codex output uses codex runtime layout", () => {
   const collected = [];
   const stack = [CODEX_PLUGIN_ROOT];
@@ -2537,7 +2576,7 @@ test("codex output uses codex runtime layout", () => {
     path.join(CODEX_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
     "utf-8",
   );
-  assert.match(orchestrate, /\.codex\/ultracode\/repo-profile\.json/);
+  assert.match(orchestrate, /\.ultracode\/repo-profile\.json/);
   const inventoryReference = fs.readFileSync(
     path.join(CODEX_PLUGIN_ROOT, "refs", "inventory-and-profile.md"),
     "utf-8",
@@ -2655,7 +2694,8 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
     assert.match(text, new RegExp(`^effort: ${grokEffortByName[agentName]}$`, "m"), name);
   }
   assert.match(explore, /tools: read_file, search_replace, run_terminal_command, grep, list_dir, web_search, web_fetch/);
-  assert.match(explore, /\.grok\/ultracode/);
+  assert.match(explore, /\.ultracode\/repo-profile\.json/);
+  assert.match(explore, /\.grok\/skills\/module-hub/);
   assert.ok(!explore.includes(".claude/"));
   assert.ok(!explore.includes("CLAUDE_PLUGIN_ROOT"));
 
