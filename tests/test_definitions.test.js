@@ -16,6 +16,7 @@ const ROOT = path.resolve(__dirname, "..");
 const GENERATOR = path.join(ROOT, "scripts", "generate_definitions.js");
 const HOOK = path.join(ROOT, "hooks", "model-router.js");
 const INSTALLER = path.join(ROOT, "install.sh");
+const UNINSTALLER = path.join(ROOT, "uninstall.sh");
 
 const IGNORED_SOURCE_ENTRIES = [
   ".git",
@@ -821,6 +822,93 @@ test("installer reports missing harness before installing", () => {
   assert.ok(stderr.includes("Missing harness CLI(s): claude"), stderr);
   assert.ok(stderr.includes("npm install -g @anthropic-ai/claude-code"), stderr);
   assert.ok(!fs.existsSync(path.join(tempDir, "ultracode")));
+});
+
+test("uninstaller unregisters each harness plugin and marketplace install.sh configured", () => {
+  const script = fs.readFileSync(UNINSTALLER, "utf-8");
+  assert.match(script, /claude plugin uninstall ultracode@ultracode/);
+  assert.match(script, /claude plugin marketplace remove ultracode/);
+  assert.match(script, /grok plugin uninstall ultracode --confirm/);
+  assert.match(script, /codex plugin remove ultracode@ultracode-local/);
+  assert.match(script, /codex plugin marketplace remove ultracode-local/);
+  assert.match(script, /MARKETPLACE_ROOT="\$\{INSTALL_DIR\}-marketplace\/codex"/);
+  assert.match(script, /rm -rf "\$MARKETPLACE_ROOT"/);
+  assert.match(script, /rm -rf "\$INSTALL_DIR"/);
+  const claudeUninstallIndex = script.indexOf("claude plugin uninstall ultracode@ultracode");
+  const claudeMarketplaceIndex = script.indexOf("claude plugin marketplace remove ultracode");
+  const installDirIndex = script.indexOf("rm -rf \"$INSTALL_DIR\"");
+  assert.ok(claudeUninstallIndex > 0 && claudeMarketplaceIndex > claudeUninstallIndex);
+  assert.ok(installDirIndex > claudeMarketplaceIndex);
+});
+
+test("uninstaller dry run covers every harness", () => {
+  for (const target of ["claude", "codex", "grok"]) {
+    const result = execFileSync(
+      "bash",
+      [UNINSTALLER, target, "--dry-run"],
+      { cwd: ROOT, encoding: "utf-8" },
+    );
+    assert.ok(result.includes(`for ${target}`), result);
+    assert.ok(result.includes("Would unregister the local marketplace"));
+    assert.ok(result.includes("Codex local marketplace checkout"));
+    assert.ok(result.includes("when uninstalling every harness"));
+  }
+  const all = execFileSync(
+    "bash",
+    [UNINSTALLER, "--dry-run"],
+    { cwd: ROOT, encoding: "utf-8" },
+  );
+  assert.ok(all.includes("for claude grok codex"));
+});
+
+test("uninstaller reports missing harness before uninstalling", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-uninstall-"));
+  const binDir = path.join(tempDir, "bin");
+  fs.mkdirSync(binDir);
+  const toolPath = execQuiet("which", ["bash"]);
+  assert.ok(toolPath, "bash not on PATH");
+  fs.symlinkSync(toolPath.trim(), path.join(binDir, "bash"));
+  const installDir = path.join(tempDir, "ultracode");
+  fs.mkdirSync(installDir);
+  const env = {
+    ...process.env,
+    PATH: binDir,
+    ULTRACODE_INSTALL_DIR: installDir,
+  };
+  let stderr = "";
+  try {
+    execFileSync("bash", [UNINSTALLER, "claude"], {
+      cwd: ROOT,
+      encoding: "utf-8",
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    assert.fail("uninstaller should have failed");
+  } catch (err) {
+    stderr = err.stderr || "";
+    assert.equal(err.status, 1);
+  }
+  assert.ok(stderr.includes("Missing harness CLI(s): claude"), stderr);
+  assert.ok(stderr.includes("npm install -g @anthropic-ai/claude-code"), stderr);
+  assert.ok(fs.existsSync(installDir));
+});
+
+test("uninstaller refuses an unsafe install dir", () => {
+  for (const unsafe of ["/", process.env.HOME]) {
+    assert.ok(unsafe, "HOME must be set");
+    try {
+      execFileSync("bash", [UNINSTALLER, "--dry-run"], {
+        cwd: ROOT,
+        encoding: "utf-8",
+        env: { ...process.env, ULTRACODE_INSTALL_DIR: unsafe },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      assert.fail(`uninstaller should refuse ULTRACODE_INSTALL_DIR=${unsafe}`);
+    } catch (err) {
+      assert.equal(err.status, 2);
+      assert.ok((err.stderr || "").includes("Refusing unsafe ULTRACODE_INSTALL_DIR"), err.stderr);
+    }
+  }
 });
 
 test("installer reports missing node before installing", () => {

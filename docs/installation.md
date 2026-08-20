@@ -37,6 +37,22 @@ not trust plugin hooks automatically, so the model-routing and pipeline guard ho
 Grok also auto-loads Claude Code plugins. If Ultracode is already installed for Claude, skip the Grok target
 or disable one copy so skills and hooks do not double-fire.
 
+## Uninstall
+
+Revert a matching `install.sh` run. The argument list is the same: omit it (or pass `all`) to unregister every
+harness and remove the checkout; pass `claude`/`grok`/`codex` to unregister one and leave the checkout for any
+remaining targets. `ULTRACODE_INSTALL_DIR` must match the install.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- claude
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- grok
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash -s -- codex
+```
+
+From a checkout, use `bash uninstall.sh`. Pass `--dry-run` to preview. Repo-local files from `/init-kit`
+(`.claude/ultracode`, `.grok/ultracode`, `.codex/ultracode`, and generated skills) are not removed.
+
 ## Claude Code manual install
 
 Generate the distribution first — `dist/` is not committed — then add its root as a marketplace:

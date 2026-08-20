@@ -82,7 +82,13 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh
 curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/install.sh | bash -s -- codex
 ```
 
-See [Installation](docs/installation.md) for manual installation.
+Uninstall with the same harness argument (default `all` unregisters every harness and removes the checkout):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.sh | bash
+```
+
+See [Installation](docs/installation.md) for manual installation and uninstall.
 
 ## Use
 
