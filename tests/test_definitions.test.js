@@ -590,9 +590,9 @@ test("codex agents are valid TOML", () => {
 
 test("model tiers map to every harness", () => {
   assert.deepEqual(MODEL_MAPPING.tiers, {
-    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.6", antigravity: "flash" },
-    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.6", antigravity: "flash" },
-    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.6", antigravity: "flash" },
+    fast: { claude: "haiku", codex: "gpt-5.6-luna", grok: "grok-4.5", antigravity: "flash" },
+    balanced: { claude: "sonnet", codex: "gpt-5.6-terra", grok: "grok-4.5", antigravity: "flash" },
+    advanced: { claude: "opus", codex: "gpt-5.6-sol", grok: "grok-4.5", antigravity: "flash" },
   });
   for (const [, definition] of sourceDefinitions()) {
     if (definition.kind === "agent") {
