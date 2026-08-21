@@ -14,6 +14,7 @@ described in [Definition authoring](definitions.md).
 | `ultracode:initializer` | Detect stack → scout patterns (parallel) → propose → generate skills (parallel) + inventory. |
 | `ultracode:explore` | Research a topic; write a grounded research document plus a criteria document breaking the request into atomic testable criteria. Anything the repo does not already use — a service, SDK, library, protocol, or third-party API — is looked up on the web and cited, never recalled. |
 | `ultracode:generate-spec` | Merge the criteria and research into one SDD spec file (EARS + Given/When/Then), with its deliverables in build order and its provided/consumed contracts. |
+| `ultracode:fact-check` | Verify every concrete claim a spec or plan makes against the repo or fetched docs; return a `{verdict, target, findings}` object. Runs after `generate-spec` and after `plan`, before either reaches its approval gate — a `PASS` is required before `ultracode_gate` will record approval. |
 | `ultracode:plan` | Design a phased, verifiable implementation plan from the spec file alone — one agent per request. |
 | `ultracode:implement` | Write code per a plan/phase; report changes; escalate via HANDOFF/STUCK. |
 | `ultracode:code-reviewer` | Review changes against the repo's Review Rule Set; emit JSON findings. |

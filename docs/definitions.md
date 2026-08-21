@@ -22,23 +22,33 @@ configuration records its argument hint. `prompt.md` contains only the large pro
 preserved by generation.
 
 The schema is `definitions/definition.schema.json`. Neutral model tiers resolve through
-`definitions/model-mapping.json`: `fast` maps to Haiku/Luna/`grok-4.5`/`flash`, `balanced` maps to
-Sonnet/Terra/`grok-4.5`/`flash`, and `advanced` maps to
-Opus/Sol/`grok-4.5`/`flash` (every Grok and Antigravity tier currently resolves
-to the same model). Canonical capabilities and their
-Claude Code/Grok Build/Codex/Antigravity translations are explicit in `definitions/tool-mapping.json`. Add a mapping
-before using a new capability in a definition. Codex, Grok Build, and Antigravity have no `Skill` tool, so that mapping
-emits an instruction to read the skill's `SKILL.md` with the harness read capability (`view_file` on Antigravity). Grok and Antigravity also have no
-dedicated plan-mode tool, so those mappings emit conversation instructions. Multiple Claude file/search tools map to Codex's `exec_command` or `apply_patch`
-capabilities, to Grok's `read_file` / `search_replace` / `grep` / `list_dir` / `run_terminal_command`, and to Antigravity's `view_file` / `replace_file_content` / `write_to_file` / `run_command` / `grep_search` / `find_by_name`.
+`definitions/model-mapping.json`:
+
+| Tier | Claude Code | Codex | Grok Build | Antigravity |
+|---|---|---|---|---|
+| `fast` | `haiku` | `gpt-5.6-luna` | `grok-4.5` | `flash` |
+| `balanced` | `sonnet` | `gpt-5.6-terra` | `grok-4.5` | `flash` |
+| `advanced` | `opus` | `gpt-5.6-sol` | `grok-4.5` | `flash` |
+
+Every Grok and Antigravity tier currently resolves to the same model.
+
+Canonical capabilities and their per-harness translations are explicit in `definitions/tool-mapping.json` — add
+a mapping before using a new capability in a definition. Where a harness has no equivalent, the mapping emits an
+instruction instead of a tool:
+
+- No `Skill` tool on Codex, Grok Build, or Antigravity → read the skill's `SKILL.md` with the harness read
+  capability (`view_file` on Antigravity).
+- No dedicated plan-mode tool on Grok or Antigravity → a conversation instruction.
+- Claude's several file/search tools collapse into Codex's `exec_command` / `apply_patch`, Grok's `read_file` /
+  `search_replace` / `grep` / `list_dir` / `run_terminal_command`, and Antigravity's `view_file` /
+  `replace_file_content` / `write_to_file` / `run_command` / `grep_search` / `find_by_name`.
 
 Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Every
-harness shares one runtime dir for its inventory/profile/session scratch — `.ultracode` at the project root,
-outside any harness state dir — and the generator enforces that: `runtime_dir` must be identical across all
-four layouts and must not be nested. Only skill discovery stays harness-native: Claude Code output uses
-`.claude/skills` for generated project skills, Grok Build `.grok/skills`, and Codex and Antigravity the native
-`.agents/skills` directory. The generator translates these paths in prompts, descriptions, references, session
-hooks, and the model router; do not hardcode a second harness path inside a definition.
+harness shares one runtime dir for inventory, profile, and session scratch — `.ultracode` at the project root,
+outside any harness state dir — and the generator enforces it: `runtime_dir` must be identical across all four
+layouts and must not be nested. Only skill discovery stays harness-native (`.claude/skills`, `.grok/skills`, and
+`.agents/skills` for both Codex and Antigravity). The generator translates these paths in prompts, descriptions,
+references, session hooks, and the model router; do not hardcode a second harness path inside a definition.
 
 Use these tokens in neutral `prompt.md` files, definition descriptions, and shared Markdown references:
 
@@ -109,22 +119,24 @@ Generate the Codex plugin distribution with:
 node scripts/generate_definitions.js --target codex
 ```
 
-When `--output-dir` is omitted, the generator writes to `dist/<target>/ultracode` beneath `--source-root`.
-Pass `--output-dir <path>` to generate a plugin somewhere else. `dist/` is build output: it is gitignored, never
-committed, and `install.sh` regenerates it from the checkout on every install, so no distribution can ship
-stale. Generate it yourself before a manual install or a validation run.
+This writes Codex agent role files to `agents/<name>.toml` and Codex skills to `skills/<name>/SKILL.md` beneath
+the Codex plugin root, with plugin metadata at `.codex-plugin/plugin.json` and target-adapted lifecycle hooks
+under `hooks/`. Two Codex-specific adaptations:
 
-This writes Codex agent role files to `agents/<name>.toml` and Codex skills to
-`skills/<name>/SKILL.md` beneath the Codex plugin root. Because plugin-bundled custom prompts are unsupported
-and standalone Codex custom prompts are deprecated/local-only, each command is emitted as an explicitly
-invoked Codex skill at `skills/<command>/SKILL.md`. Its `agents/openai.yaml` sets
-`policy.allow_implicit_invocation: false`. Invoke it as `$<command>`. Plugin metadata lives at
-`dist/codex/ultracode/.codex-plugin/plugin.json`, and target-adapted lifecycle hooks live under `hooks/`.
-Codex role TOML supports developer instructions, model/reasoning settings, and
-sandbox mode, but not Claude's per-agent timeout, fork-context, or granular tool allowlist. The generator keeps
-timeout/context in source comments, derives `sandbox_mode` from write capabilities, and prepends an explicit
-tool-vocabulary policy to the preserved prompt. Codex role files intentionally omit `model`: role-level model
-settings outrank spawn arguments, so `hooks/model-router.js` supplies the profile-selected model instead.
+- **Commands become skills.** Plugin-bundled custom prompts are unsupported and standalone Codex custom prompts
+  are deprecated/local-only, so each command is emitted as an explicitly invoked skill at
+  `skills/<command>/SKILL.md`, with `agents/openai.yaml` setting `policy.allow_implicit_invocation: false`.
+  Invoke it as `$<command>`.
+- **Role TOML is narrower than Claude front matter.** It supports developer instructions, model/reasoning
+  settings, and sandbox mode, but not per-agent timeout, fork-context, or a granular tool allowlist. The
+  generator keeps timeout/context in source comments, derives `sandbox_mode` from write capabilities, and
+  prepends an explicit tool-vocabulary policy to the preserved prompt. `model` is intentionally omitted —
+  role-level model settings outrank spawn arguments, so `hooks/model-router.js` supplies the profile-selected
+  model instead.
+
+Output goes to `dist/<target>/ultracode` beneath `--source-root` unless `--output-dir <path>` says otherwise.
+`dist/` is build output: gitignored, never committed, and regenerated by `install.sh` from the checkout on every
+install, so no distribution can ship stale. Generate it yourself before a manual install or a validation run.
 
 The generator writes `hooks/model-routing.json` per target from the neutral model mapping and agent defaults.
 Runtime repo profiles normally select `fast`, `balanced`, or `advanced`. Use `"default"` to select the agent's

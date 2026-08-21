@@ -58,36 +58,36 @@ area, and the build/test/format commands. Skill auto-discovery is just a conveni
 
 ## Repo memory (the self-improving part)
 
-Alongside `INVENTORY.md` and `repo-profile.json`, the runtime dir holds `memory/knowledge.sqlite3` — durable,
-repo-scoped lessons (a non-obvious constraint, a subtle invariant, a workaround for a specific bug) that
-survive across sessions, mirroring Pi's `memory.ts`. It's deliberately uncapped and never auto-expired: a
-large multi-module repo accumulates more lessons, across more subagent failures, than any single session's
-budget can gather in one pass, so the store has to keep growing across sessions rather than aging out on a
-timer or a size limit. The one exception is **`ultracode_memory_forget`**, a narrow, agent-initiated removal
-of a single lesson an agent has confirmed is now wrong or stale — an exact `(area, lesson)` match, never a
-bulk sweep or an automatic trim.
+Alongside `INVENTORY.md` and `repo-profile.json`, the runtime dir holds `memory/knowledge.sqlite3`: durable,
+repo-scoped lessons — a non-obvious constraint, a subtle invariant, a workaround for a specific bug — that
+survive across sessions, mirroring Pi's `memory.ts`.
 
-That scale is also why it's a real SQLite database (`node:sqlite`, with an FTS5 virtual table for ranked
-full-text search) rather than a flat file agents read in full. Any agent — not just the orchestrator — calls
-**`ultracode_memory_recall`** with its own `repo_root`, an optional `area` scope (matching hierarchical
-sub-scopes like `billing-service::InvoiceCalculator`), and a free-text `query` describing its task or failure,
-and gets back just the relevant lessons, ranked by bm25 within scope, then by relevance repo-wide as fill.
-Agents call it before starting work in an area and again with the error as the query after a failure, instead
-of dumping the whole store into context. Any agent that learns something worth keeping calls
-**`ultracode_memory`** to record it — all three tools are served from `mcp/gate-server.js`
-(`mcp/lib/memory.js` holds the storage logic), alongside the `ultracode_gate` spec/plan-approval tool. Entries
-are deduped by `(area, lesson)` — the newest occurrence updates the existing row's source and timestamp in
-place rather than growing the store — but there is no cap or expiry; the only way an entry leaves the store is
-an agent explicitly calling `ultracode_memory_forget` with that exact `(area, lesson)` pair after confirming
-it's stale. `node:sqlite` is real file-backed SQLite, so concurrent writers (e.g.
-two phases running in parallel each recording a lesson) wait on SQLite's own file lock rather than clobbering
-each other; that correctness would have needed a hand-rolled lock file with an in-memory engine like `sql.js`.
-The store is meant to be committed alongside the other generated routing files, same as `INVENTORY.md` and
-`repo-profile.json` — it's binary, so expect it to diff opaquely, not readably.
+Three MCP tools, served from `mcp/gate-server.js` (storage logic in `mcp/lib/memory.js`) alongside the
+`ultracode_gate` spec/plan-approval tool:
 
-`node:sqlite` requires Node ≥22.5 and is still an experimental API (`package.json`'s `engines` field reflects
-this) — the trade accepted for real FTS5/bm25 ranking and OS-level file locking with zero added dependency,
-over a WASM engine that would run on any Node version but require hand-rolled locking and lacks FTS5.
+- **`ultracode_memory_recall`** — any agent, not just the orchestrator, passes its own `repo_root`, an optional
+  `area` scope (matching hierarchical sub-scopes like `billing-service::InvoiceCalculator`), and a free-text
+  `query` describing its task or its failure. It gets back just the relevant lessons, ranked by bm25 within
+  scope, then by relevance repo-wide as fill. Agents call it before starting work in an area, and again with
+  the error as the query after a failure — instead of dumping the whole store into context.
+- **`ultracode_memory`** — record a lesson worth keeping. Entries dedupe on `(area, lesson)`: the newest
+  occurrence updates the existing row's source and timestamp in place rather than growing the store.
+- **`ultracode_memory_forget`** — the only way an entry ever leaves. A narrow, agent-initiated removal of a
+  single lesson an agent has confirmed is now wrong or stale, by exact `(area, lesson)` match. Never a bulk
+  sweep, never an automatic trim.
+
+The store is deliberately uncapped and never expires on a timer or a size limit: a large multi-module repo
+accumulates more lessons, across more subagent failures, than any single session's budget can gather in one
+pass, so it has to keep growing rather than aging out. That scale is also why it's a real SQLite database
+(`node:sqlite`, with an FTS5 virtual table for ranked full-text search) rather than a flat file agents read in
+full — and real file-backed SQLite means two phases running in parallel each recording a lesson wait on
+SQLite's own file lock instead of clobbering each other, which an in-memory engine like `sql.js` would have
+needed a hand-rolled lock file to match.
+
+Commit it alongside the other generated routing files, same as `INVENTORY.md` and `repo-profile.json` — it's
+binary, so expect it to diff opaquely. `node:sqlite` requires Node ≥22.5 and is still an experimental API
+(`package.json`'s `engines` field reflects this): the price of real FTS5/bm25 ranking and OS-level file locking
+with zero added dependency, over a WASM engine that runs anywhere but lacks FTS5 and locking.
 
 ## How the agents communicate
 
@@ -124,7 +124,9 @@ Don't reintroduce either.
    ▼
    explore                 ─▶ research doc + criteria doc      (one agent per repo)
    generate-spec           ─▶ ONE spec file, deliverables D1…Dn inside it
+   fact-check (spec)       ─▶ verdict JSON — PASS required before the spec gate opens
    plan                    ─▶ master plan + one self-contained file per phase  (reads only the spec file)
+   fact-check (plan)       ─▶ verdict JSON — PASS required before the plan gate opens
    ── per phase (one review loop; the loop ends here) ──
    implement               ─▶ change report    (its Changed Files list = what to trace & cover)
    code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
@@ -157,9 +159,11 @@ shippable units are deliverables `D1`, `D2`, … inside that one file, in a Deli
 built against two documents that disagree. It turns deliverables into a master plan whose phases carry a
 deliverable ID, a repo, and a dependency set, fanning out wherever phases don't block each other.
 
-Two approval gates sit on this path: the spec (before planning) and the plan (before coding). Anything the
-user changes at either gate is written back into the spec via `generate-spec`, so the spec stays the one source
-everything else traces to.
+Two approval gates sit on this path: the spec (before planning) and the plan (before coding). Each is preceded
+by a mandatory `fact-check` pass — `ultracode_gate` will not record approval without a `PASS`, whatever the
+orchestrator or the user decides — so no artifact reaches you carrying a claim that isn't true of the repo.
+Anything the user changes at either gate is written back into the spec via `generate-spec`, so the spec stays
+the one source everything else traces to.
 
 **The orchestrator is the only router.** Every spawn prompt is self-contained: session dir, exact prior-report
 paths, resolved build/test commands, and a `Required skills:` line from the inventory. An agent works, writes
@@ -194,31 +198,15 @@ skill set. A user-approval gate sits between scouting and generation.
 - **Seeded from real setups.** The pipeline agents, `orchestrate`, `meta-author`, and the stack references were
   generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go codebases.
 - **Model tiers, per repo and per phase.** `repo-profile.json`'s `models` block decides which model each
-  subagent spawn runs on. `/init-kit` seeds sensible defaults; edit the block to override. (Init-kit's own
-  skill generation always runs on the active harness's advanced model, set separately by the init-kit entry
-  point — the `initializer` is the one agent the hook never denies for a missing route, so re-initializing an
-  already-initialized repo keeps working.)
-  - `hooks/model-router.js` runs as a `PreToolUse` hook on every agent spawn, resolves the route for that
-    spawn's repo, translates it for the active harness, and sets `model` via `updatedInput` when the spawn
-    omitted `model` or already passed the routed slug. A caller `model` that does not resolve to that slug is
-    **denied**, not rewritten — Grok treats the original spawn argument as an explicit override even after
-    `updatedInput` fires, so a silent rewrite cannot win. The orchestrator should omit `model`; if a hook
-    denial names `model: <slug>`, re-spawn with that slug only. Once a profile exists, malformed or missing
-    routes deny the spawn. `"default"` = generated agent default; `"inherit"` = leave the spawn model
-    untouched (including a caller `model`). The hook re-reads the profile per spawn, so mid-session edits
-    apply next call.
-  - Claude agents keep their frontmatter defaults. Codex role TOML and Grok agent front matter omit `model`
-    so a role-level value cannot outrank the spawn argument — the hook fills its generated default when the
-    profile is absent or says `"default"`, and a Grok spawn with no model inherits the parent. Grok hook
-    stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both that and Claude/Codex
-    snake_case.
-  - `effort` can't be routed this way — it's a subagent-definition field only (no per-invocation `effort` on
-    the Agent / `spawn_subagent` tool, no env var for it). Claude and Grok write `effort` in agent front
-    matter; Codex writes `model_reasoning_effort` in the role TOML. That value always holds regardless of tier.
-  - `models.byAgent`: `explore`, `generate-spec`, `plan`, and the authoring stages → `advanced`;
-    `code-reviewer`, `execution-path-analyzer` → `balanced`.
-  - `models.byPhaseComplexity`: `implement`/`write-test` → `fast` for low/medium complexity, `balanced` for
-    high.
-  - The block is per-subagent and per-repo because not everyone runs Claude Code on Anthropic-hosted models —
-    it can point at a gateway/proxy, Bedrock, Vertex, or another backend. Match each stage to what your setup
-    actually serves and to your own cost/latency/capability needs.
+  subagent spawn runs on — a static tier per agent, and a per-phase-complexity tier for `implement` and
+  `write-test`. `hooks/model-router.js` applies it as a `PreToolUse` hook on every spawn, translates it for the
+  active harness, and denies any spawn it cannot resolve. `/init-kit` seeds defaults; edit the block to
+  override. See [Model routing](model-routing.md) for the value forms, the denial cases, and the two exempt
+  agents.
+  - Init-kit's own skill generation always runs on the active harness's advanced model, set by the init-kit
+    entry point rather than the profile.
+  - `PreToolUse` hooks do not compose — both hooks on a matcher see the original tool input and only one
+    `updatedInput` survives — so `model-router.js` is the only place an agent spawn may be rewritten at all.
+    Spawn-time prompt injection lives there for that reason, not because it belongs there.
+  - Grok hook stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both that and
+    Claude/Codex snake_case.
