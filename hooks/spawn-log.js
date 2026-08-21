@@ -25,33 +25,10 @@ const {
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 
-const MAX_RECORDS = 200;
-const SCHEMA_VERSION = 1;
-
-function summarize(toolResponse) {
-  if (toolResponse == null) return "";
-  if (typeof toolResponse === "string") return toolResponse.trim().split("\n")[0].slice(0, 200);
-  if (typeof toolResponse === "object") {
-    if (typeof toolResponse.systemMessage === "string") return toolResponse.systemMessage;
-    if (typeof toolResponse.result === "string") return toolResponse.result.trim().split("\n")[0].slice(0, 200);
-  }
-  return "";
-}
-
-function statusOf(toolResponse) {
-  if (toolResponse && typeof toolResponse === "object" && (toolResponse.isError || toolResponse.is_error)) {
-    return "error";
-  }
-  const text =
-    typeof toolResponse === "string"
-      ? toolResponse
-      : toolResponse && typeof toolResponse.result === "string"
-        ? toolResponse.result
-        : "";
-  if (/^\s*STUCK:/m.test(text)) return "stuck";
-  if (/^\s*HANDOFF:/m.test(text)) return "handoff";
-  return "ok";
-}
+// summarize/statusOf live in hooks/lib/spawn-record.js because AGY records the
+// same fields from a later message (hooks/agy-message-record.js) — one definition
+// of what a subagent's return means, whichever path observes it.
+const { SCHEMA_VERSION, MAX_RECORDS, summarize, statusOf } = require("./lib/spawn-record");
 
 async function main() {
   const hookInput = await readHookInput();

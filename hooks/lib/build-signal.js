@@ -170,28 +170,53 @@ function responseText(toolResponse) {
   return pieces.join("\n");
 }
 
+// Each harness reports the exit status in its own words. Claude Code prefixes a
+// failed call's result text "Exit code N"; Antigravity's transcript says "The
+// command exited with code N" and its hook payload carries `error: "exit status
+// N"`. All three are the harness's own report, so all three are read here rather
+// than left to output sniffing.
+const EXIT_CODE_PATTERNS = [
+  /^\s*Exit code (\d+)/m,
+  /\bexited with code (\d+)/i,
+  /\bexit status (\d+)/i,
+];
+
+function exitCodeFrom(text) {
+  for (const pattern of EXIT_CODE_PATTERNS) {
+    const match = String(text || "").match(pattern);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
 // Returns { failed: boolean, exitCode: number|null, text: string }.
 function failedFrom(toolResponse, hookInput) {
   const text = responseText(toolResponse);
+  // AGY states failure in the payload's `error` ("exit status 1"), with no result
+  // object anywhere; a hook that only read `toolResponse` counted no failures at
+  // all there.
+  const hookError =
+    hookInput && typeof hookInput.error === "string" && hookInput.error.trim()
+      ? hookInput.error
+      : "";
 
   // A timed-out/interrupted call is not evidence the code is wrong, so it
   // neither counts as a failure nor clears an existing streak.
   const interrupted =
     (toolResponse && typeof toolResponse === "object" && toolResponse.interrupted === true) ||
-    false;
+    /\b(timed out|interrupted|canceled|cancelled)\b/i.test(hookError);
   if (interrupted) return { failed: null, exitCode: null, text };
 
-  const exitMatch = text.match(/^\s*Exit code (\d+)/m);
-  if (exitMatch) {
-    const code = Number(exitMatch[1]);
-    return { failed: code !== 0, exitCode: code, text };
+  const exitCode = exitCodeFrom(text) ?? exitCodeFrom(hookError);
+  if (exitCode !== null) {
+    return { failed: exitCode !== 0, exitCode, text };
   }
 
   const explicitError =
     (toolResponse && typeof toolResponse === "object" &&
       (toolResponse.isError === true || toolResponse.is_error === true)) ||
     (hookInput && (hookInput.isError === true || hookInput.is_error === true)) ||
-    false;
+    Boolean(hookError);
   if (explicitError) return { failed: true, exitCode: null, text };
 
   if (FAILURE_MARKERS.some((marker) => marker.test(text))) {
@@ -266,6 +291,7 @@ module.exports = {
   BUILD_PURPOSES,
   isBuildCommand,
   failedFrom,
+  exitCodeFrom,
   diagnosticSignature,
   normalizeDiagnostic,
   responseText,

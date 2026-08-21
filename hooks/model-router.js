@@ -285,22 +285,37 @@ async function main() {
   const withBrief = (input) =>
     briefedPrompt && promptKey ? { ...input, [promptKey]: briefedPrompt } : input;
 
+  // Antigravity tells a subagent's own hooks nothing about which agent they are
+  // running inside — no `agent_type`, and its conversation id is not the pipeline's
+  // session id — so every per-agent hook was inert in there: build-streak counted
+  // no failures and its escalation gate could never fire. The spawn prompt is the
+  // one thing that crosses into the subagent's conversation and is preserved as its
+  // own first transcript step, so the identity is stamped there, by this hook rather
+  // than by the orchestrator's good behaviour. hooks/lib/agy-transcript.js
+  // (selfContext) reads it back.
+  const stampAgent = (text) =>
+    routing.target === "antigravity" && text && !/^Ultracode agent:/m.test(text)
+      ? `${text}${text.endsWith("\n") ? "" : "\n"}Ultracode agent: ${agent}\n`
+      : text;
+  const agyPrompt = stampAgent(briefedPrompt || prompt);
+  const agySubagents = (extra = {}) =>
+    toolInput.Subagents.map((sub, idx) => (idx === 0 ? { ...sub, Prompt: agyPrompt, ...extra } : sub));
+
   const [action, model] = resolveModel(route, routing, agent);
   if (action === "inherit") {
+    if (routing.target === "antigravity" && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
+      // Emitted whenever the prompt changed at all — the stamp alone is reason
+      // enough, even with no brief to add.
+      if (agyPrompt !== (toolInput.Subagents[0].Prompt || toolInput.Subagents[0].prompt)) {
+        emit({ decision: "allow", overwrite: { ...toolInput, Subagents: agySubagents() } });
+      }
+      return 0;
+    }
     if (briefedPrompt) {
-      if (routing.target === "antigravity" && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
-        const subagents = toolInput.Subagents.map((sub, idx) => {
-          if (idx === 0) return { ...sub, Prompt: briefedPrompt };
-          return sub;
-        });
+      if (routing.target === "antigravity" && promptKey) {
         emit({
           decision: "allow",
-          overwrite: { ...toolInput, Subagents: subagents },
-        });
-      } else if (routing.target === "antigravity" && promptKey) {
-        emit({
-          decision: "allow",
-          overwrite: withBrief(toolInput),
+          overwrite: { ...withBrief(toolInput), [promptKey]: agyPrompt },
         });
       } else if (promptKey) {
         emit({
@@ -327,23 +342,13 @@ async function main() {
 
   let updated;
   if (routing.target === "antigravity" && Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
-    const subagents = toolInput.Subagents.map((sub, idx) => {
-      if (idx === 0) {
-        return {
-          ...sub,
-          Model: model,
-          ...(briefedPrompt ? { Prompt: briefedPrompt } : {}),
-        };
-      }
-      return sub;
-    });
-    updated = { ...toolInput, Subagents: subagents };
+    updated = { ...toolInput, Subagents: agySubagents({ Model: model }) };
     emit({
       decision: "allow",
       overwrite: updated,
     });
   } else if (routing.target === "antigravity") {
-    updated = withBrief({ ...toolInput, model, Model: model });
+    updated = { ...withBrief({ ...toolInput, model, Model: model }), ...(promptKey ? { [promptKey]: agyPrompt } : {}) };
     emit({
       decision: "allow",
       overwrite: updated,

@@ -90,6 +90,9 @@ for HARNESS in $TARGETS; do
       agy plugin uninstall ultracode \
         || { echo "Failed to uninstall the Antigravity plugin ultracode." >&2; exit 1; }
     fi
+    # install.sh registers this separately from the plugin, so uninstalling the
+    # plugin leaves it behind pointing at a directory that is about to be gone.
+    agy mcp remove ultracode-gate >/dev/null 2>&1 || true
     echo "Uninstalled Ultracode from Antigravity. Start a new agy session."
   else
     if codex plugin list --json | grep -Fq '"pluginId": "ultracode@ultracode-local"'; then

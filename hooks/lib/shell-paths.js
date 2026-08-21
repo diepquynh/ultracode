@@ -51,10 +51,17 @@ function tokenize(segment) {
 function targetsFromSegment(segment) {
   const targets = [];
 
-  const redirectPattern = /(?:^|[^<>])(\d*>{1,2}\|?|&>{1,2})\s*(\S+)/g;
+  // `[^<>]` before the operator keeps `2>&1`-style and heredoc text out. The
+  // placeholder guard below covers the other direction: prose inside a command —
+  // a spawn prompt, an echoed instruction — routinely contains `<NAME>`, and
+  // `...session-<ID>/factcheck.json` read as "redirect into /factcheck.json",
+  // which denied a legitimate command for a write it never made.
+  const redirectPattern = /(^|[^<>])(\d*>{1,2}\|?|&>{1,2})\s*(\S+)/g;
   let match;
   while ((match = redirectPattern.exec(segment))) {
-    targets.push(...candidatePaths(match[2]));
+    const beforeOperator = segment.slice(0, match.index + match[1].length);
+    if (/<[A-Za-z_][\w.-]*$/.test(beforeOperator)) continue; // closing `<NAME>`, not a redirect
+    targets.push(...candidatePaths(match[3]));
   }
 
   const tokens = tokenize(segment);
@@ -94,4 +101,7 @@ function extractWriteTargets(command) {
   return targets;
 }
 
-module.exports = { extractWriteTargets };
+// splitSegments/tokenize/stripQuotes are exported for hooks/lib/plugin-policy.js,
+// which needs the same "good enough" shell reading to decide what a segment runs
+// — one heuristic shared by both, rather than a second copy that drifts.
+module.exports = { extractWriteTargets, splitSegments, tokenize, stripQuotes };

@@ -46,6 +46,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/plugin-guard.js\""
+          },
+          {
+            "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/bash-guard.js\""
           },
           {
@@ -65,6 +69,10 @@
       {
         "matcher": "Write|Edit",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/plugin-guard.js\""
+          },
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/artifact-guard.js\""

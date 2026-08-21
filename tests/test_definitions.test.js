@@ -1495,6 +1495,761 @@ test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts
   artifactGuardTest("grok");
 });
 
+// The commands in DENIED_* below are the shapes recorded in a real Antigravity
+// session where the orchestrator, blocked from writing factcheck.json with the
+// write tool, ran ultracode's own code instead: `node <plugin>/mcp/gate-server.js`,
+// then `node -e "require('<plugin>/mcp/lib/gate.js').recordGateDecision(...)"`,
+// then `node -e "require('<plugin>/hooks/lib/common.js').writeJsonAtomic(
+// '<session>/factcheck.json', …)"` — approving its own spec with a fact-check
+// PASS no agent ever returned. None of them names a protected path in an
+// argument position, which is why every path-based guard passed them through.
+function pluginGuardTest(target) {
+  const pluginRoot = pluginRootFor(target);
+  const hookPath = path.join(pluginRoot, "hooks", "plugin-guard.js");
+  const antigravity = target === "antigravity";
+  const env = { [HARNESS_LAYOUT.layouts[target].plugin_root_env]: pluginRoot };
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-plugguard-${target}-`));
+  const session = path.join(
+    repo,
+    HARNESS_LAYOUT.layouts[target].runtime_dir,
+    "session",
+    "ultracode-session-testsess",
+  );
+
+  const command = (text, cwd = repo) =>
+    runHook(
+      hookPath,
+      antigravity
+        ? { cwd, toolCall: { args: { CommandLine: text, Cwd: cwd } } }
+        : { cwd, tool_input: { command: text, cwd } },
+      env,
+    );
+  const write = (filePath) =>
+    runHook(
+      hookPath,
+      antigravity
+        ? { cwd: repo, toolCall: { args: { TargetFile: filePath } } }
+        : { cwd: repo, tool_input: { file_path: filePath } },
+      env,
+    );
+  const reasonOf = (raw, label) => {
+    assert.notEqual(raw, "", `${target}: ${label} must be denied`);
+    const payload = JSON.parse(raw);
+    return antigravity
+      ? payload.reason
+      : payload.hookSpecificOutput.permissionDecisionReason;
+  };
+
+  // Running or loading ultracode's own code, in every spelling the recorded
+  // session used plus the obvious variations on it.
+  for (const text of [
+    `node ${pluginRoot}/mcp/gate-server.js`,
+    `node -e "require('${pluginRoot}/mcp/lib/gate.js').recordGateDecision('${session}','spec','approved')"`,
+    `node -e "require('${pluginRoot}/hooks/lib/common.js').writeJsonAtomic('x.json',{})"`,
+    `bash -c "node ${pluginRoot}/hooks/factcheck-record.js < /tmp/payload.json"`,
+    `cat /tmp/payload.json | node ${pluginRoot}/hooks/factcheck-record.js`,
+    `cd ${pluginRoot} && node ./hooks/factcheck-record.js`,
+    // Disarming a guard is the same class of move as impersonating one.
+    `sed -i 's/deny/allow/' ${pluginRoot}/hooks/pipeline-gate.js`,
+    `rm ${pluginRoot}/hooks/plugin-guard.js`,
+    `chmod -x ${pluginRoot}/hooks/bash-scope-guard.js`,
+    `echo '{}' > ${pluginRoot}/hooks/model-routing.json`,
+  ]) {
+    assert.match(reasonOf(command(text), text), /ultracode's own plugin code|plugin tree/);
+  }
+
+  // Reading the plugin stays allowed: a denial is only useful if the caller can
+  // go look up the rule that produced it.
+  for (const text of [
+    `cat ${pluginRoot}/hooks/pipeline-gate.js`,
+    `grep -n "deny" ${pluginRoot}/hooks/pipeline-gate.js`,
+    `head -40 ${pluginRoot}/mcp/lib/gate.js`,
+    `sed -n '1,20p' ${pluginRoot}/hooks/lib/ledger-policy.js`,
+  ]) {
+    assert.equal(command(text), "", `${target}: ${text} must stay allowed`);
+  }
+
+  // An interpreter fed inline code is the other half of the bypass: shell-paths.js
+  // sees `> file`, never `fs.writeFileSync` inside a JS string.
+  assert.match(
+    reasonOf(command(`node -e "require('fs').writeFileSync('${session}/factcheck.json','{}')"`), "eval ledger write"),
+    /forge a pipeline decision/,
+  );
+  assert.match(
+    reasonOf(command(`python3 -c "open('${session}/gates.json','w').write('{}')"`), "python ledger write"),
+    /forge a pipeline decision/,
+  );
+  assert.match(
+    reasonOf(command(`python3 - <<'PY'\nopen('out.json','w').write('{}')\nPY`), "heredoc write"),
+    /opaque|writes to the filesystem/,
+  );
+  assert.match(
+    reasonOf(command(`node -e "require('child_process').execSync('ls')"`), "eval spawn"),
+    /spawns another process/,
+  );
+
+  // Inline code that only reads or prints is ordinary tooling, not a channel.
+  for (const text of [
+    'node -e "console.log(process.version)"',
+    'node -p "require(\'./package.json\').version"',
+    'python3 -c "print(open(\'README.md\').read())"',
+    "npm test",
+    "./mvnw -q compile",
+    "git status",
+    "node hooks/bash-guard.js", // ultracode's own source checkout: no plugin markers
+  ]) {
+    assert.equal(command(text), "", `${target}: ${text} must stay allowed`);
+  }
+
+  // The write-tool half of the same rule.
+  assert.match(
+    reasonOf(write(path.join(pluginRoot, "hooks", "pipeline-gate.js")), "plugin write"),
+    /read-only/,
+  );
+  assert.equal(write(path.join(repo, "src", "App.ts")), "");
+  assert.equal(write(path.join(session, "ultracode-implement-phase-1.md")), "");
+}
+
+test("plugin-guard denies running, loading, or patching ultracode's own code", () => {
+  pluginGuardTest("claude");
+  pluginGuardTest("codex");
+  pluginGuardTest("grok");
+  pluginGuardTest("antigravity");
+});
+
+// Antigravity spawns carry a free-text `Role` the model writes itself next to the
+// canonical `TypeName`. Resolving from `Role` yields "fact-checker" /
+// "implementation-planner" — names no hook knows — so pipeline-gate skips its gate,
+// factcheck-record bails, and model-router finds no route: every per-agent guard
+// turns itself off, and the model can trigger that by renaming its own spawn.
+function agentResolutionTest(target) {
+  const pluginRoot = pluginRootFor(target);
+  const { agentFromToolInput } = require(path.join(pluginRoot, "hooks", "lib", "common.js"));
+  const shapes = [
+    [{ Subagents: [{ Role: "Fact Checker", TypeName: "ultracode-fact-check" }] }, "fact-check"],
+    [{ Subagents: [{ Role: "Implementation Planner", TypeName: "ultracode-plan" }] }, "plan"],
+    [{ Subagents: [{ Role: "Codebase Researcher", TypeName: "ultracode:explore" }] }, "explore"],
+    [{ Subagents: [{ Role: "Specification Engineer", TypeName: "ultracode-generate-spec" }] }, "generate-spec"],
+    // Canonical name in whichever field carries it, including only-Role spawns.
+    [{ Subagents: [{ Role: "ultracode-fact-check" }] }, "fact-check"],
+    [{ Subagents: [{ TypeName: "ultracode-plan" }] }, "plan"],
+    [{ subagent_type: "ultracode:implement" }, "implement"],
+    [{ agent_type: "ultracode-code-reviewer" }, "code-reviewer"],
+    // AGY's own built-in kinds are never ultracode agents.
+    [{ Subagents: [{ Role: "self", TypeName: "self" }] }, ""],
+    // A genuinely non-ultracode subagent still resolves to something loggable,
+    // canonical field first.
+    [{ Subagents: [{ Role: "Some Helper", TypeName: "team-linter" }] }, "team-linter"],
+  ];
+  for (const [toolInput, expected] of shapes) {
+    assert.equal(
+      agentFromToolInput(toolInput),
+      expected,
+      `${target}: ${JSON.stringify(toolInput)}`,
+    );
+  }
+}
+
+test("agent resolution prefers the shipped agent name over a free-text Role", () => {
+  agentResolutionTest("claude");
+  agentResolutionTest("codex");
+  agentResolutionTest("grok");
+  agentResolutionTest("antigravity");
+});
+
+test("a Role-labelled AGY plan spawn is still gated and still routed", () => {
+  const pluginRoot = ANTIGRAVITY_PLUGIN_ROOT;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-role-"));
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ models: { byAgent: { plan: "balanced" }, byPhaseComplexity: {} } }),
+    "utf-8",
+  );
+  const env = { ANTIGRAVITY_PLUGIN_ROOT: pluginRoot };
+  const payload = {
+    cwd: repo,
+    conversationId: "testsess",
+    toolCall: {
+      name: "invoke_subagent",
+      args: {
+        Subagents: [
+          {
+            Role: "Implementation Planner",
+            TypeName: "ultracode-plan",
+            Model: "inherit",
+            Prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\n`,
+          },
+        ],
+      },
+    },
+  };
+
+  const gate = JSON.parse(
+    runHook(path.join(pluginRoot, "hooks", "pipeline-gate.js"), payload, env),
+  );
+  assert.equal(gate.decision, "deny");
+  assert.match(gate.reason, /refusing to spawn ultracode:plan/);
+
+  // The router must route it too — a Role-derived name matched no `defaults` key,
+  // so the spawn used to run on whatever model the parent happened to have.
+  const routed = JSON.parse(
+    runHook(path.join(pluginRoot, "hooks", "model-router.js"), payload, env),
+  );
+  assert.equal(routed.decision, "allow");
+  assert.equal(
+    routed.overwrite.Subagents[0].Model,
+    MODEL_MAPPING.tiers.balanced.antigravity,
+  );
+});
+
+// Built from the real transcript AGY wrote during conversation
+// 48e8b97b-fe9a-4690-9754-fb06458e3c49: an invoke_subagent call, the
+// "Created the following subagents" result that names the subagent's
+// conversationId, and the SYSTEM_MESSAGE step whose sender is that same id.
+function agyTranscript(sessionDir, repo, { sender, verdict, target, step, agent }) {
+  return [
+    {
+      step_index: step - 3,
+      source: "MODEL",
+      type: "PLANNER_RESPONSE",
+      status: "DONE",
+      tool_calls: [
+        {
+          name: "invoke_subagent",
+          args: {
+            Subagents: [
+              {
+                Model: "inherit",
+                Role: "Fact Checker",
+                TypeName: agent,
+                Prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nTarget type: ${target}\n`,
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      step_index: step - 2,
+      source: "MODEL",
+      type: "GENERIC",
+      status: "DONE",
+      content: `Created the following subagents:\n{\n  "conversationId": "${sender}",\n  "workspaceUris": ["file://${repo}"]\n}\nThe subagents will send you a message when they have completed their task.`,
+    },
+    {
+      step_index: step,
+      source: "SYSTEM",
+      type: "SYSTEM_MESSAGE",
+      status: "DONE",
+      content:
+        "The following is a <SYSTEM_MESSAGE> not actually sent by the user.\n\n<SYSTEM_MESSAGE>\n" +
+        `[Message] timestamp=2026-08-20T18:31:28Z sender=${sender} priority=MESSAGE_PRIORITY_HIGH ` +
+        `content={"verdict": "${verdict}", "target": "${target}", "findings": []}\n</SYSTEM_MESSAGE>`,
+    },
+  ]
+    .map((entry) => JSON.stringify(entry))
+    .join("\n");
+}
+
+test("agy-message-record recovers a fact-check verdict AGY never puts in a tool result", () => {
+  const pluginRoot = ANTIGRAVITY_PLUGIN_ROOT;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-verdict-"));
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess", "backend");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const transcriptPath = path.join(repo, "transcript_full.jsonl");
+  const hookPath = path.join(pluginRoot, "hooks", "agy-message-record.js");
+  const factcheckPath = path.join(sessionDir, "factcheck.json");
+  const env = { ANTIGRAVITY_PLUGIN_ROOT: pluginRoot };
+  const run = () =>
+    runHook(
+      hookPath,
+      {
+        conversationId: "testsess",
+        workspacePaths: [repo],
+        transcriptPath,
+        invocationNum: 1,
+      },
+      env,
+    );
+  const write = (options) =>
+    fs.writeFileSync(transcriptPath, agyTranscript(sessionDir, repo, options), "utf-8");
+
+  // Happy path: the verdict lands in the file the gate reads, and the hook says so.
+  write({ sender: "ee2e6159-d766-4f04-8d7f-2825eada35fb", verdict: "PASS", target: "spec", step: 120, agent: "ultracode-fact-check" });
+  const injected = JSON.parse(run());
+  assert.match(injected.injectSteps[0].ephemeralMessage, /recorded ultracode:fact-check's verdict/);
+  const recorded = JSON.parse(fs.readFileSync(factcheckPath, "utf-8"));
+  assert.equal(recorded.spec.verdict, "PASS");
+  assert.equal(recorded.spec.rounds, 1);
+  assert.equal(recorded.spec.sourceStep, 120);
+
+  // Firing on every invocation must not re-record or inflate rounds.
+  assert.deepEqual(JSON.parse(run()), {});
+  assert.equal(JSON.parse(fs.readFileSync(factcheckPath, "utf-8")).spec.rounds, 1);
+
+  // A later verdict for the same target supersedes it and counts a round.
+  write({ sender: "aa11bb22-cc33-dd44-ee55-ff6677889900", verdict: "FAIL", target: "spec", step: 190, agent: "ultracode-fact-check" });
+  run();
+  const second = JSON.parse(fs.readFileSync(factcheckPath, "utf-8"));
+  assert.equal(second.spec.verdict, "FAIL");
+  assert.equal(second.spec.rounds, 2);
+
+  // Unhappy paths, each of which must record NOTHING.
+  const cases = {
+    "a message whose sender matches no spawn": (text) =>
+      text.replace(/sender=[0-9a-f-]+/, "sender=99999999-9999-9999-9999-999999999999"),
+    "a verdict attributed to a different agent": (text) =>
+      text.replace(/ultracode-fact-check/, "ultracode-explore"),
+    "a spawn with no reported conversationId": (text) =>
+      text.replace(/Created the following subagents[\s\S]*?workspaceUris[^}]*}/, "Created nothing"),
+    "an unparseable verdict payload": (text) => text.replace(/content=\{[^}]*\}/, "content=see above"),
+    // The transcript is JSONL, so the message's inner JSON arrives escaped —
+    // these mutations have to match `\"target\": \"spec\"` as written on disk.
+    "a verdict for an unknown target": (text) =>
+      text.replace(/\\"target\\": \\"spec\\"/, '\\"target\\": \\"vibes\\"'),
+    "a verdict that is neither PASS nor FAIL": (text) =>
+      text.replace(/\\"verdict\\": \\"PASS\\"/, '\\"verdict\\": \\"probably fine\\"'),
+  };
+  for (const [label, mutate] of Object.entries(cases)) {
+    fs.rmSync(factcheckPath, { force: true });
+    write({ sender: "ee2e6159-d766-4f04-8d7f-2825eada35fb", verdict: "PASS", target: "spec", step: 220, agent: "ultracode-fact-check" });
+    fs.writeFileSync(transcriptPath, mutate(fs.readFileSync(transcriptPath, "utf-8")), "utf-8");
+    assert.deepEqual(JSON.parse(run()), {}, label);
+    assert.equal(fs.existsSync(factcheckPath), false, label);
+  }
+
+  // The same hook also runs on PostToolUse, which accepts a bare {} only: AGY
+  // rejects a response carrying injectSteps there as an unknown field and throws
+  // the whole thing away.
+  fs.rmSync(factcheckPath, { force: true });
+  write({ sender: "ee2e6159-d766-4f04-8d7f-2825eada35fb", verdict: "PASS", target: "spec", step: 300, agent: "ultracode-fact-check" });
+  const postTool = JSON.parse(
+    runHook(
+      hookPath,
+      { conversationId: "testsess", workspacePaths: [repo], transcriptPath, stepIdx: 12 },
+      env,
+    ),
+  );
+  assert.deepEqual(postTool, {}, "PostToolUse output must carry no extra fields");
+  assert.equal(JSON.parse(fs.readFileSync(factcheckPath, "utf-8")).spec.verdict, "PASS");
+
+  // A missing or unreadable transcript is not an error, it is just no evidence.
+  assert.deepEqual(
+    JSON.parse(
+      runHook(hookPath, { conversationId: "testsess", transcriptPath: "/nope/none.jsonl" }, env),
+    ),
+    {},
+  );
+  assert.deepEqual(JSON.parse(runHook(hookPath, { conversationId: "testsess" }, env)), {});
+});
+
+test("deny payload shape follows the generated target, not the ambient environment", () => {
+  // AGY validates hook output against a proto and rejects unknown fields, so a
+  // Claude-shaped denial is not merely ignored there — protojson throws
+  // "unknown field hookSpecificOutput" and the guard fails open. This was
+  // observed live: `agy` launched from inside a Claude Code turn inherits
+  // CLAUDE_CODE_SESSION_ID, which flipped the old env sniffing to "not AGY" and
+  // silently discarded every denial in that session.
+  const nested = {
+    CLAUDE_CODE_SESSION_ID: "outer-session",
+    CLAUDE_PLUGIN_ROOT: CLAUDE_PLUGIN_ROOT,
+    GROK_SESSION_ID: "outer-grok",
+  };
+  const denyOf = (target, env) =>
+    JSON.parse(
+      runHook(
+        path.join(pluginRootFor(target), "hooks", "bash-guard.js"),
+        { tool_input: { command: "sleep 5" } },
+        env,
+      ),
+    );
+
+  const agy = denyOf("antigravity", { ...nested, ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT });
+  assert.equal(agy.decision, "deny");
+  assert.equal(agy.hookSpecificOutput, undefined, "AGY must receive no unknown fields");
+  assert.match(agy.reason, /Hard rule 19/);
+
+  for (const target of ["claude", "codex", "grok"]) {
+    const other = denyOf(target, {
+      ANTIGRAVITY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT,
+      AGY_PLUGIN_ROOT: ANTIGRAVITY_PLUGIN_ROOT,
+    });
+    assert.equal(
+      other.hookSpecificOutput.permissionDecision,
+      "deny",
+      `${target}: keeps its own shape even under AGY variables`,
+    );
+  }
+});
+
+test("a placeholder like <ID> in command text is not read as a redirect", () => {
+  const { extractWriteTargets } = require(
+    path.join(CLAUDE_PLUGIN_ROOT, "hooks", "lib", "shell-paths.js"),
+  );
+  // Prose inside a command — a spawn prompt, an echoed instruction — routinely
+  // contains <NAME>. Reading `...session-<ID>/factcheck.json` as a redirect
+  // denied a command that wrote nothing at all.
+  assert.deepEqual(
+    extractWriteTargets("echo 'Session dir: /repo/.ultracode/session/ultracode-session-<ID>/factcheck.json'"),
+    [],
+  );
+  assert.deepEqual(extractWriteTargets("agy -p 'replace <ID> then read /tmp/out.json'"), []);
+  // Real redirects still register, including right after a closed placeholder.
+  assert.deepEqual(extractWriteTargets("echo x > /repo/notes.json"), ["/repo/notes.json"]);
+  assert.deepEqual(extractWriteTargets("echo '<ID>' > /repo/notes.json"), ["/repo/notes.json"]);
+  assert.deepEqual(extractWriteTargets("cmd 2> /repo/err.log"), ["/repo/err.log"]);
+});
+
+// spawn-log.js opens a progress.json record when a spawn returns, which on AGY is
+// before the agent has said anything — so every AGY spawn was logged as
+// `status: "ok"` with an empty summary, including agents that handed back STUCK.
+// hooks/session-resume.js reads that log after a compaction, so the one artifact
+// meant to survive a compaction was the one that knew the least.
+test("agy-message-record completes progress.json from the subagent's message", () => {
+  const pluginRoot = ANTIGRAVITY_PLUGIN_ROOT;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-progress-"));
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const transcriptPath = path.join(repo, "transcript_full.jsonl");
+  const progressPath = path.join(sessionDir, "progress.json");
+  const env = { ANTIGRAVITY_PLUGIN_ROOT: pluginRoot };
+  const hookPath = path.join(pluginRoot, "hooks", "agy-message-record.js");
+
+  const transcript = (agent, sender, step, message) =>
+    [
+      {
+        step_index: step - 2,
+        source: "MODEL",
+        type: "PLANNER_RESPONSE",
+        tool_calls: [
+          {
+            name: "invoke_subagent",
+            args: {
+              Subagents: [
+                {
+                  Role: "Implementer",
+                  TypeName: agent,
+                  Prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\n`,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        step_index: step - 1,
+        source: "MODEL",
+        type: "GENERIC",
+        content: `Created the following subagents:\n{ "conversationId": "${sender}" }`,
+      },
+      {
+        step_index: step,
+        source: "SYSTEM",
+        type: "SYSTEM_MESSAGE",
+        content: `<SYSTEM_MESSAGE>\n[Message] timestamp=2026-08-20T20:00:00Z sender=${sender} priority=MESSAGE_PRIORITY_HIGH content=${message}\n</SYSTEM_MESSAGE>`,
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+  const run = () =>
+    runHook(
+      hookPath,
+      { conversationId: "testsess", workspacePaths: [repo], transcriptPath, invocationNum: 2 },
+      env,
+    );
+
+  // The record spawn-log.js opened, exactly as it writes it on AGY today.
+  fs.writeFileSync(
+    progressPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      records: [{ ts: "2026-08-20T20:00:00.000Z", agent: "implement", phase: "phase-3", status: "ok", summary: "" }],
+    }),
+    "utf-8",
+  );
+  fs.writeFileSync(
+    transcriptPath,
+    transcript("ultracode-implement", "11111111-1111-1111-1111-111111111111", 20, "Implemented phase 3: added the tracker service.\nAll steps verified."),
+    "utf-8",
+  );
+  run();
+  let records = JSON.parse(fs.readFileSync(progressPath, "utf-8")).records;
+  assert.equal(records.length, 1, "the waiting record is completed, not duplicated");
+  assert.equal(records[0].summary, "Implemented phase 3: added the tracker service.");
+  assert.equal(records[0].status, "ok");
+  assert.equal(records[0].phase, "phase-3", "the record spawn-log wrote keeps its phase");
+  assert.equal(records[0].messageStep, 20);
+
+  // Re-firing on every invocation and every tool call must not duplicate or churn.
+  run();
+  assert.deepEqual(JSON.parse(fs.readFileSync(progressPath, "utf-8")).records, records);
+
+  // A STUCK return is recorded as an escalation and surfaced to the orchestrator.
+  fs.writeFileSync(
+    progressPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      records: [{ ts: "2026-08-20T20:05:00.000Z", agent: "implement", phase: null, status: "ok", summary: "" }],
+    }),
+    "utf-8",
+  );
+  fs.writeFileSync(
+    transcriptPath,
+    transcript("ultracode-implement", "22222222-2222-2222-2222-222222222222", 40, "STUCK: the build fails on a dependency I cannot resolve from this phase."),
+    "utf-8",
+  );
+  const stuck = JSON.parse(run());
+  records = JSON.parse(fs.readFileSync(progressPath, "utf-8")).records;
+  assert.equal(records[0].status, "stuck");
+  assert.match(records[0].summary, /^STUCK: the build fails/);
+  assert.ok(
+    stuck.injectSteps.some((step) => /returned STUCK/.test(step.ephemeralMessage)),
+    "an escalation must be said out loud, not just filed",
+  );
+
+  // A message with no record waiting is appended rather than dropped.
+  fs.rmSync(progressPath);
+  fs.writeFileSync(
+    transcriptPath,
+    transcript("ultracode-explore", "33333333-3333-3333-3333-333333333333", 60, "Wrote research.md and criteria.md."),
+    "utf-8",
+  );
+  run();
+  records = JSON.parse(fs.readFileSync(progressPath, "utf-8")).records;
+  assert.equal(records.length, 1);
+  assert.equal(records[0].agent, "explore");
+  assert.equal(records[0].summary, "Wrote research.md and criteria.md.");
+});
+
+// AGY names the shell command `CommandLine`, so hooks reading only `command` did
+// nothing there: the whole build-streak feature — the failure counter, the lesson
+// recall, and the gate that forces escalation at five — was inert on that harness.
+// And its PostToolUse payload has no result at all: failure shows up as
+// `error: "exit status 1"`, with the output only in the transcript.
+test("build-streak counts AGY failures from CommandLine, error, and the transcript", () => {
+  const pluginRoot = ANTIGRAVITY_PLUGIN_ROOT;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-streak-"));
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ schemaVersion: 1, commands: { build: "./mvnw -q compile" } }),
+    "utf-8",
+  );
+  const transcriptPath = path.join(repo, "transcript_full.jsonl");
+  const statePath = path.join(sessionDir, "build-streak.json");
+  const env = { ANTIGRAVITY_PLUGIN_ROOT: pluginRoot };
+  const counter = path.join(pluginRoot, "hooks", "build-streak.js");
+  const gate = path.join(pluginRoot, "hooks", "build-streak-gate.js");
+
+  let step = 0;
+  const post = (output, error) => {
+    step += 2;
+    fs.writeFileSync(
+      transcriptPath,
+      JSON.stringify({ step_index: step, source: "MODEL", type: "GENERIC", content: output }) + "\n",
+      "utf-8",
+    );
+    return runHook(
+      counter,
+      {
+        cwd: repo,
+        conversationId: "testsess",
+        agent_type: "ultracode-implement",
+        transcriptPath,
+        stepIdx: step,
+        ...(error ? { error } : {}),
+        toolCall: { name: "run_command", args: { CommandLine: "./mvnw -q compile", Cwd: repo } },
+      },
+      env,
+    );
+  };
+  const streak = () => JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implement;
+
+  const failure =
+    "The command exited with code 1.\nOutput:\n[ERROR] /r/src/main/java/Foo.java:[11,2] cannot find symbol";
+  post(failure, "exit status 1");
+  assert.equal(streak().consecutiveFailures, 1, "a failure counts on AGY at all");
+  assert.match(streak().lastSignature, /cannot find symbol/, "the diagnostic comes from the transcript");
+  post(failure, "exit status 1");
+  const warned = post(failure, "exit status 1");
+  assert.equal(streak().consecutiveFailures, 3);
+
+  // AGY's PostToolUse output accepts `{}` only, so the nudge is filed for the
+  // gate to deliver instead of being dropped on the floor.
+  assert.deepEqual(JSON.parse(warned || "{}"), {}, "AGY PostToolUse takes no extra fields");
+  const warningPath = path.join(sessionDir, "build-streak-warning.json");
+  const warning = JSON.parse(fs.readFileSync(warningPath, "utf-8"));
+  assert.match(warning.warning, /3 consecutive failing build\/test commands/);
+  assert.equal(warning.streak, 3);
+
+  // A pass clears the streak, read from AGY's own wording with no error field.
+  post("The command exited with code 0.\nOutput:\nBUILD SUCCESS", null);
+  assert.equal(streak().consecutiveFailures, 0);
+
+  // Five failures and the gate refuses the next build command — on AGY, in AGY's
+  // payload shape and with AGY's deny shape.
+  for (let i = 0; i < 5; i += 1) post(failure, "exit status 1");
+  assert.equal(streak().consecutiveFailures, 5);
+  const denied = JSON.parse(
+    runHook(
+      gate,
+      {
+        cwd: repo,
+        conversationId: "testsess",
+        agent_type: "ultracode-implement",
+        toolCall: { name: "run_command", args: { CommandLine: "./mvnw -q compile", Cwd: repo } },
+      },
+      env,
+    ),
+  );
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.hookSpecificOutput, undefined);
+  assert.match(denied.reason, /STUCK:/);
+  // The nudge AGY could not deliver at three failures rides along with the block.
+  assert.match(denied.reason, /consecutive failing build\/test commands/);
+});
+
+// Measured live: an AGY subagent's own hooks DO fire, but its payload carries no
+// `agent_type` and its conversation id is not the pipeline's session id — so every
+// per-agent hook was inert inside a subagent. The router stamps the identity into
+// the spawn prompt, which AGY preserves as the subagent conversation's first step.
+test("AGY spawns are stamped with the agent identity its own hooks read back", () => {
+  const pluginRoot = ANTIGRAVITY_PLUGIN_ROOT;
+  const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-agy-stamp-"));
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      commands: { build: "./mvnw -q compile" },
+      models: { byAgent: {}, byPhaseComplexity: { implement: { low: "balanced" } } },
+    }),
+    "utf-8",
+  );
+  const env = { ANTIGRAVITY_PLUGIN_ROOT: pluginRoot };
+  const prompt = `Repo root: ${repo}\nSession dir: ${sessionDir}\nNo plan: identity test.\n`;
+
+  const routed = JSON.parse(
+    runHook(
+      path.join(pluginRoot, "hooks", "model-router.js"),
+      {
+        cwd: repo,
+        conversationId: "testsess",
+        toolCall: {
+          name: "invoke_subagent",
+          args: {
+            Subagents: [
+              { Role: "Implementer", TypeName: "ultracode-implement", Model: "inherit", Prompt: prompt },
+            ],
+          },
+        },
+      },
+      env,
+    ),
+  );
+  const stamped = routed.overwrite.Subagents[0].Prompt;
+  assert.match(stamped, /^Ultracode agent: implement$/m);
+  assert.ok(stamped.startsWith(prompt.trimEnd()) || stamped.includes("No plan: identity test."));
+
+  // A subagent conversation's own transcript begins with that prompt, which is all
+  // its hooks get: no agent_type, and a conversation id that is not the session id.
+  const transcriptPath = path.join(repo, "subagent-transcript.jsonl");
+  const write = (output) =>
+    fs.writeFileSync(
+      transcriptPath,
+      [
+        JSON.stringify({
+          step_index: 0,
+          source: "USER_EXPLICIT",
+          type: "USER_INPUT",
+          content: `<USER_REQUEST>\n${stamped}</USER_REQUEST>`,
+        }),
+        JSON.stringify({ step_index: 3, source: "MODEL", type: "GENERIC", content: output }),
+      ].join("\n"),
+      "utf-8",
+    );
+  const post = () =>
+    runHook(
+      path.join(pluginRoot, "hooks", "build-streak.js"),
+      {
+        conversationId: "a-subagent-conversation-id",
+        workspacePaths: [repo],
+        transcriptPath,
+        stepIdx: 3,
+        error: "", // AGY leaves this empty even for a nonzero exit
+        toolCall: { name: "run_command", args: { CommandLine: "./mvnw -q compile", Cwd: repo } },
+      },
+      env,
+    );
+
+  // AGY reports the exit status only in the transcript text, and only there.
+  write("The command exited with code 127.\nOutput:\nbash: line 1: ./mvnw: No such file or directory");
+  post();
+  const streakPath = path.join(sessionDir, "build-streak.json");
+  assert.ok(fs.existsSync(streakPath), "the streak is recorded in the session dir the spawn declared");
+  assert.equal(JSON.parse(fs.readFileSync(streakPath, "utf-8")).streaks.implement.consecutiveFailures, 1);
+
+  // An unstamped prompt (a spawn the router never saw) stays inert rather than
+  // guessing an agent.
+  fs.writeFileSync(
+    transcriptPath,
+    [
+      JSON.stringify({ step_index: 0, source: "USER_EXPLICIT", type: "USER_INPUT", content: prompt }),
+      JSON.stringify({ step_index: 3, source: "MODEL", type: "GENERIC", content: "The command exited with code 1." }),
+    ].join("\n"),
+    "utf-8",
+  );
+  fs.rmSync(streakPath);
+  post();
+  assert.equal(fs.existsSync(streakPath), false, "no identity means no attribution");
+});
+
+test("gates.json and the memory store are tool-owned ledgers", () => {
+  const { checkLedger, ledgerNamePattern } = require(
+    path.join(CLAUDE_PLUGIN_ROOT, "hooks", "lib", "ledger-policy.js"),
+  );
+  // Before this, gates.json — the file hooks/pipeline-gate.js reads to decide
+  // whether ultracode:plan may be spawned — was protected by nothing: only
+  // mcp/lib/gate.js ever wrote it, so a plain `>` redirect could approve a spec
+  // that no fact-check had passed.
+  for (const writer of ["", "fact-check", "implement", "code-reviewer"]) {
+    const gates = checkLedger(writer, "/repo/.ultracode/session/x/gates.json");
+    assert.equal(gates.allowed, false, writer || "orchestrator");
+    assert.match(gates.reason, /ultracode_gate MCP tool/);
+    assert.equal(
+      checkLedger(writer, "/repo/.ultracode/memory/knowledge.sqlite3").allowed,
+      false,
+      writer || "orchestrator",
+    );
+  }
+  assert.equal(checkLedger("", "/repo/.ultracode/session/x/report.md").allowed, true);
+
+  // The free-text pattern plugin-policy.js scans inline code with must cover
+  // every class, and must not match an ordinary artifact name.
+  for (const name of [
+    "factcheck.json",
+    "gates.json",
+    "build-streak.json",
+    "spawn-scope.json",
+    "progress.json",
+    "knowledge.sqlite3",
+    "ultracode-review-ledger.md",
+    "ultracode-security-block.json",
+  ]) {
+    assert.match(name, ledgerNamePattern(), name);
+  }
+  assert.doesNotMatch("ultracode-spec-2026-01-01-topic.md", ledgerNamePattern());
+});
+
 // A failing Bash call reaches a PostToolUse hook with its result text prefixed
 // "Exit code N" — the harness's own report, and the only exit status available
 // (a successful call's tool_response is { stdout, stderr, interrupted, ... } with
@@ -2439,6 +3194,7 @@ test("every plugin distribution includes target hooks", () => {
       .filter((name) => fs.statSync(path.join(hookDir, name)).isFile())
       .sort();
     assert.deepEqual(files, [
+      "agy-message-record.js",
       "artifact-guard.js",
       "bash-guard.js",
       "bash-scope-guard.js",
@@ -2449,6 +3205,7 @@ test("every plugin distribution includes target hooks", () => {
       "model-router.js",
       "model-routing.json",
       "pipeline-gate.js",
+      "plugin-guard.js",
       "review-cap.js",
       "scope-guard.js",
       "security-block.js",
@@ -2463,6 +3220,9 @@ test("every plugin distribution includes target hooks", () => {
       "session.js",
       "scope-policy.js",
       "ledger-policy.js",
+      "plugin-policy.js",
+      "agy-transcript.js",
+      "spawn-record.js",
       "build-signal.js",
       "context-brief.js",
       "shell-paths.js",
@@ -2790,10 +3550,21 @@ test("antigravity generation uses antigravity plugin layout and validation", () 
   assert.ok(mcpConfig.mcpServers["ultracode-gate"]);
 
   const explore = fs.readFileSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "explore.md"), "utf-8");
-  assert.match(explore, /^---\nname: explore\n/);
+  // AGY's own agent-md shape: prefixed name (the spawn TypeName) and a tools list.
+  assert.match(explore, /^---\nname: ultracode-explore\n/);
   assert.match(explore, /^model: flash$/m);
   assert.match(explore, /^effort: high$/m);
-  assert.match(explore, /tools: view_file, write_to_file, run_command, grep_search, find_by_name, search_web, read_url_content/);
+  for (const tool of [
+    "view_file",
+    "write_to_file",
+    "run_command",
+    "grep_search",
+    "find_by_name",
+    "search_web",
+    "read_url_content",
+  ]) {
+    assert.match(explore, new RegExp(`^ {4}- ${tool}$`, "m"), tool);
+  }
 
   const orchestrate = fs.readFileSync(
     path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
@@ -2802,6 +3573,66 @@ test("antigravity generation uses antigravity plugin layout and validation", () 
   assert.match(orchestrate, /invoke_subagent/);
   assert.match(orchestrate, /# Antigravity Notes/);
   assert.match(orchestrate, /Antigravity has no separate Skill tool/);
+});
+
+test("antigravity agents ship as natively invocable subagents", () => {
+  // AGY resolves a markdown agent as a subagent only in its own shape: the
+  // frontmatter `name` is the exact TypeName a spawn passes, `tools` is a YAML
+  // list, `subagent: true` marks it invocable, and the prompt sits under an H1.
+  // In the Claude shape every ultracode spawn came back "subagent
+  // ultracode-fact-check not found or not allowed to be invoked", and the model's
+  // way around that was `define_subagent` with a prompt it wrote itself — a
+  // different agent under the shipped agent's name.
+  for (const name of ["fact-check", "plan", "implement", "code-reviewer"]) {
+    const text = fs.readFileSync(
+      path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", `${name}.md`),
+      "utf-8",
+    );
+    assert.match(text, new RegExp(`^name: ultracode-${name}$`, "m"), name);
+    assert.match(text, /^subagent: true$/m, name);
+    assert.match(text, /^hidden: true$/m, name);
+    assert.match(text, /^inheritMcp: true$/m, name);
+    assert.match(text, /^tools:\n( {4}- \w+\n)+/m, `${name}: tools must be a YAML list`);
+    // send_message is how an AGY subagent returns anything at all.
+    assert.match(text, /^ {4}- send_message$/m, name);
+    assert.match(text, /^# Agent System Instructions$/m, name);
+  }
+
+  // Instructions must name the spawn exactly as AGY resolves it, so no agent is
+  // referred to by the colon form anywhere in the AGY build.
+  const agentNames = fs
+    .readdirSync(path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents"))
+    .map((file) => file.replace(/\.md$/, ""));
+  const documents = [
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "init-kit", "SKILL.md"),
+    ...agentNames.map((name) => path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", `${name}.md`)),
+  ];
+  for (const document of documents) {
+    const text = fs.readFileSync(document, "utf-8");
+    for (const name of agentNames) {
+      assert.ok(
+        !text.includes(`ultracode:${name}`),
+        `${document} still spawns ultracode:${name} by its colon name`,
+      );
+    }
+    // Skills are not agents and are still invoked by their colon name.
+    if (document.endsWith("orchestrate/SKILL.md")) {
+      assert.match(text, /ultracode:orchestrate/);
+    }
+  }
+
+  // Claude/Codex/Grok keep the colon form and their own agent shapes.
+  const claudeAgent = fs.readFileSync(
+    path.join(CLAUDE_PLUGIN_ROOT, "agents", "fact-check.md"),
+    "utf-8",
+  );
+  assert.match(claudeAgent, /^name: fact-check$/m);
+  assert.doesNotMatch(claudeAgent, /^subagent: true$/m);
+  assert.match(
+    fs.readFileSync(path.join(CLAUDE_PLUGIN_ROOT, "commands", "orchestrate.md"), "utf-8"),
+    /ultracode:fact-check/,
+  );
 });
 
 test("antigravity hooks accept structured payloads", () => {

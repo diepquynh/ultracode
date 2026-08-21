@@ -26,6 +26,8 @@ const COMMON_HOOK_FILES = [
   "session-guard.js",
   "bash-guard.js",
   "bash-scope-guard.js",
+  "plugin-guard.js",
+  "agy-message-record.js",
   "artifact-guard.js",
   "scope-guard.js",
   "spawn-log.js",
@@ -41,6 +43,9 @@ const COMMON_HOOK_FILES = [
   "lib/session.js",
   "lib/scope-policy.js",
   "lib/ledger-policy.js",
+  "lib/plugin-policy.js",
+  "lib/agy-transcript.js",
+  "lib/spawn-record.js",
   "lib/context-brief.js",
   "lib/shell-paths.js",
 ];
@@ -835,37 +840,81 @@ function antigravityCapabilityNotes(promptRaw, mapping) {
   return ["# Antigravity Notes", "", ...notes].join("\n");
 }
 
+// Antigravity resolves a markdown agent as an invocable subagent only when the
+// file is in its own shape: the frontmatter `name` is the exact TypeName the
+// spawn must pass, `tools` is a YAML list, `subagent: true` marks it invocable,
+// and the system prompt sits under an H1.
+//
+// Emitting the Claude shape here meant `invoke_subagent` answered
+// `subagent "ultracode-fact-check" not found or not allowed to be invoked` for
+// every ultracode agent. The way out the model found was AGY's `define_subagent`
+// tool — which works, but only by having the model retype the agent: a recorded
+// session defined ultracode-fact-check from a two-sentence paraphrase it wrote
+// itself, so the "fact-check agent" that ran shared nothing with agents/fact-check.md
+// but its name. Shipping the native shape means the spawned agent is the prompt
+// this repo actually reviews and versions.
+//
+// `send_message` is added to every agent's tools because that is how an AGY
+// subagent returns anything at all: the spawn call is asynchronous and the answer
+// comes back as a message to the parent (hooks/lib/agy-transcript.js reads those).
 function antigravityFrontmatter(definition, mapping, modelMapping) {
   const data = definition.data;
+  const isAgent = definition.data.kind === "agent";
   const lines = [
     "---",
-    `name: ${definition.data.name}`,
+    `name: ${isAgent ? `ultracode-${definition.data.name}` : definition.data.name}`,
     ...foldedYaml("description", data.description),
   ];
-  if (definition.data.kind === "agent") {
+  if (isAgent) {
     const translatedTools = data.config.tools
       .map((toolId) => mapping.capabilities[toolId].antigravity)
       .filter((tool) => tool && !tool.includes(" "));
+    if (!translatedTools.includes("send_message")) translatedTools.push("send_message");
     const model = modelMapping.tiers[data.config.model_tier].antigravity;
     const effort =
       data.config.reasoning_effort.antigravity ?? data.config.reasoning_effort.claude;
     lines.push(
       `model: ${model}`,
       `effort: ${effort}`,
-      `tools: ${translatedTools.join(", ")}`,
+      "tools:",
+      ...translatedTools.map((tool) => `    - ${tool}`),
       `timeout: ${data.config.timeout_seconds}`,
       `context: ${data.config.context}`,
+      "subagent: true",
+      "hidden: true",
+      "inheritMcp: true",
     );
   }
   lines.push("---");
   return lines.join("\n") + "\n\n";
 }
 
-function renderAntigravity(definition, mapping, modelMapping, harnessLayout) {
+// The agent files are named `ultracode-{agent}` because that is what AGY resolves,
+// so every instruction that tells the orchestrator which name to spawn has to say
+// the same thing. Skill names (`ultracode:orchestrate`) keep the colon — they are
+// not agents and are not spawned.
+function antigravityAgentNames(definitions) {
+  return definitions.filter((d) => d.data.kind === "agent").map((d) => d.data.name);
+}
+
+function withAntigravitySpawnNames(text, agentNames) {
+  let out = text;
+  for (const name of agentNames) {
+    out = out.split(`ultracode:${name}`).join(`ultracode-${name}`);
+  }
+  return out;
+}
+
+function renderAntigravity(definition, mapping, modelMapping, harnessLayout, definitions) {
   const notes = antigravityCapabilityNotes(definition.prompt, mapping);
   const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
-  const source = antigravityFrontmatter(definition, mapping, modelMapping) + body;
-  return renderHarnessTemplate(source, "antigravity", harnessLayout, modelMapping, mapping);
+  // AGY delimits a markdown agent's system prompt with an H1, and names that
+  // section "# Agent System Instructions" in the files it writes itself.
+  const delimited =
+    definition.data.kind === "agent" ? `# Agent System Instructions\n\n${body}` : body;
+  const source = antigravityFrontmatter(definition, mapping, modelMapping) + delimited;
+  const rendered = renderHarnessTemplate(source, "antigravity", harnessLayout, modelMapping, mapping);
+  return withAntigravitySpawnNames(rendered, antigravityAgentNames(definitions || []));
 }
 
 function outputPath(target, outputRoot, definition) {
@@ -1143,7 +1192,7 @@ function pluginStaticFiles(
   return files;
 }
 
-function render(target, definition, mapping, modelMapping, harnessLayout) {
+function render(target, definition, mapping, modelMapping, harnessLayout, definitions) {
   if (target === "claude") {
     const source =
       definition.data.kind === "command"
@@ -1155,7 +1204,7 @@ function render(target, definition, mapping, modelMapping, harnessLayout) {
     return renderGrok(definition, mapping, modelMapping, harnessLayout);
   }
   if (target === "antigravity") {
-    return renderAntigravity(definition, mapping, modelMapping, harnessLayout);
+    return renderAntigravity(definition, mapping, modelMapping, harnessLayout, definitions);
   }
   if (definition.data.kind === "command") {
     return renderCodexCommand(definition, mapping, modelMapping, harnessLayout);
@@ -1209,7 +1258,7 @@ function generate(target, sourceRoot, outputRoot, check) {
   const mismatches = [];
   for (const definition of definitions) {
     const destination = outputPath(target, outputRoot, definition);
-    const content = render(target, definition, mapping, modelMapping, harnessLayout);
+    const content = render(target, definition, mapping, modelMapping, harnessLayout, definitions);
     if (check) {
       if (!fs.existsSync(destination)) {
         mismatches.push(`missing: ${destination}`);

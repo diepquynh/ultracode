@@ -4,6 +4,16 @@
       {
         "type": "command",
         "command": "node ./hooks/session-resume.js"
+      },
+      {
+        "type": "command",
+        "command": "node ./hooks/agy-message-record.js"
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "node ./hooks/agy-message-record.js"
       }
     ],
     "PreToolUse": [
@@ -41,6 +51,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node ./hooks/plugin-guard.js"
+          },
+          {
+            "type": "command",
             "command": "node ./hooks/bash-guard.js"
           },
           {
@@ -60,6 +74,10 @@
       {
         "matcher": "Write|Edit|search_replace|write_to_file|replace_file_content",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/plugin-guard.js"
+          },
           {
             "type": "command",
             "command": "node ./hooks/artifact-guard.js"
@@ -100,6 +118,15 @@
           {
             "type": "command",
             "command": "node ./hooks/build-streak.js"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/agy-message-record.js"
           }
         ]
       }

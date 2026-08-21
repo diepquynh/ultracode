@@ -30,9 +30,26 @@ const {
   isDirectory,
   readJsonIfFile,
   promptFromToolInput,
+  commandFromToolInput,
+  pick,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 const { isBuildCommand } = require("./lib/build-signal");
+const { selfContext } = require("./lib/agy-transcript");
+
+// Same identity problem as hooks/build-streak.js: Antigravity tells a subagent's
+// own hooks neither which agent they are inside nor which session dir it was
+// given, so both are read back from the stamp hooks/model-router.js put in the
+// spawn prompt. Without this the gate could never fire on AGY, however long the
+// failure streak got.
+function agentIdentity(hookInput) {
+  const declared = bareAgentName(hookAgentType(hookInput));
+  if (declared) return { agent: declared, sessionDir: "" };
+  const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
+  if (typeof transcriptPath !== "string" || !transcriptPath) return { agent: "", sessionDir: "" };
+  const self = selfContext(transcriptPath);
+  return { agent: self.agent, sessionDir: self.sessionDir };
+}
 
 const DENY_THRESHOLD = 5;
 const STATE_FILE = "build-streak.json";
@@ -40,16 +57,16 @@ const STATE_FILE = "build-streak.json";
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  const agent = bareAgentName(hookAgentType(hookInput));
+  const { agent, sessionDir: declaredSessionDir } = agentIdentity(hookInput);
   if (!agent) return 0;
 
   const toolInput = hookToolInput(hookInput);
-  const command = toolInput && typeof toolInput.command === "string" ? toolInput.command : "";
+  const command = commandFromToolInput(toolInput);
   if (!command) return 0;
 
   const prompt = promptFromToolInput(toolInput || {});
   const repoRoot = resolveRepoRoot(hookInput, prompt);
-  let sessionDir = field(prompt, "Session dir");
+  let sessionDir = field(prompt, "Session dir") || declaredSessionDir || "";
   const info = pluginTargetInfo();
   if (!sessionDir || !isDirectory(sessionDir)) {
     if (!info) return 0;
@@ -67,9 +84,18 @@ async function main() {
   const { build } = isBuildCommand(command, profile);
   if (!build) return 0;
 
+  // On Antigravity, hooks/build-streak.js could not deliver its mid-streak nudge
+  // (PostToolUse there cannot add context to the turn), so it filed the text
+  // instead. A deny reason is a channel AGY does honor, so hand it over here —
+  // late, but the agent still learns the streak was seen and repeating rather
+  // than only that it is now blocked.
+  const filed = readJsonIfFile(path.join(sessionDir, "build-streak-warning.json"));
+  const filedWarning = filed && typeof filed.warning === "string" ? filed.warning : "";
+
   const signature = entry.lastSignature;
   denyPreToolUse(
-    `ultracode: refusing another build/test command for ultracode:${agent} — ` +
+    (filedWarning ? `${filedWarning}\n\n` : "") +
+      `ultracode: refusing another build/test command for ultracode:${agent} — ` +
       `${entry.consecutiveFailures} consecutive build/test failures in this run` +
       (signature ? `, last diagnostic: "${signature}"` : "") +
       ". Retrying again is not the next step; you do not yet have the information the fix needs.\n\n" +

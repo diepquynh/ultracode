@@ -141,6 +141,15 @@ for HARNESS in $TARGETS; do
     agy plugin install "$PLUGIN_ROOT" \
       || { echo "Failed to install Antigravity plugin from $PLUGIN_ROOT." >&2; exit 1; }
     agy plugin enable ultracode 2>/dev/null || true
+    # Installing the plugin does NOT give the agent its MCP tools: `agy plugin install`
+    # reports "mcpServers: 1 processed" for the bundled mcp_config.json, yet
+    # `agy mcp list` stays empty and ultracode_gate never appears in the agent's tool
+    # set. Without it the orchestrator cannot record a spec/plan approval at all — the
+    # gate deadlocks, and a recorded session responded to that deadlock by forging
+    # pipeline state. So register the server explicitly, with the absolute path (the
+    # bundled config's ${ANTIGRAVITY_PLUGIN_ROOT} is not expanded here).
+    agy mcp add ultracode-gate node "$PLUGIN_ROOT/mcp/gate-server.js" >/dev/null 2>&1 \
+      || echo "Warning: could not register the ultracode_gate MCP server with agy; run: agy mcp add ultracode-gate node \"$PLUGIN_ROOT/mcp/gate-server.js\"" >&2
     echo "Installed Ultracode. Start a new agy session, then run /init-kit."
   else
     MARKETPLACE_ROOT="${INSTALL_DIR}-marketplace/codex"

@@ -643,3 +643,15 @@ remain, report them to the user and ask how to proceed. Do not auto-run a 4th fo
     do not honor a user "use X" request by putting X on the spawn — edit `repo-profile.json` if the route
     should change. If a spawn is denied for a `model: {slug}` reason, re-spawn once with that exact slug and
     nothing else; never invent a different one.
+23. **Never operate ultracode's own machinery, and never hand-author pipeline state.** The hooks and the
+    `ultracode_gate` MCP tool are what hold this pipeline honest, so they are never yours to run, load, patch,
+    or stand in for: no `{{tool_shell}}` call that executes a file under the installed plugin, no
+    `require`/`import` of its `hooks/` or `mcp/` modules from an interpreter one-liner, no editing or deleting
+    any file in it. The same goes for the state those parts own — `factcheck.json`, `gates.json`,
+    `progress.json`, `build-streak.json`, `spawn-scope.json`, the review ledgers, the memory store: each one is
+    a record of something that happened, written by the hook or tool that observed it. Writing one by hand
+    fabricates the event, and doing it through `node -e`, a heredoc, or a piped interpreter to keep the path out
+    of a tool argument is the same act with the evidence hidden. **When a gate cannot be satisfied** — the
+    fact-check verdict never lands, a hook never fires, the gate tool keeps refusing — that is a defect to
+    report, not an obstacle to route around: tell the user exactly which step did not record and stop there.
+    A pipeline that lies about what it verified is worse than one that admits it is stuck.

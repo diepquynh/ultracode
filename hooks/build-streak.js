@@ -31,6 +31,7 @@ const {
   emitAdditionalContext,
   hookToolInput,
   hookToolResponse,
+  commandFromToolInput,
   hookAgentType,
   bareAgentName,
   hookSessionId,
@@ -39,9 +40,38 @@ const {
   readJsonIfFile,
   writeJsonAtomic,
   promptFromToolInput,
+  pick,
+  isAntigravity,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
 const { isBuildCommand, failedFrom, diagnosticSignature } = require("./lib/build-signal");
+const { toolResultText, selfContext } = require("./lib/agy-transcript");
+
+// Which agent this hook is running inside, and the session dir that agent was
+// given. Every harness but Antigravity states both in the payload (`agent_type`,
+// plus a spawn prompt to read `Session dir:` from); AGY states neither, so they are
+// read back from the identity hooks/model-router.js stamped into the spawn prompt.
+function agentIdentity(hookInput) {
+  const declared = bareAgentName(hookAgentType(hookInput));
+  if (declared) return { agent: declared, sessionDir: "" };
+  const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
+  if (typeof transcriptPath !== "string" || !transcriptPath) return { agent: "", sessionDir: "" };
+  const self = selfContext(transcriptPath);
+  return { agent: self.agent, sessionDir: self.sessionDir };
+}
+
+// What the command printed. Antigravity's PostToolUse payload has no result field
+// at all (only `stepIdx` and, on failure, `error`), so its output is read from the
+// transcript instead — without it the diagnostic signature, the lesson recall, and
+// the "same error again" detection all had nothing to work with on that harness.
+function commandOutput(hookInput) {
+  const response = hookToolResponse(hookInput);
+  if (response !== null && response !== undefined) return response;
+  const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
+  if (typeof transcriptPath !== "string" || !transcriptPath) return null;
+  const text = toolResultText(transcriptPath, pick(hookInput, "stepIdx", "step_idx"));
+  return text || null;
+}
 
 const SCHEMA_VERSION = 1;
 // Recall fires one failure BEFORE the warning: if this repo already learned the
@@ -79,15 +109,15 @@ function areaFromCommand(command) {
   return null;
 }
 
-function stateFilePath(hookInput, prompt) {
+function stateFilePath(hookInput, prompt, declaredSessionDir) {
   const repoRoot = resolveRepoRoot(hookInput, prompt);
-  let sessionDir = field(prompt, "Session dir");
+  let sessionDir = field(prompt, "Session dir") || declaredSessionDir || "";
   if (!sessionDir || !isDirectory(sessionDir)) {
     const info = pluginTargetInfo();
     if (!info) return null;
     sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
-  return { statePath: path.join(sessionDir, STATE_FILE), repoRoot };
+  return { statePath: path.join(sessionDir, STATE_FILE), repoRoot, sessionDir };
 }
 
 function loadProfile(repoRoot) {
@@ -99,22 +129,22 @@ function loadProfile(repoRoot) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  const agent = bareAgentName(hookAgentType(hookInput));
+  const { agent, sessionDir: declaredSessionDir } = agentIdentity(hookInput);
   if (!agent) return 0;
 
   const toolInput = hookToolInput(hookInput);
-  const command = toolInput && typeof toolInput.command === "string" ? toolInput.command : "";
+  const command = commandFromToolInput(toolInput);
   if (!command) return 0;
 
-  const resolved = stateFilePath(hookInput, promptFromToolInput(toolInput || {}));
+  const resolved = stateFilePath(hookInput, promptFromToolInput(toolInput || {}), declaredSessionDir);
   if (!resolved) return 0;
-  const { statePath, repoRoot } = resolved;
+  const { statePath, repoRoot, sessionDir } = resolved;
 
   const profile = loadProfile(repoRoot);
   const { build, purpose } = isBuildCommand(command, profile);
   if (!build) return 0;
 
-  const { failed, exitCode, text } = failedFrom(hookToolResponse(hookInput), hookInput);
+  const { failed, exitCode, text } = failedFrom(commandOutput(hookInput), hookInput);
   // `failed === null` means interrupted/timed out — no evidence either way, so
   // leave the streak exactly as it was.
   if (failed === null) return 0;
@@ -206,17 +236,30 @@ async function main() {
     const repeated =
       signature && (entry.history || []).filter((h) => h.signature === signature).length > 1;
     const remaining = DENY_THRESHOLD - count;
-    emitAdditionalContext(
-      "PostToolUse",
+    const warning =
       `ultracode: that is ${count} consecutive failing build/test commands in this run` +
-        (repeated ? `, and the same diagnostic is repeating ("${signature}")` : "") +
-        ". Before the next attempt, state explicitly what you now believe the root cause is and " +
-        "what specifically will change — do not retry a variation of the same edit. " +
-        `After ${remaining} more consecutive failure${remaining === 1 ? "" : "s"} further ` +
-        'build/test commands are refused and you must hand back to the orchestrator with a "STUCK:" ' +
-        "report." +
-        lessonBlock,
-    );
+      (repeated ? `, and the same diagnostic is repeating ("${signature}")` : "") +
+      ". Before the next attempt, state explicitly what you now believe the root cause is and " +
+      "what specifically will change — do not retry a variation of the same edit. " +
+      `After ${remaining} more consecutive failure${remaining === 1 ? "" : "s"} further ` +
+      'build/test commands are refused and you must hand back to the orchestrator with a "STUCK:" ' +
+      "report." +
+      lessonBlock;
+    // Antigravity's PostToolUse output accepts `{}` and nothing else, so this
+    // nudge has nowhere to go at the moment it is earned. File it instead:
+    // hooks/build-streak-gate.js prepends it to the refusal it issues at the deny
+    // threshold, which is a channel AGY does honor. The nudge therefore arrives
+    // late on AGY (with the block, rather than two failures before it) — the
+    // counter, the recall lookup, and the escalation itself are unaffected.
+    if (isAntigravity()) {
+      writeJsonAtomic(path.join(sessionDir, "build-streak-warning.json"), {
+        warning,
+        streak: count,
+        ts: now,
+      });
+    } else {
+      emitAdditionalContext("PostToolUse", warning);
+    }
   }
   return 0;
 }

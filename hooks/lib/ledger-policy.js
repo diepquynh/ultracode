@@ -12,11 +12,14 @@
 // bash-scope-guard.js ignored the orchestrator entirely, so both a Write and a
 // shell redirect could forge it.
 //
-// Two ownership classes:
+// Three ownership classes:
 //   * hook-owned  — written ONLY by ultracode's own PostToolUse hooks
 //                   (factcheck-record.js, spawn-log.js, build-streak.js). No
 //                   model-issued write is ever legitimate, from any agent or
 //                   from the orchestrator.
+//   * tool-owned  — written ONLY by the bundled MCP server (mcp/gate-server.js)
+//                   as the record of a call it accepted. Same rule as hook-owned:
+//                   a hand-authored copy is a decision that was never made.
 //   * agent-owned — written by the agent(s) whose prompt.md documents the file
 //                   as their output. Everyone else, orchestrator included, is
 //                   denied so pipeline state can only be authored by the role
@@ -52,6 +55,29 @@ const HOOK_OWNED = [
   },
 ];
 
+// Written by mcp/gate-server.js itself, in-process, so denying every tool-issued
+// write costs the pipeline nothing. gates.json is the file hooks/pipeline-gate.js
+// reads to decide whether ultracode:plan or a phase-driven ultracode:implement
+// may be spawned at all — hand-writing it approves your own spec or plan and
+// skips the fact-check requirement mcp/lib/gate.js enforces on the real call.
+const TOOL_OWNED = [
+  {
+    pattern: /^gates\.json$/,
+    writer: "the ultracode_gate MCP tool (mcp/gate-server.js), from a decision it accepted",
+    stakes:
+      "hooks/pipeline-gate.js reads it to decide whether ultracode:plan and a phase-driven " +
+      "ultracode:implement may be spawned, and the tool records an approval only once " +
+      "ultracode:fact-check has returned PASS",
+  },
+  {
+    pattern: /^knowledge\.sqlite3(-wal|-shm|-journal)?$/,
+    writer: "the ultracode_memory MCP tools (mcp/lib/memory.js)",
+    stakes:
+      "it is the repo's durable lesson store that later sessions recall as fact, and gate-server.js " +
+      "documents it as never hand-edited",
+  },
+];
+
 const AGENT_OWNED = [
   {
     pattern: /^ultracode-review-ledger(-[\w.-]+)?\.md$/,
@@ -80,7 +106,7 @@ function checkLedger(agent, targetPath) {
   const base = path.basename(String(targetPath || "").replace(/\\/g, "/"));
   if (!base) return { allowed: true };
 
-  for (const entry of HOOK_OWNED) {
+  for (const entry of [...HOOK_OWNED, ...TOOL_OWNED]) {
     if (!entry.pattern.test(base)) continue;
     return {
       allowed: false,
@@ -109,4 +135,16 @@ function checkLedger(agent, targetPath) {
   return { allowed: true };
 }
 
-module.exports = { checkLedger, HOOK_OWNED, AGENT_OWNED };
+// One regex matching every protected ledger name, for callers that must scan
+// free text rather than a path — hooks/lib/plugin-policy.js looks for a ledger
+// named inside an interpreter's inline code, where there is no path argument to
+// check. Built from the same entries above so a ledger added there is covered
+// here without a second list to keep in step.
+function ledgerNamePattern() {
+  const sources = [...HOOK_OWNED, ...TOOL_OWNED, ...AGENT_OWNED].map((entry) =>
+    entry.pattern.source.replace(/^\^/, "").replace(/\$$/, ""),
+  );
+  return new RegExp(`(?:${sources.join("|")})`, "i");
+}
+
+module.exports = { checkLedger, ledgerNamePattern, HOOK_OWNED, TOOL_OWNED, AGENT_OWNED };
