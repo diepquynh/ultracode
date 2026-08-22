@@ -58,20 +58,27 @@ Extra user focus for this run (may be empty): `{{arguments}}`
 
 Follow these steps exactly.
 
-## Step 0 — Session directory + repo root
+## Step 0 — Session directory + repo root + repo key
 
-Create the scratch dir (every initializer agent writes its files there) and record the repo root:
+Create the scratch dir (every initializer agent writes its files there), and record the repo root and this
+repo's key:
 
 ```bash
 SESSION_ROOT="$PWD/{{runtime_dir}}/session"                                # repo-local scratch (was /tmp)
 ULTRACODE_SESSION="$SESSION_ROOT/ultracode-session-{{session_id_expr}}"
 mkdir -p "$ULTRACODE_SESSION"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
+REPO_KEY="$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed 's/^-*//; s/-*$//')"
+[ -n "$REPO_KEY" ] || REPO_KEY="repo"                                      # a slug is always required
 echo "session=$ULTRACODE_SESSION"
 echo "repo=$PWD"
+echo "repo_key=$REPO_KEY"
 ```
 
-Keep `$ULTRACODE_SESSION` (session dir) and the repo root (`$PWD`, an absolute path) for every spawn below.
+Keep `$ULTRACODE_SESSION` (session dir), the repo root (`$PWD`, an absolute path) and `$REPO_KEY` for every
+spawn below. Every spawn that names a `Repo root:` must also carry `Session dir:` and `Repo key:` — a spawn
+missing either is refused, because the hooks that record a stage's outcome address it as (session dir, repo
+key).
 
 **The path is derived, not generated.** The harness supplies {{session_id_names}}, which every agent inherits
 unchanged, so the formula yields the same path in every mode below from any working directory. Re-running it is
@@ -91,6 +98,7 @@ prompt: "Mode: detect.
 Repo root: {absolute repo root}.
 User focus: {{arguments}}
 Session dir: {ULTRACODE_SESSION}.
+Repo key: {REPO_KEY}.
 Before scanning anything, check whether another harness already has a complete bootstrap for this repo
 (Step D0) and report any cross-harness candidates instead of scanning. Otherwise, detect the stack, choose the
 matching reference from your refs library, and write the scout plan (the list of slices to scout in parallel +
@@ -118,6 +126,7 @@ scanning. {{tool_read}} that file and handle it before touching Steps 2–4:
     Source skills dir: {chosen candidate.skillsDir}.
     Repo root: {absolute repo root}.
     Session dir: {ULTRACODE_SESSION}.
+    Repo key: {REPO_KEY}.
     Migrate the source's repo-profile.json, INVENTORY.md, and every skill into {{runtime_dir}} and
     {{skills_dir}}, translating stale paths and resetting the models block to the seeded defaults. Leave the
     legacy source dir on disk. Return the report path, the source harness, the source runtime dir, and the
@@ -218,6 +227,7 @@ Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
 Repo root: {absolute repo root}.
+Repo key: {REPO_KEY}.
 {{tool_write}} ONLY your one skill into {absolute repo root}/{{skills_dir}}/{skill.name}/ , grounded in this component
 type's captured exemplar + invariants + distilled template from the scout findings. If Disposition is
 regenerate, your {{tool_write}} overwrites the existing SKILL.md with the fresh generation. For a module-hub skill, also
@@ -244,6 +254,7 @@ Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
 Repo root: {absolute repo root}.
+Repo key: {REPO_KEY}.
 {{tool_write}} {absolute repo root}/{{runtime_dir}}/INVENTORY.md and {absolute repo root}/{{runtime_dir}}/repo-profile.json.
 EVERY skill in Generated skills AND every skill in Reused skills MUST appear in both the Skills Inventory table
 and the profile skills[] array (mark each profile skills[] entry source: generated or reused). For each reused

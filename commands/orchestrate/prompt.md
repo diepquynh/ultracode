@@ -37,8 +37,11 @@ later rule collapses to the single-repo flow.
    (file type → skills to load), its **Module/Area Map**, its **Commands** (build/test/testOne/format/lint),
    and its **Review Rule Set** (IDs + severity + which are auto-fixable). Route that repo's work
    by these tables **by name** — never by skill descriptions, never with another repo's tables.
-3. **Assign each repo a short repo key** — a lowercase slug, e.g. `backend`, `web`, `api`. Use it to tag tasks,
-   session subdirs, and spawn prompts.
+3. **Assign each repo a short repo key** — a lowercase slug (letters, digits, dashes), e.g. `backend`, `web`,
+   `api`. Use it to tag tasks and session subdirs, and pass it verbatim as the `Repo key:` line of every spawn
+   for that repo and as the `repo_key` of every `ultracode_gate` call about it. Assign a key even when there is
+   exactly one repo. Once assigned, a repo's key never changes for the rest of the session: it is half the
+   address under which each stage's recorded state is stored and read back.
 
 Store, **per repo key**: its absolute root, its resolved command strings (build, test, testOne, format, lint),
 and its auto-fixable rule-ID set. These hold for the rest of the session. Never apply one repo's commands,
@@ -69,8 +72,9 @@ echo "$SESSION_DIR"
 
 **The path is derived, not generated.** {{session_id_inheritance}}, so this formula is a pure function of the
 session and the repo root and is idempotent to re-run. Never generate a random suffix or discover the dir by
-picking the newest match under `$SESSION_ROOT` — and still pass `Session dir:` in every spawn (Hard rule 3);
-the derivation is the fallback for when a prompt omits it, not a licence to drop the line.
+picking the newest match under `$SESSION_ROOT` — and still pass `Session dir:` and `Repo key:` in every spawn
+(Hard rule 3); the derivation is the fallback for when a prompt omits the dir, not a licence to drop either
+line, and there is no fallback at all for the repo key.
 
 {{session_id_unavailable}} the final fallback `no-session-id` still gives
 one stable shared path, so the pipeline degrades to a single working dir rather than failing.
@@ -81,7 +85,7 @@ Give **each repo its own subdirectory** so parallel repos never collide on repor
 mkdir -p "$SESSION_DIR/{repo-key}"
 ```
 
-Every subagent prompt carries two lines that scope the agent to its repo:
+Every subagent prompt carries three lines that scope the agent to its repo:
 
 - `Repo root: {absolute repo root}` — the agent **changes its working directory to this root before its first
   tool call** and stays there, then resolves every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path (inventory, profile, skills) and every
@@ -90,10 +94,16 @@ Every subagent prompt carries two lines that scope the agent to its repo:
   harness may start an agent above the repo or inside a different one, and {{tool_skill}} resolves skill names
   relative to the working directory, so an agent left elsewhere cannot load this repo's skills at all.
 - `Session dir: {SESSION_DIR}/{repo-key}` — where that agent writes its reports.
+- `Repo key: {repo-key}` — the same slug that names the subdirectory above. This is not a duplicate of it: the
+  hooks that record a stage's outcome address pipeline state as **(session dir, repo key)**, so the key is
+  what makes a recorded fact-check verdict findable by the `ultracode_gate` call that reads it back. A spawn
+  without it is refused; a spawn whose key disagrees with its session-dir subdirectory is refused too.
 
 For a single-repo session use one repo key and one subdir; the flow is otherwise unchanged. A cross-repo
 artifact that describes the whole session (a multi-repo master plan) goes in `{SESSION_DIR}` itself, not in a
-repo subdir.
+repo subdir — and a cross-repo stage still carries a `Repo key:`, the **primary repo's** key (the repo at
+`$PWD`, whose root holds `$SESSION_DIR`). Use that same primary key in the `ultracode_gate` calls for the spec
+and the plan, since those two artifacts cover the whole session.
 
 ## The spec-driven flow — criteria → one spec → one plan → phases → steps
 
@@ -129,14 +139,16 @@ units live **inside** that file as deliverables `D1`, `D2`, … in the Delivery 
 
 **Rule D2 — generate-spec is one cross-repo agent.** Spawn exactly **one** `ultracode:generate-spec` for the
 whole request, even when several repos are in scope, and even when several explore agents ran. Pass it every
-criteria doc path, every research doc path, the `Repos in scope:` list, and `Session dir: {SESSION_DIR}` — the
-root, not a repo subdir, because one spec describes the whole session. It tags each deliverable with one repo key.
+criteria doc path, every research doc path, the `Repos in scope:` list, `Session dir: {SESSION_DIR}` — the
+root, not a repo subdir, because one spec describes the whole session — and `Repo key: {primary repo key}`. It
+tags each deliverable with one repo key.
 
 **Rule D3 — Approve the spec before planning, and fold every answer back into it.** The spec file is the
 requirements contract. After `ultracode:generate-spec` returns:
 
 1. {{tool_read}} the spec file.
-2. Spawn `ultracode:fact-check` (`Target: {spec file}`, `Target type: spec`, every research doc path). `FAIL` →
+2. Spawn `ultracode:fact-check` (`Target: {spec file}`, `Target type: spec`, every research doc path,
+   `Session dir: {SESSION_DIR}` and `Repo key: {primary repo key}`). `FAIL` →
    re-spawn `ultracode:generate-spec` with the findings, then fact-check again; if the same finding keeps
    recurring after a few rounds, stop and ask the user rather than continuing to retry. `PASS` → continue.
 3. Surface its Open Questions with **{{tool_ask_user}}** and wait for the answers.
@@ -150,21 +162,26 @@ agent reads only the spec file, so an answer that is not written into the spec i
 the plan. **Priority on conflict:** this rule wins over any impulse to save a round-trip — a re-spawn of
 `ultracode:generate-spec` is always cheaper than a plan built on stale requirements.
 
-Once the user approves, call `ultracode_gate(session_dir: {SESSION_DIR}, gate: "spec", decision: "approved")`
-before spawning `ultracode:plan`.
+Once the user approves, call
+`ultracode_gate(session_dir: {SESSION_DIR}, repo_key: {primary repo key}, gate: "spec", decision: "approved")`
+before spawning `ultracode:plan`. The `repo_key` must be the one the fact-check spawn carried — that is where
+the hook recorded its verdict, and the tool refuses an approval it cannot find a `PASS` for.
 
 **Rule D4 — One plan agent, given the spec file and nothing else.** After spec approval, spawn exactly **one**
 `ultracode:plan`. Its prompt carries the **one** spec file path, the `Repos in scope:` list (or the single
-`Repo root:`), and `Session dir: {SESSION_DIR}` — the root, since one plan covers the whole request. Do **not**
+`Repo root:`), `Session dir: {SESSION_DIR}` — the root, since one plan covers the whole request — and
+`Repo key: {primary repo key}`. Do **not**
 pass it the research document path, the criteria document path, or any user answer text: all of that is already
 in the spec file, and handing the agent a second requirements document makes it plan against two sources that
 can disagree. The plan agent turns the spec's deliverables into phases and returns one master plan.
 
 **Rule D5 — Approve the plan, then execute its phases.** Before presenting the master plan, spawn
-`ultracode:fact-check` (`Target: {master plan file}`, `Target type: plan`) the same way Rule D3 does for the
+`ultracode:fact-check` (`Target: {master plan file}`, `Target type: plan`, `Session dir: {SESSION_DIR}`,
+`Repo key: {primary repo key}`) the same way Rule D3 does for the
 spec — `FAIL` re-spawns `ultracode:plan` with the findings and fact-checks again; `PASS` continues. Present the
 plan for approval. Once approved, call
-`ultracode_gate(session_dir: {SESSION_DIR}, gate: "plan", decision: "approved")` before spawning any phase that
+`ultracode_gate(session_dir: {SESSION_DIR}, repo_key: {primary repo key}, gate: "plan", decision: "approved")`
+— the same `repo_key` the plan's fact-check spawn carried — before spawning any phase that
 names a `Phase file:`. Then run the phases through the per-phase loop,
 scheduling by the Phase Index's `Depends on` graph (Rule D6). One plan covers every deliverable, so there is no
 second plan to sequence behind it.
@@ -220,11 +237,13 @@ schedulable unit is a `(repo key, stage-or-phase)` node — e.g. `backend:explor
 **Flow across repos:** `ultracode:explore` fans out per repo (Rule M1). Then **one** cross-repo
 `ultracode:generate-spec` (Rule D2) writes the single spec file, whose deliverables each target exactly one
 repo, and **one** cross-repo `ultracode:plan` (Rule D4) turns that spec into one master plan. Pass the plan
-agent `Repos in scope:` = each `{repo key} → {absolute root}` and `Session dir: {SESSION_DIR}` — the root, since
-one plan covers every repo. Its phases are each tagged with a **Deliverable**, a **Repo**, and a **Depends on**
+agent `Repos in scope:` = each `{repo key} → {absolute root}`, `Session dir: {SESSION_DIR}` — the root, since
+one plan covers every repo — and `Repo key: {primary repo key}`. Its phases are each tagged with a
+**Deliverable**, a **Repo**, and a **Depends on**
 set — the dependency graph you schedule from.
 
-Implementation then runs per repo (each with its own `Repo root:` and `Session dir: {SESSION_DIR}/{repo-key}`)
+Implementation then runs per repo (each with its own `Repo root:`, `Session dir: {SESSION_DIR}/{repo-key}` and
+`Repo key: {repo-key}`)
 under Rules M2–M6, and each repo reaches its own closing gate when its own phases are done (Rule T6). The spec
 stage never skips; only `ultracode:plan` skips for a lower-stakes request, per the unchanged stakes judgment
 (Rule M3's last bullet).
@@ -288,16 +307,18 @@ verbatim, prefix included. Each writes a report into the session dir.
 | --- | --- | --- |
 | `ultracode:explore` | Request is ambiguous/unfamiliar; gather context before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API) — that agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. Skippable otherwise. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
 | `ultracode:generate-spec` | Any request that will be planned or implemented (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
-| `ultracode:fact-check` | **Mandatory**, before every spec is presented for approval and before every plan is presented for approval (Rules D3, D5). Verifies concrete claims against the repo and any research docs; `ultracode_gate` refuses `approved` without a recorded `PASS`. | JSON (inline) |
+| `ultracode:fact-check` | **Mandatory**, before every spec is presented for approval and before every plan is presented for approval (Rules D3, D5). Verifies concrete claims against the repo and any research docs; `ultracode_gate` refuses `approved` without a recorded `PASS` **under the same `repo_key` that spawn carried**. | JSON (inline) |
 | `ultracode:plan` | Medium/high-stakes; needs a sequenced, phased strategy. Exactly one per request, given only the spec file (Rule D4). | master plan + per-phase files |
 | `ultracode:implement` | Code must be written/modified/deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
 | `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
 | `ultracode:write-test` | After every EPA is back, in the same requested test stage (Rules T2–T4); write tests. **One phase at a time** — never two in a message (Rule T4). Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
-| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop or the closing test stage. Every spawn carries `Changed files:` and `Change rationale:` alongside `Repo root:`/`Session dir:`. | JSON (inline) |
+| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop or the closing test stage. Every spawn carries `Changed files:` and `Change rationale:` alongside `Repo root:`/`Session dir:`/`Repo key:`. | JSON (inline) |
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
-**Repo scoping:** every spawn carries `Repo root: {absolute root}` and `Session dir: {SESSION_DIR}/{repo-key}`.
+**Repo scoping:** every spawn carries `Repo root: {absolute root}`, `Session dir: {SESSION_DIR}/{repo-key}` and
+`Repo key: {repo-key}` (**Session isolation**) — the cross-repo spec and plan stages take `{SESSION_DIR}` itself
+plus the primary repo's key.
 The agent makes that root its working directory before its first tool call, then resolves every
 `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and source path against it and reads **that repo's** inventory, skills, and profile — so
 route each spawn to the repo whose files it will touch. Never spawn an agent without a `Repo root:` line and
@@ -355,7 +376,7 @@ phase, after that phase's test review passes — so a run where the user decline
 staging step. Always pass `Review scope: unstaged` to `ultracode:code-reviewer` when staging is in effect.
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}` (the agent works from that
-directory — Hard rule 3), the phase/plan file path, prior
+directory — Hard rule 3), `Session dir:` and `Repo key:`, the phase/plan file path, prior
 reports, and (for `ultracode:implement` / `ultracode:write-test`) the `Required skills:` line plus a
 `Phase file: {absolute path}` line whenever a plan exists (Hard rule 13). The one exception to "include prior
 reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
@@ -572,9 +593,13 @@ remain, report them to the user and ask how to proceed. Do not auto-run a 4th fo
    `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Route by its tables, by name — never by skill descriptions,
    never with another repo's tables.
 3. **Self-contained prompts.** Subagents cannot see this conversation; include every needed path and fact,
-   plus `Repo root:` and `Session dir:`. Every agent works **from** its `Repo root:` — it moves its working
+   plus `Repo root:`, `Session dir:` and `Repo key:` — all three, in every spawn. Every agent works **from**
+   its `Repo root:` — it moves its working
    directory there before its first tool call, because {{tool_skill}} resolves skills relative to the working
-   directory and an agent left where the harness started it loads none of that repo's skills.
+   directory and an agent left where the harness started it loads none of that repo's skills. The `Repo key:`
+   is what makes the stage's recorded state addressable: hooks write it under (session dir, repo key) and
+   `ultracode_gate` reads it back from the same pair, so a spawn missing that line is refused rather than
+   silently recording a verdict the gate will not find.
 4. **{{tool_read}} every report** before deciding the next step.
 5. **Ask open questions** with {{tool_ask_user}}; never answer on their behalf.
 6. **The spec and the plan need approval.** The spec needs approval before the plan agent runs (Rule D3); the
@@ -589,8 +614,10 @@ remain, report them to the user and ask how to proceed. Do not auto-run a 4th fo
 11. **Never cross a dependency edge in parallel.** Independent work across repos may run concurrently; a phase
     blocked by another repo's phase waits until that phase completes and passes review. When unsure whether a
     cross-repo dependency exists, queue (Rule M5).
-12. **Single repo, unchanged.** With one in-scope repo, behave exactly as the single-repo flow — no
-    parallelism, and the repo key is cosmetic.
+12. **Single repo, still keyed.** With one in-scope repo, behave exactly as the single-repo flow — no
+    parallelism, one repo key, one session subdir. The key is not cosmetic even then: it is half the address
+    of every recorded fact-check verdict, so a single-repo session still assigns one and still passes it in
+    every spawn and every `ultracode_gate` call.
 13. **Every phase spawn names its phase file.** `ultracode:implement` and `ultracode:write-test` spawns MUST
     carry `Phase file: {absolute path}` whenever a plan exists, so the agent works from the phase's own
     header, scope, and steps rather than from your summary of them. A phase spawn without that line is
@@ -654,4 +681,7 @@ remain, report them to the user and ask how to proceed. Do not auto-run a 4th fo
     of a tool argument is the same act with the evidence hidden. **When a gate cannot be satisfied** — the
     fact-check verdict never lands, a hook never fires, the gate tool keeps refusing — that is a defect to
     report, not an obstacle to route around: tell the user exactly which step did not record and stop there.
+    One legitimate retry first: `ultracode_gate` reports `none recorded` when its `repo_key` is not the key the
+    fact-check spawn carried, so re-read both and, if they differ, call the tool again with the matching key.
+    That is fixing the address of a real verdict, not manufacturing one — and it is the only retry available.
     A pipeline that lies about what it verified is worse than one that admits it is stuck.

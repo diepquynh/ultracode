@@ -10,7 +10,7 @@
 // the two events that fire around the model's turn and carry `transcriptPath` —
 // and records what the transcript already proves:
 //
-//   * ultracode:fact-check verdicts -> {session-dir}/factcheck.json
+//   * ultracode:fact-check verdicts -> {session-dir}/{repo-key}/factcheck.json
 //   * every subagent's return       -> the waiting {session-dir}/progress.json
 //                                      record's summary and status
 //
@@ -49,7 +49,7 @@ const {
   hookSessionId,
   pick,
 } = require("./lib/common");
-const { pluginTargetInfo, baseSessionDir } = require("./lib/session");
+const { pluginTargetInfo, baseSessionDir, normalizeRepoKey, repoStateDir } = require("./lib/session");
 const { subagentMessages, subagentVerdicts } = require("./lib/agy-transcript");
 const { recordAgentMessage } = require("./lib/spawn-record");
 
@@ -68,8 +68,14 @@ function resolveSessionDir(record, hookInput) {
   return isDirectory(derived) ? derived : null;
 }
 
-function recordVerdict(sessionDir, record) {
-  const factcheckPath = path.join(sessionDir, "factcheck.json");
+// Same (session dir, repo key) addressing as hooks/factcheck-record.js on every
+// other harness, and the same refusal to guess: the repo key comes from the
+// fact-check spawn's own `Repo key:` line, and without it there is no path
+// ultracode_gate would also resolve to.
+function recordVerdict(sessionDir, repoKey, record) {
+  const stateDir = repoStateDir(sessionDir, repoKey);
+  if (!stateDir) return null;
+  const factcheckPath = path.join(stateDir, "factcheck.json");
   const current = readJsonIfFile(factcheckPath) || {};
   const existing = current[record.target];
   if (existing && existing.sourceStep === record.step) return null; // already recorded
@@ -78,6 +84,7 @@ function recordVerdict(sessionDir, record) {
     verdict: record.verdict,
     rounds: ((existing && existing.rounds) || 0) + 1,
     findings: record.findings,
+    repo: repoKey,
     ts: new Date().toISOString(),
     sourceStep: record.step,
     sender: record.sender,
@@ -104,11 +111,17 @@ async function main() {
   }
 
   const recorded = [];
+  const keyless = [];
   for (const record of latest.values()) {
     const sessionDir = resolveSessionDir(record, hookInput);
     if (!sessionDir) continue;
+    const repoKey = normalizeRepoKey(record.repoKey);
+    if (!repoKey) {
+      keyless.push(`${record.target}: ${record.verdict}`);
+      continue;
+    }
     try {
-      if (recordVerdict(sessionDir, record)) {
+      if (recordVerdict(sessionDir, repoKey, record)) {
         recorded.push(`${record.target}: ${record.verdict}`);
       }
     } catch {
@@ -146,8 +159,19 @@ async function main() {
   if (recorded.length) {
     notes.push(
       `ultracode: recorded ultracode:fact-check's verdict into factcheck.json (${recorded.join(", ")}). ` +
-        "The spec/plan gate can now read it — call ultracode_gate with the same session_dir once the user " +
-        "has approved. Do not write this file yourself.",
+        "The spec/plan gate can now read it — call ultracode_gate with the same session_dir and the same " +
+        "repo_key once the user has approved. Do not write this file yourself.",
+    );
+  }
+  // A keyless spawn is the one case where the verdict arrived and still cannot be
+  // recorded anywhere the gate will look, so the orchestrator has to hear it: on
+  // AGY there is no PreToolUse denial to catch it at spawn time.
+  if (keyless.length) {
+    notes.push(
+      `ultracode: ultracode:fact-check returned ${keyless.join(", ")}, and it was NOT recorded — that ` +
+        "spawn carried no valid `Repo key:` line, so there is no factcheck.json path this hook and " +
+        "ultracode_gate would both resolve to. Re-spawn ultracode:fact-check with `Repo key: {repo-key}` " +
+        "and call ultracode_gate with that same repo_key. Do not write factcheck.json yourself.",
     );
   }
   // An escalation is the one return the orchestrator must not skim past: the agent

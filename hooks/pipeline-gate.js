@@ -5,7 +5,8 @@
 //
 // Reads a PreToolUse hook payload (matcher: Task|Agent / Agent) from stdin.
 // Approval is recorded by the orchestrator calling the ultracode_gate MCP tool
-// (mcp/gate-server.js), which writes {session-dir}/gates.json. A plan-driven
+// (mcp/gate-server.js), which writes {session-dir}/gates.json — the session dir
+// itself, since one spec and one plan cover every repo in scope. A plan-driven
 // spawn (one whose prompt carries a Phase file:) is gated on gates.plan.
 //
 // An inline no-plan ultracode:implement spawn (Rule M3's last bullet) is still
@@ -31,7 +32,13 @@ const {
   hookToolInput,
   hookSessionId,
 } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const {
+  pluginTargetInfo,
+  resolveRepoRoot,
+  baseSessionDir,
+  sessionBaseDir,
+  normalizeRepoKey,
+} = require("./lib/session");
 
 const PLAN_GATED_AGENTS = new Set([
   "implement",
@@ -79,9 +86,21 @@ async function main() {
     sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
-  const gates = readJsonIfFile(path.join(sessionDir, "gates.json"));
+  // A spec/plan approval is one session-level decision — one spec and one plan
+  // cover every repo in scope — so it is read from the session dir itself, not
+  // from whichever repo-key subdirectory this particular spawn is scoped to.
+  // Reading it relative to the declared dir meant a phase spawn scoped to
+  // `{SESSION_DIR}/{repo-key}` looked for an approval the ultracode_gate call
+  // had recorded at `{SESSION_DIR}`, and every such spawn was refused for a
+  // plan the user had in fact approved.
+  const gates = readJsonIfFile(path.join(sessionBaseDir(sessionDir), "gates.json"));
+  // The key this spawn declares is the one whose fact-check verdict the gate tool
+  // will look for, so quoting it back makes the hint a call the orchestrator can
+  // issue as-is rather than one it has to reconstruct.
+  const repoKey = normalizeRepoKey(field(prompt, "Repo key")) || "{repo-key}";
   const gateCallHint =
-    `ultracode_gate(session_dir: "${sessionDir}", gate: "%GATE%", decision: "approved")`;
+    `ultracode_gate(session_dir: "${sessionDir}", repo_key: "${repoKey}", gate: "%GATE%", ` +
+    'decision: "approved")';
 
   if (needsSpecGate && decisionFor(gates, "spec") !== "approved") {
     denyPreToolUse(

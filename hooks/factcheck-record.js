@@ -1,8 +1,15 @@
 #!/usr/bin/env node
-// Auto-capture ultracode:fact-check's verdict into {session-dir}/factcheck.json —
-// code-enforced capture, not dependent on the orchestrator remembering to record
-// anything. mcp/gate-server.js's ultracode_gate tool reads this file before it
-// will honor an "approved" decision for the matching gate (spec/plan).
+// Auto-capture ultracode:fact-check's verdict into
+// {session-dir}/{repo-key}/factcheck.json — code-enforced capture, not dependent
+// on the orchestrator remembering to record anything. mcp/gate-server.js's
+// ultracode_gate tool reads that same (session dir, repo key) pair before it will
+// honor an "approved" decision for the matching gate (spec/plan).
+//
+// The repo key comes from the spawn's own `Repo key:` line and is required: with
+// no key there is no one directory both this hook and the gate tool agree on, and
+// a verdict recorded in the wrong one reads back at the gate as "none recorded" —
+// the deadlock this file exists to prevent. So a keyless spawn records nothing and
+// says so, instead of writing state the gate will never find.
 //
 // Reads a PostToolUse hook payload (matcher: Task|Agent / Agent) from stdin.
 // PostToolUse cannot block — this only records, and never denies.
@@ -14,6 +21,7 @@ const {
   readHookInput,
   agentFromToolInput,
   promptFromToolInput,
+  emitAdditionalContext,
   field,
   isDirectory,
   readJsonIfFile,
@@ -23,7 +31,13 @@ const {
   hookToolResponse,
   hookSessionId,
 } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const {
+  pluginTargetInfo,
+  resolveRepoRoot,
+  baseSessionDir,
+  normalizeRepoKey,
+  repoStateDir,
+} = require("./lib/session");
 
 async function main() {
   const hookInput = await readHookInput();
@@ -47,14 +61,28 @@ async function main() {
     sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
   }
 
+  const repoKey = normalizeRepoKey(field(prompt, "Repo key"));
+  if (!repoKey) {
+    emitAdditionalContext(
+      "PostToolUse",
+      `ultracode: ultracode:fact-check returned ${verdict} for the ${target}, and it was NOT recorded — ` +
+        "that spawn carried no valid `Repo key:` line, so there is no factcheck.json path this hook and " +
+        "ultracode_gate would both resolve to. Re-spawn ultracode:fact-check with `Repo key: {repo-key}` " +
+        "(the lowercase slug from Step 0, matching the repo-key subdirectory of its `Session dir:`), then " +
+        "call ultracode_gate with that same repo_key. Do not write factcheck.json yourself.",
+    );
+    return 0;
+  }
+
   try {
-    const factcheckPath = path.join(sessionDir, "factcheck.json");
+    const factcheckPath = path.join(repoStateDir(sessionDir, repoKey), "factcheck.json");
     const current = readJsonIfFile(factcheckPath) || {};
     const priorRounds = (current[target] && current[target].rounds) || 0;
     current[target] = {
       verdict,
       rounds: priorRounds + 1,
       findings: Array.isArray(payload.findings) ? payload.findings : [],
+      repo: repoKey,
       ts: new Date().toISOString(),
     };
     writeJsonAtomic(factcheckPath, current);

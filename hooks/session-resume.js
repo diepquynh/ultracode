@@ -20,6 +20,11 @@ function formatRecord(record) {
   return `${record.agent}${phase} [${record.status}]${summary}`;
 }
 
+// Called for the session dir and for each repo-key subdirectory of it, and reads
+// every ledger in whichever it is handed: gates.json is session-level, while
+// factcheck.json, progress.json and the review ledger are per repo key. Printing
+// whatever is present in each place keeps this readable against a session from
+// either layout rather than going silent on the other one.
 function reportFor(sessionDir, label) {
   const lines = [];
   const progress = readJsonIfFile(path.join(sessionDir, "progress.json"));

@@ -1364,21 +1364,47 @@ function sessionGuardTest(target) {
       { PLUGIN_ROOT: pluginRoot },
     );
 
-  assert.equal(run(`Repo root: ${repo}.\nSession dir: ${expectedDir}.`), "");
-  assert.equal(run(`Repo root: ${repo}.\nSession dir: ${path.join(expectedDir, "backend")}.`), "");
+  assert.equal(run(`Repo root: ${repo}.\nSession dir: ${expectedDir}.\nRepo key: backend.`), "");
+  assert.equal(
+    run(`Repo root: ${repo}.\nSession dir: ${path.join(expectedDir, "backend")}.\nRepo key: backend.`),
+    "",
+  );
 
   const missing = JSON.parse(run(`Repo root: ${repo}.`)).hookSpecificOutput;
   assert.equal(missing.permissionDecision, "deny");
   assert.match(missing.permissionDecisionReason, /no Session dir:/);
 
   const wrong = JSON.parse(
-    run(`Repo root: ${repo}.\nSession dir: ${path.join(repo, runtimeDir, "session", "ultracode-session-RANDOM")}.`),
+    run(
+      `Repo root: ${repo}.\nSession dir: ${path.join(repo, runtimeDir, "session", "ultracode-session-RANDOM")}.` +
+        "\nRepo key: backend.",
+    ),
   ).hookSpecificOutput;
   assert.equal(wrong.permissionDecision, "deny");
   assert.match(wrong.permissionDecisionReason, new RegExp(expectedDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  // The repo key is half the address of every recorded fact-check verdict, so a
+  // spawn without one is refused rather than left to record state the gate tool
+  // cannot find. A key that disagrees with the session dir's own subdirectory is
+  // the same defect wearing a valid-looking key.
+  const noKey = JSON.parse(run(`Repo root: ${repo}.\nSession dir: ${expectedDir}.`)).hookSpecificOutput;
+  assert.equal(noKey.permissionDecision, "deny");
+  assert.match(noKey.permissionDecisionReason, /no Repo key:/);
+
+  const badKey = JSON.parse(
+    run(`Repo root: ${repo}.\nSession dir: ${expectedDir}.\nRepo key: Back End!.`),
+  ).hookSpecificOutput;
+  assert.equal(badKey.permissionDecision, "deny");
+  assert.match(badKey.permissionDecisionReason, /is not a repo key/);
+
+  const mismatched = JSON.parse(
+    run(`Repo root: ${repo}.\nSession dir: ${path.join(expectedDir, "web")}.\nRepo key: backend.`),
+  ).hookSpecificOutput;
+  assert.equal(mismatched.permissionDecision, "deny");
+  assert.match(mismatched.permissionDecisionReason, /name different repos/);
 }
 
-test("session-guard denies a missing or invented Session dir:", () => {
+test("session-guard denies a missing Session dir:/Repo key: or an invented one", () => {
   sessionGuardTest("claude");
   sessionGuardTest("codex");
   sessionGuardTest("grok");
@@ -1709,7 +1735,7 @@ test("a Role-labelled AGY plan spawn is still gated and still routed", () => {
 // 48e8b97b-fe9a-4690-9754-fb06458e3c49: an invoke_subagent call, the
 // "Created the following subagents" result that names the subagent's
 // conversationId, and the SYSTEM_MESSAGE step whose sender is that same id.
-function agyTranscript(sessionDir, repo, { sender, verdict, target, step, agent }) {
+function agyTranscript(sessionDir, repo, { sender, verdict, target, step, agent, repoKey = "backend" }) {
   return [
     {
       step_index: step - 3,
@@ -1725,7 +1751,10 @@ function agyTranscript(sessionDir, repo, { sender, verdict, target, step, agent 
                 Model: "inherit",
                 Role: "Fact Checker",
                 TypeName: agent,
-                Prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nTarget type: ${target}\n`,
+                Prompt:
+                  `Repo root: ${repo}\nSession dir: ${sessionDir}\n` +
+                  (repoKey ? `Repo key: ${repoKey}\n` : "") +
+                  `Target type: ${target}\n`,
               },
             ],
           },
@@ -1821,6 +1850,22 @@ test("agy-message-record recovers a fact-check verdict AGY never puts in a tool 
     assert.deepEqual(JSON.parse(run()), {}, label);
     assert.equal(fs.existsSync(factcheckPath), false, label);
   }
+
+  // A spawn with no Repo key: records nothing — there is no path ultracode_gate
+  // would resolve to either — and says so. AGY has no PreToolUse denial to catch
+  // this at spawn time, so the injected message is the only warning there is.
+  fs.rmSync(factcheckPath, { force: true });
+  write({
+    sender: "ee2e6159-d766-4f04-8d7f-2825eada35fb",
+    verdict: "PASS",
+    target: "spec",
+    step: 260,
+    agent: "ultracode-fact-check",
+    repoKey: "",
+  });
+  const keyless = JSON.parse(run());
+  assert.match(keyless.injectSteps[0].ephemeralMessage, /was NOT recorded/);
+  assert.equal(fs.existsSync(factcheckPath), false);
 
   // The same hook also runs on PostToolUse, which accepts a bare {} only: AGY
   // rejects a response carrying injectSteps there as an unknown field and throws
@@ -2845,7 +2890,7 @@ function pipelineGateTest(target) {
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
   const hookPath = path.join(pluginRoot, "hooks", "pipeline-gate.js");
-  const run = (agent, extraPromptLines = "") =>
+  const run = (agent, extraPromptLines = "", spawnDir = sessionDir) =>
     runHook(
       hookPath,
       {
@@ -2853,7 +2898,7 @@ function pipelineGateTest(target) {
         session_id: "testsess",
         tool_input: {
           subagent_type: `ultracode:${agent}`,
-          prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.${extraPromptLines}`,
+          prompt: `Repo root: ${repo}.\nSession dir: ${spawnDir}.\nRepo key: backend.${extraPromptLines}`,
         },
       },
       { PLUGIN_ROOT: pluginRoot },
@@ -2862,6 +2907,8 @@ function pipelineGateTest(target) {
   const planDenied = JSON.parse(run("plan")).hookSpecificOutput;
   assert.equal(planDenied.permissionDecision, "deny");
   assert.match(planDenied.permissionDecisionReason, /spec has not been recorded as approved/);
+  // The hint quotes this spawn's own repo key, so it is a call to issue as-is.
+  assert.match(planDenied.permissionDecisionReason, /repo_key: "backend"/);
 
   fs.writeFileSync(
     path.join(sessionDir, "gates.json"),
@@ -2890,6 +2937,14 @@ function pipelineGateTest(target) {
     "utf-8",
   );
   assert.equal(run("implement", phaseLine), "");
+
+  // The approval is session-level, so a phase spawn scoped to its repo's own
+  // subdirectory reads the same one. Resolving gates.json relative to whichever
+  // session dir the prompt declared is what refused every per-repo phase spawn
+  // for a plan the user had approved.
+  const repoSubdir = path.join(sessionDir, "backend");
+  fs.mkdirSync(repoSubdir, { recursive: true });
+  assert.equal(run("implement", phaseLine, repoSubdir), "");
 }
 
 test("pipeline-gate denies plan/implement spawns without a recorded approval", () => {
@@ -2995,14 +3050,15 @@ function factcheckRecordTest(target) {
   const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
-  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
-  const record = (verdict, findings = []) =>
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nRepo key: backend.`;
+  const statePath = path.join(sessionDir, "backend", "factcheck.json");
+  const record = (verdict, findings = [], promptText = prompt) =>
     runHook(
       path.join(pluginRoot, "hooks", "factcheck-record.js"),
       {
         cwd: repo,
         session_id: "testsess",
-        tool_input: { subagent_type: "ultracode:fact-check", prompt },
+        tool_input: { subagent_type: "ultracode:fact-check", prompt: promptText },
         tool_response: JSON.stringify({ verdict, target: "spec", findings }),
       },
       { PLUGIN_ROOT: pluginRoot },
@@ -3011,10 +3067,37 @@ function factcheckRecordTest(target) {
   record("FAIL", [{ severity: "HIGH", location: "x", claim: "y", issue: "z" }]);
   record("PASS");
 
-  const factcheck = JSON.parse(fs.readFileSync(path.join(sessionDir, "factcheck.json"), "utf-8"));
+  const factcheck = JSON.parse(fs.readFileSync(statePath, "utf-8"));
   assert.equal(factcheck.spec.verdict, "PASS");
   assert.equal(factcheck.spec.rounds, 2);
+  assert.equal(factcheck.spec.repo, "backend");
   assert.deepEqual(factcheck.spec.findings, []);
+
+  // The verdict is addressed by (session dir, repo key), so a spawn scoped to the
+  // repo subdir records into the same file the ultracode_gate call reads when it
+  // passes the session root plus that key — the mismatch that used to strand a
+  // real PASS where the gate never looked.
+  record("PASS", [], `Repo root: ${repo}.\nSession dir: ${path.join(sessionDir, "backend")}.\nRepo key: backend.`);
+  assert.equal(JSON.parse(fs.readFileSync(statePath, "utf-8")).spec.rounds, 3);
+
+  // No repo key: nothing is recorded anywhere, and the orchestrator is told so
+  // rather than left to discover it at a gate that reports "none recorded".
+  const keyless = runHook(
+    path.join(pluginRoot, "hooks", "factcheck-record.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      tool_input: {
+        subagent_type: "ultracode:fact-check",
+        prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.`,
+      },
+      tool_response: JSON.stringify({ verdict: "PASS", target: "plan" }),
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+  assert.match(JSON.parse(keyless).hookSpecificOutput.additionalContext, /no valid `Repo key:` line/);
+  assert.equal(fs.existsSync(path.join(sessionDir, "factcheck.json")), false);
+  assert.ok(!JSON.parse(fs.readFileSync(statePath, "utf-8")).plan);
 
   // A non-fact-check spawn must not be recorded.
   runHook(
@@ -3027,11 +3110,11 @@ function factcheckRecordTest(target) {
     },
     { PLUGIN_ROOT: pluginRoot },
   );
-  const unchanged = JSON.parse(fs.readFileSync(path.join(sessionDir, "factcheck.json"), "utf-8"));
+  const unchanged = JSON.parse(fs.readFileSync(statePath, "utf-8"));
   assert.ok(!unchanged.plan);
 }
 
-test("factcheck-record captures fact-check verdicts and increments rounds", () => {
+test("factcheck-record captures fact-check verdicts under the spawn's repo key", () => {
   factcheckRecordTest("claude");
   factcheckRecordTest("codex");
   factcheckRecordTest("grok");
@@ -3164,21 +3247,67 @@ test("mcp/lib/gate refuses approval without a fact-check PASS and allows it once
   const { recordGateDecision } = require(path.join(ROOT, "mcp", "lib", "gate.js"));
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-gate-lib-"));
 
-  const denied = recordGateDecision(tempDir, "spec", "approved");
+  const denied = recordGateDecision(tempDir, "backend", "spec", "approved");
   assert.equal(denied.ok, false);
   assert.match(denied.message, /has not returned a PASS/);
 
-  const rejected = recordGateDecision(tempDir, "plan", "rejected", "needs rework");
+  const rejected = recordGateDecision(tempDir, "backend", "plan", "rejected", "needs rework");
   assert.equal(rejected.ok, true);
 
-  fs.writeFileSync(path.join(tempDir, "factcheck.json"), JSON.stringify({ spec: { verdict: "PASS" } }));
-  const approved = recordGateDecision(tempDir, "spec", "approved");
+  fs.mkdirSync(path.join(tempDir, "backend"), { recursive: true });
+  fs.writeFileSync(
+    path.join(tempDir, "backend", "factcheck.json"),
+    JSON.stringify({ spec: { verdict: "PASS", repo: "backend" } }),
+  );
+  const approved = recordGateDecision(tempDir, "backend", "spec", "approved");
   assert.equal(approved.ok, true);
 
   const gates = JSON.parse(fs.readFileSync(path.join(tempDir, "gates.json"), "utf-8"));
   assert.equal(gates.spec.decision, "approved");
+  assert.equal(gates.spec.repo, "backend");
   assert.equal(gates.plan.decision, "rejected");
   assert.equal(gates.plan.notes, "needs rework");
+
+  // A verdict recorded under one repo key does not approve another key's gate,
+  // and the refusal says which key it looked under so the fix is the call, not a
+  // hand-written file.
+  const otherKey = recordGateDecision(tempDir, "web", "spec", "approved");
+  assert.equal(otherKey.ok, false);
+  assert.match(otherKey.message, /none recorded/);
+  assert.match(otherKey.message, /Repo key: web/);
+
+  // No repo key at all is refused outright: there is no directory this tool and
+  // hooks/factcheck-record.js would both resolve to.
+  for (const missing of ["", "   ", undefined, null, "Back End!"]) {
+    const result = recordGateDecision(tempDir, missing, "spec", "approved");
+    assert.equal(result.ok, false, String(missing));
+    assert.match(result.message, /repo_key is required/);
+  }
+  assert.equal(JSON.parse(fs.readFileSync(path.join(tempDir, "gates.json"), "utf-8")).spec.repo, "backend");
+});
+
+test("gate state resolves to one path from either session-dir form", () => {
+  const { recordGateDecision, factCheckVerdict } = require(path.join(ROOT, "mcp", "lib", "gate.js"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-gate-form-"));
+  const sessionDir = path.join(root, ".ultracode", "session", "ultracode-session-abc123");
+  const repoSubdir = path.join(sessionDir, "backend");
+  fs.mkdirSync(repoSubdir, { recursive: true });
+
+  // Written where a spawn scoped to the repo subdir puts it...
+  fs.writeFileSync(
+    path.join(repoSubdir, "factcheck.json"),
+    JSON.stringify({ plan: { verdict: "PASS", repo: "backend" } }),
+  );
+
+  // ...and found by a gate call passing either form of the session dir. This is
+  // the deadlock the repo key removes: same inputs, same path, from both sides.
+  assert.equal(factCheckVerdict(sessionDir, "backend", "plan"), "PASS");
+  assert.equal(factCheckVerdict(repoSubdir, "backend", "plan"), "PASS");
+
+  assert.equal(recordGateDecision(repoSubdir, "backend", "plan", "approved").ok, true);
+  const gatesPath = path.join(sessionDir, "gates.json");
+  assert.equal(JSON.parse(fs.readFileSync(gatesPath, "utf-8")).plan.decision, "approved");
+  assert.equal(fs.existsSync(path.join(repoSubdir, "gates.json")), false);
 });
 
 test("every plugin distribution includes target hooks", () => {
@@ -3487,7 +3616,7 @@ test("grok hooks accept camelCase payloads", () => {
   const runtimeDir = HARNESS_LAYOUT.layouts.grok.runtime_dir;
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
-  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nRepo key: backend.`;
   const allowed = runHook(
     path.join(GROK_PLUGIN_ROOT, "hooks", "session-guard.js"),
     {
@@ -3641,7 +3770,7 @@ test("antigravity hooks accept structured payloads", () => {
   const runtimeDir = HARNESS_LAYOUT.layouts.antigravity.runtime_dir;
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
-  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
+  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nRepo key: backend.`;
 
   const allowed = runHook(
     path.join(ANTIGRAVITY_PLUGIN_ROOT, "hooks", "session-guard.js"),

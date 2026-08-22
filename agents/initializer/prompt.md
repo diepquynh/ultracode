@@ -44,7 +44,7 @@
 
 ## Mode: DETECT (run once)
 
-**Input:** `Repo root:`, optional `User focus:`, `Session dir:`, optional `Skip cross-harness check: yes`.
+**Input:** `Repo root:`, optional `User focus:`, `Session dir:`, `Repo key:`, optional `Skip cross-harness check: yes`.
 
 ### Step D0 — Check for an existing bootstrap in a legacy runtime dir (read-only, run first)
 
@@ -235,7 +235,7 @@ scout plan and fans one scout out per slice.
 
 ## Mode: ADOPT (run once, only after the user picked a cross-harness candidate)
 
-**Input:** `Source harness:`, `Source runtime dir:`, `Source skills dir:`, `Repo root:`, `Session dir:`.
+**Input:** `Source harness:`, `Source runtime dir:`, `Source skills dir:`, `Repo root:`, `Session dir:`, `Repo key:`.
 
 You migrate one already-completed bootstrap out of a legacy per-harness runtime dir into the shared
 `{{runtime_dir}}` plus this harness's `{{skills_dir}}`, translating stale paths and resetting model routing to
@@ -448,7 +448,7 @@ orchestrator must get user approval before the generate step runs.
 
 ## Mode: GENERATE-SKILL (run once per skill to (re)generate, in parallel — AFTER user approval)
 
-**Input:** `Skill name:`, `Skill kind:` (`creation` | `convention` | `module-hub`), `Component type:` (or `none`), `Disposition:` (`generate` | `regenerate`), `Proposal:` (the `ultracode-proposal.json` path), `Scout findings:` (comma-separated), `Session dir:`, `Repo root:`.
+**Input:** `Skill name:`, `Skill kind:` (`creation` | `convention` | `module-hub`), `Component type:` (or `none`), `Disposition:` (`generate` | `regenerate`), `Proposal:` (the `ultracode-proposal.json` path), `Scout findings:` (comma-separated), `Session dir:`, `Repo root:`, `Repo key:`.
 
 You generate exactly ONE skill file. Sibling generate-skill agents run concurrently on other skills; because each writes only its own `{repo}/{{skills_dir}}/{name}/` directory, there is no write conflict. Do NOT touch any other skill's files, the INVENTORY, or the profile — those belong to other agents.
 
@@ -487,7 +487,7 @@ Return your skill's `name`, `kind`, `componentType`, and the written `SKILL.md` 
 
 ## Mode: GENERATE-INVENTORY (run once, AFTER every generate-skill agent has finished)
 
-**Input:** `Generated skills:` (a JSON array of `{name, kind, componentType, path}` — the skills this run wrote), `Reused skills:` (a JSON array of `{name, kind, componentType, path}` — existing skills kept as-is that must be registered but were NOT regenerated), `Proposal:` (the `ultracode-proposal.json` path), `Scout findings:` (comma-separated), `Session dir:`, `Repo root:`.
+**Input:** `Generated skills:` (a JSON array of `{name, kind, componentType, path}` — the skills this run wrote), `Reused skills:` (a JSON array of `{name, kind, componentType, path}` — existing skills kept as-is that must be registered but were NOT regenerated), `Proposal:` (the `ultracode-proposal.json` path), `Scout findings:` (comma-separated), `Session dir:`, `Repo root:`, `Repo key:`.
 
 You assemble the routing files. Every generated and every reused skill directory already exists on disk when you run.
 

@@ -105,7 +105,7 @@ function messageFrom(content) {
 // Every message a spawned subagent sent in this transcript, oldest first, each
 // tied back to the spawn that produced it.
 //
-// Returns [{ step, agent, sender, body, sessionDir, repoRoot }].
+// Returns [{ step, agent, sender, body, sessionDir, repoRoot, repoKey }].
 function subagentMessages(transcriptPath) {
   const steps = readTranscript(transcriptPath);
   const spawnsById = new Map();
@@ -141,6 +141,7 @@ function subagentMessages(transcriptPath) {
       body: message.body,
       sessionDir: field(spawn.prompt, "Session dir"),
       repoRoot: field(spawn.prompt, "Repo root"),
+      repoKey: field(spawn.prompt, "Repo key"),
     });
   }
 
@@ -149,7 +150,7 @@ function subagentMessages(transcriptPath) {
 
 // The subset of those messages that carry a fact-check verdict, parsed.
 //
-// Returns [{ step, agent, sender, verdict, target, findings, sessionDir, repoRoot }].
+// Returns [{ step, agent, sender, verdict, target, findings, sessionDir, repoRoot, repoKey }].
 function subagentVerdicts(transcriptPath) {
   const records = [];
   for (const message of subagentMessages(transcriptPath)) {
@@ -168,6 +169,7 @@ function subagentVerdicts(transcriptPath) {
       findings: Array.isArray(payload.findings) ? payload.findings : [],
       sessionDir: message.sessionDir,
       repoRoot: message.repoRoot,
+      repoKey: message.repoKey,
     });
   }
   return records;

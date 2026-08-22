@@ -115,6 +115,23 @@ derivation is a fallback, not a reason to drop it. It replaced two fragile schem
 thread through every prompt, and a "newest dir" lookup that could silently pick up another session's artifacts.
 Don't reintroduce either.
 
+Each repo in scope gets its own subdirectory of that dir, named by its **repo key**, and every spawn prompt
+carries the key on a `Repo key:` line beside `Session dir:`. Pipeline state splits along that seam:
+
+| State | Lives at | Written by | Read by |
+|---|---|---|---|
+| `factcheck.json` | `{session dir}/{repo key}/` | `hooks/factcheck-record.js` (`hooks/agy-message-record.js` on Antigravity) | the `ultracode_gate` MCP tool, before it will record an approval |
+| `gates.json` | `{session dir}/` | the `ultracode_gate` MCP tool | `hooks/pipeline-gate.js`, before it will allow the next stage to spawn |
+
+The asymmetry is deliberate: a fact-check verdict is about one repo's spec or plan claims, while an approval is
+one session-level decision over one spec and one plan. What matters is that **both sides of each pair resolve
+the same path from the same inputs** — every reader and writer normalizes a declared session dir to the
+`ultracode-session-*` directory first (`hooks/lib/session.js`), then re-appends the repo key if that state is
+per repo. Joining a filename onto whichever form a prompt happened to pass is what previously wrote a real
+`PASS` into `{session dir}/{repo key}/` and looked for it in `{session dir}/`, leaving the gate to refuse an
+approval for a verdict that existed. A spawn or gate call with no repo key is refused outright rather than
+defaulted, for the same reason: there is no key to guess that both sides would guess alike.
+
 ```
  ORCHESTRATOR — the only router: derives the session dir, hands each agent a
  self-contained prompt, reads the report it returns, decides the next step.

@@ -139,6 +139,18 @@ function baseSessionDir(repoRoot, runtimeDir, sessionId) {
   );
 }
 
+// The repo key a prompt's `Repo key:` line (or a tool call's `repo_key`) carries:
+// the lowercase slug the orchestrator assigned that repo in Step 0. "" for
+// anything that is not one — every caller treats "" as a hard failure rather than
+// guessing a key, because a guessed key writes pipeline state to a directory the
+// next reader will not look in.
+const REPO_KEY_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+function normalizeRepoKey(value) {
+  const key = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return REPO_KEY_PATTERN.test(key) ? key : "";
+}
+
 // A declared "Session dir:" is valid if it is exactly the base dir, or the
 // base dir plus one repo-key subdirectory (Rule: "Give each repo its own
 // subdirectory"). Returns { ok, expected } — expected is the base dir, for
@@ -152,8 +164,37 @@ function matchesSessionDir(declaredDir, repoRoot, runtimeDir, sessionId) {
     relative &&
     !relative.startsWith("..") &&
     !path.isAbsolute(relative) &&
-    /^[a-z0-9-]+$/.test(relative);
+    REPO_KEY_PATTERN.test(relative);
   return { ok: Boolean(isRepoKeySubdir), expected };
+}
+
+// The `ultracode-session-{id}` directory itself, from a session dir that may be
+// that directory or one repo-key subdirectory of it.
+//
+// Both forms are legitimate in a spawn prompt — Rules D2/D4 hand the cross-repo
+// stages the base dir, everything else gets `{base}/{repo-key}` — so a reader
+// that joins onto whichever form it happened to be handed reads a different path
+// than the writer wrote. That is how a recorded fact-check PASS went missing at
+// the gate: written under the repo subdir the fact-check spawn declared, looked
+// for at the base dir the ultracode_gate call passed. Normalizing here first
+// means (session dir, repo key) resolves to one path from either side.
+function sessionBaseDir(declaredDir) {
+  const resolved = path.resolve(String(declaredDir || ""));
+  const parts = resolved.split(path.sep);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].startsWith("ultracode-session-")) {
+      return parts.slice(0, i + 1).join(path.sep) || path.sep;
+    }
+  }
+  return resolved;
+}
+
+// Where one repo's gated state (factcheck.json) lives: always the repo-key
+// subdirectory, whichever of the two session-dir forms the caller was handed.
+function repoStateDir(declaredSessionDir, repoKey) {
+  const key = normalizeRepoKey(repoKey);
+  if (!key) return "";
+  return path.join(sessionBaseDir(declaredSessionDir), key);
 }
 
 module.exports = {
@@ -161,5 +202,8 @@ module.exports = {
   resolveRepoRoot,
   baseSessionDir,
   matchesSessionDir,
+  normalizeRepoKey,
+  sessionBaseDir,
+  repoStateDir,
   isFile,
 };

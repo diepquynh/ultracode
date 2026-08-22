@@ -27,17 +27,24 @@ server.tool(
     "can allow the next stage to spawn. Call this immediately after the user approves (or rejects) " +
     "the spec or the plan — never speculatively, and never before the user has actually answered. " +
     "An 'approved' decision is refused unless ultracode:fact-check has already returned a PASS for " +
-    "that same target in this session dir — spawn and pass fact-check first.",
+    "that same target under the same repo_key — spawn and pass fact-check first.",
   {
     session_dir: z
       .string()
       .describe("The exact Session dir: value already used for this session's spawns."),
+    repo_key: z
+      .string()
+      .describe(
+        "The repo key this decision is for — the same lowercase slug the ultracode:fact-check spawn " +
+          "carried on its `Repo key:` line. Required: the verdict this tool checks is stored per repo " +
+          "key, so a different key (or none) finds no verdict.",
+      ),
     gate: z.enum(["spec", "plan"]).describe("Which gate this decision is for."),
     decision: z.enum(["approved", "rejected"]).describe("What the user decided."),
     notes: z.string().optional().describe("Optional one-line context (e.g. a rejection reason)."),
   },
-  async ({ session_dir, gate, decision, notes }) => {
-    const result = recordGateDecision(session_dir, gate, decision, notes);
+  async ({ session_dir, repo_key, gate, decision, notes }) => {
+    const result = recordGateDecision(session_dir, repo_key, gate, decision, notes);
     return {
       ...(result.ok ? {} : { isError: true }),
       content: [{ type: "text", text: result.message }],
