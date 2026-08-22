@@ -62,7 +62,7 @@ Use these tokens in neutral `prompt.md` files, definition descriptions, and shar
 | `{{arguments}}` | Claude/Grok/Antigravity command arguments (`$ARGUMENTS`) or the request text following a Codex skill invocation |
 | `{{command_prefix}}` | Explicit invocation prefix (`/` for Claude, Grok, and Antigravity, `$` for Codex) |
 | `{{agent_selector}}` | Agent-spawn selector field (`subagent_type` or `agent_type`) |
-| `{{agent_tool}}` | Agent-spawn tool name (`Agent`, `spawn_subagent`, `spawn_agent`, or `invoke_subagent`) |
+| `{{tool_delegate}}` | Agent-spawn tool name (`Agent`, `spawn_subagent`, `spawn_agent`, or `invoke_subagent`) |
 | `{{session_id_expr}}` | Harness session expression configured by the selected layout |
 | `{{session_id_source}}` | Prose description of the harness session identifier |
 | `{{session_id_names}}` | Harness session identifier names and fallback behavior |
@@ -77,6 +77,25 @@ For example, author the profile as `{repo-root}/{{runtime_dir}}/repo-profile.jso
 rejects concrete `.claude/`, `.grok/`, `.codex/`, or `.agents/` paths, harness-specific plugin-root variables, and concrete
 harness session identifier names in neutral sources. It also rejects unknown template tokens and unresolved
 template tokens in output.
+
+## Subagent parameter contracts
+
+`hooks/subagent-parameters.json` defines the prompt parameters that are required before each Ultracode agent may
+spawn. Parameters are canonical IDs with one or more literal prompt labels, a type, and optional enum values;
+each agent lists its required IDs, alternatives, and initializer mode-specific additions.
+`definitions/subagent-parameters.schema.json` defines the manifest shape. The generator bundles the manifest and
+`hooks/lib/subagent-params.js` into every target, while `session-guard.js` validates every decoded spawn entry.
+
+The four common parameters have separate jobs:
+
+- `Primary repo root:` — explicit owner of the deterministic session root; required because some harnesses do
+  not preserve workspace ordering when extra repositories are attached.
+- `Repo root:` — source/profile/skills working repository; it may differ per subagent.
+- `Session dir:` — report/state path under the **primary** harness project's deterministic session root.
+- `Repo key:` — stable state-address key and repo subdirectory name.
+
+Do not derive `Session dir:` from `Repo root:` in a cross-repo spawn. The primary repo owns shared pipeline state;
+the work repo owns only the source files the agent reads or changes.
 
 ## Generate
 

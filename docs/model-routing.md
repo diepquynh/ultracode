@@ -116,14 +116,16 @@ someone re-ran `/init-kit`. Note that this affects *which model* runs it, never 
 ## What happens on a spawn
 
 1. The hook fires on every agent spawn — `PreToolUse`, matcher `Task|Agent`.
-2. It works out which agent is being spawned, across the various field names the four harnesses use, and strips
-   the `ultracode:` prefix.
-3. **If the agent isn't one of Ultracode's, it does nothing.** Your own subagents and the harness's built-ins
-   spawn untouched.
-4. It resolves the repo root, reads `.ultracode/repo-profile.json`, and looks up the route.
+2. `HookContext` uses the active harness adapter to decode the call into a list of canonical spawn entries. A
+   flat Claude/Codex/Grok call is a one-entry list; Antigravity's `Subagents[]` remains a complete list.
+3. For **each** Ultracode entry, it resolves the work repo from that entry's `Repo root:`. Non-Ultracode
+   subagents remain untouched.
+4. It reads the work repo's `.ultracode/repo-profile.json` and looks up that agent/phase route.
 5. It resolves the route to a concrete model for the active harness.
-6. If the caller passed a `model`, it's canonicalized and compared. Mismatch is a denial.
-7. It sets the model, and injects the repo brief into the prompt.
+6. If the caller passed a model for that entry, it is canonicalized and compared. Any mismatch denies the
+   whole spawn call.
+7. It accumulates every model/prompt patch and emits one harness-native rewrite. Every entry receives its own
+   repo brief; Antigravity entries also receive the identity and primary-repo stamps their nested hooks recover.
 
 Step 7 is the surprise: the model router also writes part of the prompt. That's not scope creep, it's a
 constraint. `PreToolUse` hooks don't compose — with two hooks on the same matcher, both see the *original* tool
@@ -133,6 +135,11 @@ spawns aren't acceptable. There's exactly one safe place to rewrite an agent spa
 adding spawn-time behaviour, it goes in `model-router.js` too, however unrelated it feels.
 
 ## Cross-harness translation
+
+Codex's `spawn_agent` schema accepts only lowercase letters, digits, and underscores. Generated Codex roles and
+spawn instructions therefore use names such as `fact_check` and `code_reviewer`; the harness adapter normalizes
+those aliases back to canonical `fact-check` and `code-reviewer` before routing and policy lookup. Claude/Grok
+keep `ultracode:{agent}`, while Antigravity uses `ultracode-{agent}`.
 
 The generated routing table carries the tier→model map for the harness it was built for, plus aliases from
 every *other* harness's model names to the local equivalent. Write `"opus"` in a profile and run it on Codex,

@@ -76,9 +76,9 @@ echo "repo_key=$REPO_KEY"
 ```
 
 Keep `$ULTRACODE_SESSION` (session dir), the repo root (`$PWD`, an absolute path) and `$REPO_KEY` for every
-spawn below. Every spawn that names a `Repo root:` must also carry `Session dir:` and `Repo key:` — a spawn
-missing either is refused, because the hooks that record a stage's outcome address it as (session dir, repo
-key).
+spawn below. Every spawn carries `Primary repo root:`, `Repo root:`, `Session dir:`, and `Repo key:` — the hook validates the
+initializer mode's full parameter contract before any agent starts, and session state is always written under
+this primary repo's `$ULTRACODE_SESSION` even when a future workflow targets another work repo.
 
 **The path is derived, not generated.** The harness supplies {{session_id_names}}, which every agent inherits
 unchanged, so the formula yields the same path in every mode below from any working directory. Re-running it is
@@ -95,6 +95,7 @@ Spawn ONE `ultracode:initializer` agent:
 {{agent_selector}}: ultracode:initializer
 model: {{balanced_model}}
 prompt: "Mode: detect.
+Primary repo root: {absolute repo root}.
 Repo root: {absolute repo root}.
 User focus: {{arguments}}
 Session dir: {ULTRACODE_SESSION}.
@@ -124,7 +125,8 @@ scanning. {{tool_read}} that file and handle it before touching Steps 2–4:
     Source harness: {chosen candidate.harness}.
     Source runtime dir: {chosen candidate.runtimeDir}.
     Source skills dir: {chosen candidate.skillsDir}.
-    Repo root: {absolute repo root}.
+    Primary repo root: {absolute repo root}.
+Repo root: {absolute repo root}.
     Session dir: {ULTRACODE_SESSION}.
     Repo key: {REPO_KEY}.
     Migrate the source's repo-profile.json, INVENTORY.md, and every skill into {{runtime_dir}} and
@@ -154,7 +156,10 @@ Slice: {slice descriptor}.
 Slice paths: {slice path(s)}.
 Stack reference: {refs/<stack>.md path from detect}.
 Scout plan: {scout-plan path}.
+Primary repo root: {absolute repo root}.
+Repo root: {absolute repo root}.
 Session dir: {ULTRACODE_SESSION}.
+Repo key: {REPO_KEY}.
 Find every instance of each candidate component type WITHIN your slice's paths only, count them, capture ONE
 real exemplar + the invariants + a distilled template per type, and write your scout-findings file
 (ultracode-findings-{slice-slug}.md). Return its path."
@@ -172,7 +177,10 @@ model: {{balanced_model}}
 prompt: "Mode: propose.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Scout plan: {scout-plan path}.
+Primary repo root: {absolute repo root}.
+Repo root: {absolute repo root}.
 Session dir: {ULTRACODE_SESSION}.
+Repo key: {REPO_KEY}.
 Merge and dedupe component types across slices, rank by cross-module ubiquity, then reconcile against the
 scout plan's Existing Skills table: give each skill a status (new|existing) with its existingPath, default
 every existing skill to reuse, and fold every bespoke existing skill into skills[] as a kind:other entry.
@@ -226,6 +234,7 @@ Disposition: {skill.disposition}.
 Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
+Primary repo root: {absolute repo root}.
 Repo root: {absolute repo root}.
 Repo key: {REPO_KEY}.
 {{tool_write}} ONLY your one skill into {absolute repo root}/{{skills_dir}}/{skill.name}/ , grounded in this component
@@ -253,6 +262,7 @@ Reused skills: {JSON array of the Reused skills list}.
 Proposal: {ULTRACODE_SESSION}/ultracode-proposal.json.
 Scout findings: {comma-separated list of ALL scout-findings paths}.
 Session dir: {ULTRACODE_SESSION}.
+Primary repo root: {absolute repo root}.
 Repo root: {absolute repo root}.
 Repo key: {REPO_KEY}.
 {{tool_write}} {absolute repo root}/{{runtime_dir}}/INVENTORY.md and {absolute repo root}/{{runtime_dir}}/repo-profile.json.

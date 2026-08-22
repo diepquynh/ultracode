@@ -31,6 +31,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { readJsonIfFile, writeJsonAtomic, isInside } = require("../../hooks/lib/common");
+const { sessionBaseDir } = require("../../hooks/lib/session");
+const { scopeRecordFor } = require("../../hooks/lib/scope-policy");
 
 const SPAWN_SCOPE_FILE = "spawn-scope.json";
 const BUILD_STREAK_FILE = "build-streak.json";
@@ -41,8 +43,12 @@ function bareAgent(agent) {
 }
 
 function spawnRecord(sessionDir, agent) {
-  const state = readJsonIfFile(path.join(sessionDir, SPAWN_SCOPE_FILE));
-  return (state && state.agents && state.agents[bareAgent(agent)]) || null;
+  const baseDir = sessionBaseDir(sessionDir);
+  const state = readJsonIfFile(path.join(baseDir, SPAWN_SCOPE_FILE));
+  return scopeRecordFor(state, {
+    agent: bareAgent(agent),
+    repoKey: path.relative(baseDir, path.resolve(sessionDir)),
+  });
 }
 
 // Recoveries this agent has not yet turned into a lesson.

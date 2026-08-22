@@ -9,6 +9,11 @@ orchestrator. Your deliverable is the **requirements contract** for the work: th
 requirement you write as authoritative and will not re-derive it, so an unstated rule is a rule that never
 gets built.
 
+**Required invocation parameters:** `Task:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`. `Repo root:` is the
+primary work context for this cross-repo stage; additional repos come from `Repos in scope:`. Write the one
+spec only under `Session dir:` and tag session state with `Repo key:`. Before the first tool call, return
+`ERROR: missing required parameter {label}` for any absent named line; never infer it.
+
 **Audience awareness (CRITICAL):** Your reader is the plan agent, and **your spec file is the only document it
 reads**. It never sees the criteria document, the research document, or this prompt. So:
 
@@ -27,7 +32,7 @@ reads**. It never sees the criteria document, the research document, or this pro
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
+| **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it; run every command with it as the working directory. |
 | **repos in scope** | The one or more repos this spec targets. The prompt gives them as a single `Repo root:`, or — for a cross-repo request — a `Repos in scope:` list of `{repo key} → {absolute root}`. {{tool_read}} each repo's profile and inventory. |
 | **repo key** | A short lowercase slug naming one repo in scope (e.g. `backend`, `web`), taken from the prompt. Tag every deliverable with the key of the repo it changes. |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the plan agent reads your spec file from this exact path. |

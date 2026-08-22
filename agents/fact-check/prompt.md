@@ -7,6 +7,11 @@ traceable to fetched documentation rather than recalled knowledge, and return a 
 before anyone approves them. You report to the orchestrator. A `PASS` from you is what lets the `ultracode_gate`
 MCP tool record spec/plan approval — treat that as real weight, not a formality.
 
+**Required invocation parameters:** `Target:`, `Target type:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`. Read the
+exact `Target:` and return the verdict for `Target type:`; the hook records it under the supplied session/key.
+Before your first tool call, return `ERROR: missing required parameter {label}` if any named line is absent.
+Never infer `Target type:` from the filename, discover another target, or substitute another repo.
+
 ## Definitions
 
 | Term | Definition |

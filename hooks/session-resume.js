@@ -11,8 +11,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { readHookInput, readTextIfFile, readJsonIfFile, hookSessionId } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const { readHookInput, readTextIfFile, readJsonIfFile } = require("./lib/common");
+const { HookContext } = require("./lib/hook-context");
 
 function formatRecord(record) {
   const phase = record.phase ? ` ${record.phase}` : "";
@@ -52,11 +52,9 @@ async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
 
-  const info = pluginTargetInfo();
-  if (!info) return 0;
-
-  const repoRoot = resolveRepoRoot(hookInput, "");
-  const baseDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
+  const context = new HookContext(hookInput);
+  const baseDir = context.sessionRoot;
+  if (!baseDir) return 0;
 
   const found = [...reportFor(baseDir, "")];
   let repoKeys = [];

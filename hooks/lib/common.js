@@ -10,6 +10,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { adapterFor, bareAgentName: normalizeAgentName } = require("./harness");
 
 function emit(payload) {
   process.stdout.write(JSON.stringify(payload));
@@ -19,20 +20,26 @@ function emit(payload) {
 // file that sits beside this very file. Authoritative and environment-independent:
 // the generator writes one per build, so the answer is a property of the plugin
 // being run rather than a guess from whatever variables happen to be exported.
-let generatedTargetCache;
-function generatedTarget() {
-  if (generatedTargetCache !== undefined) return generatedTargetCache;
-  generatedTargetCache = null;
+let generatedRoutingCache;
+function generatedRouting() {
+  if (generatedRoutingCache !== undefined) return generatedRoutingCache;
+  generatedRoutingCache = null;
   const text = readTextIfFile(path.join(__dirname, "..", "model-routing.json"));
-  if (text) {
-    try {
-      const routing = JSON.parse(text);
-      if (routing && typeof routing.target === "string") generatedTargetCache = routing.target;
-    } catch {
-      // fall through to the env heuristic
+  if (!text) return generatedRoutingCache;
+  try {
+    const routing = JSON.parse(text);
+    if (routing && typeof routing === "object" && !Array.isArray(routing)) {
+      generatedRoutingCache = routing;
     }
+  } catch {
+    // Callers apply their existing environment/fail-open fallback.
   }
-  return generatedTargetCache;
+  return generatedRoutingCache;
+}
+
+function generatedTarget() {
+  const routing = generatedRouting();
+  return routing && typeof routing.target === "string" ? routing.target : null;
 }
 
 // Antigravity needs a different deny payload than Claude Code: it validates hook
@@ -66,8 +73,17 @@ function isAntigravity() {
   );
 }
 
+function isGrok() {
+  const target = generatedTarget();
+  if (target) return target === "grok";
+  return Boolean(process.env.GROK_PLUGIN_ROOT || process.env.GROK_SESSION_ID);
+}
+
 function denyPreToolUse(reason) {
-  if (isAntigravity()) {
+  // Antigravity and Grok honor a top-level decision. Claude/Codex honor
+  // hookSpecificOutput.permissionDecision; a top-level "deny" there is not a
+  // valid Claude decision value and can drop the whole payload.
+  if (isAntigravity() || isGrok()) {
     emit({ decision: "deny", reason });
     return;
   }
@@ -207,34 +223,29 @@ function pick(obj, ...keys) {
   return undefined;
 }
 
-function hookToolInput(hookInput) {
-  if (hookInput && hookInput.toolCall && typeof hookInput.toolCall === "object") {
-    return hookInput.toolCall.args || hookInput.toolCall.input || null;
-  }
-  return pick(hookInput, "tool_input", "toolInput") || null;
+function harnessAdapter() {
+  return adapterFor(generatedTarget() || (isAntigravity() ? "antigravity" : "claude"));
 }
 
-// The shell command a tool call carries, under whichever key the harness uses:
-// Claude/Codex/Grok say `command`, Antigravity says `CommandLine`. Hooks that read
-// only `command` are silently inert on AGY — that is how the whole build-streak
-// feature (counting a subagent's consecutive build failures, and the gate that
-// forces escalation) never fired there.
+function hookToolInput(hookInput) {
+  return harnessAdapter().toolInput(hookInput);
+}
+
 function commandFromToolInput(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return "";
-  for (const key of ["CommandLine", "command", "Command"]) {
-    if (typeof toolInput[key] === "string" && toolInput[key]) return toolInput[key];
-  }
-  return "";
+  return harnessAdapter().command(toolInput);
+}
+
+function writePathFromToolInput(toolInput) {
+  return harnessAdapter().writePath(toolInput);
 }
 
 function hookToolResponse(hookInput) {
-  const value = pick(hookInput, "tool_response", "toolResponse", "tool_result", "toolResult");
-  return value === undefined ? null : value;
+  return harnessAdapter().toolResponse(hookInput);
 }
 
 function hookSessionId(hookInput) {
   return (
-    pick(hookInput, "conversationId", "conversation_id", "session_id", "sessionId") ||
+    harnessAdapter().sessionId(hookInput) ||
     process.env.ANTIGRAVITY_CONVERSATION_ID ||
     process.env.AGY_CONVERSATION_ID ||
     process.env.GROK_SESSION_ID ||
@@ -245,17 +256,15 @@ function hookSessionId(hookInput) {
 }
 
 function hookAgentType(hookInput) {
-  return pick(hookInput, "agent_type", "agentType") || "";
+  return harnessAdapter().actor(hookInput);
+}
+
+function hookTranscriptPath(hookInput) {
+  return harnessAdapter().transcriptPath(hookInput);
 }
 
 function bareAgentName(value) {
-  if (typeof value !== "string") return "";
-  let val = value.trim();
-  if (val.startsWith("ultracode:")) val = val.slice("ultracode:".length);
-  else if (val.startsWith("ultracode-")) val = val.slice("ultracode-".length);
-  else if (val.startsWith("ultracode_")) val = val.slice("ultracode_".length);
-  val = val.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-  return val;
+  return normalizeAgentName(value);
 }
 
 // The agent names this plugin actually defines, read from the generated routing
@@ -266,16 +275,9 @@ let knownAgentCache = null;
 function knownAgents() {
   if (knownAgentCache) return knownAgentCache;
   knownAgentCache = new Set();
-  const text = readTextIfFile(path.join(pluginRootFromEnv(), "hooks", "model-routing.json"));
-  if (text) {
-    try {
-      const routing = JSON.parse(text);
-      if (routing && routing.defaults && typeof routing.defaults === "object") {
-        for (const name of Object.keys(routing.defaults)) knownAgentCache.add(name);
-      }
-    } catch {
-      // keep the empty set
-    }
+  const routing = generatedRouting();
+  if (routing && routing.defaults && typeof routing.defaults === "object") {
+    for (const name of Object.keys(routing.defaults)) knownAgentCache.add(name);
   }
   return knownAgentCache;
 }
@@ -292,51 +294,18 @@ function knownAgents() {
 // first one that IS a shipped agent wins, whichever field it came from. Only when
 // none matches (a non-ultracode subagent) does the first readable candidate win,
 // canonical field first.
+function spawnsFromToolInput(toolInput) {
+  return harnessAdapter().spawnEntries(toolInput, knownAgents());
+}
+
 function agentFromToolInput(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return "";
-  const raw = [];
-  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
-    const first = toolInput.Subagents[0] || {};
-    raw.push(first.TypeName, first.typeName, first.Role, first.role);
-  }
-  for (const key of [
-    "subagent_type",
-    "subagentType",
-    "agent_type",
-    "agentType",
-    "task_name",
-    "taskName",
-    "TypeName",
-    "typeName",
-    "Role",
-    "role",
-  ]) {
-    raw.push(toolInput[key]);
-  }
-
-  const candidates = [];
-  for (const value of raw) {
-    if (typeof value !== "string") continue;
-    const name = bareAgentName(value);
-    // "self"/"research" are Antigravity's own built-in subagent kinds, never ours.
-    if (!name || name === "self" || name === "research") continue;
-    if (!candidates.includes(name)) candidates.push(name);
-  }
-
-  const known = knownAgents();
-  return candidates.find((name) => known.has(name)) || candidates[0] || "";
+  const first = spawnsFromToolInput(toolInput)[0];
+  return first ? first.agent : "";
 }
 
 function promptFromToolInput(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return "";
-  if (Array.isArray(toolInput.Subagents) && toolInput.Subagents.length > 0) {
-    const first = toolInput.Subagents[0];
-    if (typeof first.Prompt === "string") return first.Prompt;
-    if (typeof first.prompt === "string") return first.prompt;
-  }
-  return (
-    ["prompt", "Prompt", "message", "Message"].map((key) => toolInput[key]).find((v) => typeof v === "string") || ""
-  );
+  const first = spawnsFromToolInput(toolInput)[0];
+  return first ? first.prompt : "";
 }
 
 function writeJsonAtomic(filePath, data) {
@@ -346,19 +315,45 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tmp, filePath);
 }
 
+function textFromContentBlocks(blocks) {
+  if (!Array.isArray(blocks)) return "";
+  const pieces = [];
+  for (const block of blocks) {
+    if (typeof block === "string" && block) {
+      pieces.push(block);
+      continue;
+    }
+    if (!block || typeof block !== "object") continue;
+    if (typeof block.text === "string" && block.text) pieces.push(block.text);
+    else if (typeof block.content === "string" && block.content) pieces.push(block.content);
+  }
+  return pieces.join("\n");
+}
+
 function textFromToolResponse(toolResponse) {
   if (typeof toolResponse === "string") return toolResponse;
-  if (toolResponse && typeof toolResponse === "object" && typeof toolResponse.result === "string") {
-    return toolResponse.result;
+  if (Array.isArray(toolResponse)) return textFromContentBlocks(toolResponse);
+  if (toolResponse && typeof toolResponse === "object") {
+    if (typeof toolResponse.result === "string") return toolResponse.result;
+    if (typeof toolResponse.content === "string") return toolResponse.content;
+    if (Array.isArray(toolResponse.content)) return textFromContentBlocks(toolResponse.content);
   }
   return "";
 }
 
 // Tolerant JSON extraction for a leaf agent's raw text return (code-reviewer,
-// fact-check): accepts an already-parsed object, a bare JSON string, JSON
-// wrapped in a markdown fence, or JSON with stray text around it.
+// fact-check): accepts an already-parsed object, Claude content-block arrays,
+// a bare JSON string, JSON wrapped in a markdown fence, or JSON with stray
+// text around it.
 function extractJsonObject(value) {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (
+      Object.prototype.hasOwnProperty.call(value, "verdict") ||
+      Object.prototype.hasOwnProperty.call(value, "findings")
+    ) {
+      return value;
+    }
+  }
   const text = textFromToolResponse(value) || (typeof value === "string" ? value : "");
   if (!text) return null;
   const candidates = [text];
@@ -390,6 +385,9 @@ function readJsonIfFile(filePath) {
 
 module.exports = {
   emit,
+  generatedRouting,
+  generatedTarget,
+  harnessAdapter,
   isAntigravity,
   denyPreToolUse,
   denyUserPromptExpansion,
@@ -408,9 +406,13 @@ module.exports = {
   hookToolInput,
   hookToolResponse,
   commandFromToolInput,
+  writePathFromToolInput,
   hookSessionId,
   hookAgentType,
+  hookTranscriptPath,
   bareAgentName,
+  knownAgents,
+  spawnsFromToolInput,
   agentFromToolInput,
   promptFromToolInput,
   writeJsonAtomic,

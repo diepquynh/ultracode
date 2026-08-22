@@ -194,11 +194,13 @@ function selfContext(transcriptPath) {
   const steps = readTranscript(transcriptPath);
   const first = steps.find((step) => step && step.type === "USER_INPUT" && contentOf(step));
   const content = first ? contentOf(first) : "";
-  if (!content) return { agent: "", sessionDir: "", repoRoot: "" };
+  if (!content) return { agent: "", sessionDir: "", repoRoot: "", repoKey: "", primaryRepoRoot: "" };
   return {
     agent: bareAgentName(field(content, "Ultracode agent")),
     sessionDir: field(content, "Session dir"),
     repoRoot: field(content, "Repo root"),
+    repoKey: field(content, "Repo key"),
+    primaryRepoRoot: field(content, "Ultracode primary repo"),
   };
 }
 

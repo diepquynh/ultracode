@@ -225,5 +225,30 @@ skill set. A user-approval gate sits between scouting and generation.
   - `PreToolUse` hooks do not compose — both hooks on a matcher see the original tool input and only one
     `updatedInput` survives — so `model-router.js` is the only place an agent spawn may be rewritten at all.
     Spawn-time prompt injection lives there for that reason, not because it belongs there.
-  - Grok hook stdin is camelCase (`toolInput`, `sessionId`); shared hook helpers accept both that and
-    Claude/Codex snake_case.
+  - Hook policy consumes `hooks/lib/hook-context.js`, not raw payload casing. `hooks/lib/harness.js` declares
+    each harness's tool-input, result, session, actor, transcript, prompt, model, command, and path fields. It
+    normalizes Claude/Codex snake_case, Grok camelCase, and Antigravity's `toolCall.args.Subagents[]` envelope.
+  - A spawn call is a list, even on harnesses whose normal form is one flat object. Routing and every spawn
+    guard iterate the complete list; a malformed later `Subagents[]` entry denies the whole call instead of
+    bypassing policy behind entry zero.
+  - `hooks/subagent-parameters.json` is the runtime contract: one parameter catalog plus the required set for
+    every agent (including initializer mode-specific requirements). `definitions/subagent-parameters.schema.json`
+    defines that manifest's shape. `session-guard.js` validates the literal `Label: value` lines before spawn.
+  - `Repo root:` and session ownership are intentionally separate. `Repo root:` is the checkout the leaf agent
+    works in; required `Primary repo root:` names the repository that owns the deterministic
+    `.ultracode/session/ultracode-session-*` root.
+    Reports, gates, fact-checks, progress, scope, and build-streak state stay in that primary root even when the
+    work repo is another checkout, preventing fragmented pipeline state.
+  - **Current harness limitations (live, 2026-08-22):**
+    - Claude Code 2.1.220 and Antigravity CLI 1.1.18 dispatch Ultracode plugin spawn hooks. Claude rewrites must
+      live only in `hookSpecificOutput.updatedInput` — a top-level `overwrite` fails Claude's hook schema and is
+      discarded. Claude leaf `PostToolUse` Bash events also often omit `agent_type`, so `build-streak.js` /
+      `build-streak-gate.js` cannot attribute failures inside a forked implement/write-test turn even when the
+      matching PreToolUse Bash call carried the actor.
+    - Grok CLI 1.0.5 currently discovers the Ultracode plugin (`has_hooks=true`) but expands **zero** plugin
+      handlers into its runtime registry (`total_hooks=0`), so parent Bash/Write denials never fire either —
+      this is broader than the earlier spawn-only bypass. Separately, Grok honors top-level `{decision:"deny"}`
+      and fail-opens on Claude-style `hookSpecificOutput.permissionDecision`; Ultracode emits the Grok shape.
+    - Codex CLI 0.147.0 still does not dispatch plugin handlers for native `spawn_agent` (parent Bash/Write
+      hooks can still fire once trusted). Generated leaf prompts therefore repeat the parameter contract and
+      fail before their first tool call when a required line is missing.

@@ -116,5 +116,7 @@ module.exports = {
   summarize,
   statusOf,
   progressPath,
+  loadProgress,
+  saveProgress,
   recordAgentMessage,
 };

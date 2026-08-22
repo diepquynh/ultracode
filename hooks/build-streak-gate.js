@@ -22,34 +22,12 @@ const path = require("node:path");
 const {
   readHookInput,
   denyPreToolUse,
-  hookToolInput,
-  hookAgentType,
-  bareAgentName,
-  hookSessionId,
-  field,
-  isDirectory,
   readJsonIfFile,
-  promptFromToolInput,
   commandFromToolInput,
-  pick,
 } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const { pluginTargetInfo, sessionBaseDir } = require("./lib/session");
 const { isBuildCommand } = require("./lib/build-signal");
-const { selfContext } = require("./lib/agy-transcript");
-
-// Same identity problem as hooks/build-streak.js: Antigravity tells a subagent's
-// own hooks neither which agent they are inside nor which session dir it was
-// given, so both are read back from the stamp hooks/model-router.js put in the
-// spawn prompt. Without this the gate could never fire on AGY, however long the
-// failure streak got.
-function agentIdentity(hookInput) {
-  const declared = bareAgentName(hookAgentType(hookInput));
-  if (declared) return { agent: declared, sessionDir: "" };
-  const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
-  if (typeof transcriptPath !== "string" || !transcriptPath) return { agent: "", sessionDir: "" };
-  const self = selfContext(transcriptPath);
-  return { agent: self.agent, sessionDir: self.sessionDir };
-}
+const { HookContext } = require("./lib/hook-context");
 
 const DENY_THRESHOLD = 5;
 const STATE_FILE = "build-streak.json";
@@ -57,22 +35,18 @@ const STATE_FILE = "build-streak.json";
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  const { agent, sessionDir: declaredSessionDir } = agentIdentity(hookInput);
+  const context = new HookContext(hookInput);
+  const actor = context.currentActor();
+  const agent = actor.agent;
   if (!agent) return 0;
 
-  const toolInput = hookToolInput(hookInput);
-  const command = commandFromToolInput(toolInput);
+  const command = commandFromToolInput(context.toolInput);
   if (!command) return 0;
 
-  const prompt = promptFromToolInput(toolInput || {});
-  const repoRoot = resolveRepoRoot(hookInput, prompt);
-  let sessionDir = field(prompt, "Session dir") || declaredSessionDir || "";
+  const repoRoot = actor.repoRoot;
+  const sessionDir = actor.sessionDir ? sessionBaseDir(actor.sessionDir) : context.sessionRoot;
   const info = pluginTargetInfo();
-  if (!sessionDir || !isDirectory(sessionDir)) {
-    if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
-  }
-
+  if (!sessionDir) return 0;
   const state = readJsonIfFile(path.join(sessionDir, STATE_FILE));
   const entry = state && state.streaks && state.streaks[agent];
   if (!entry || (entry.consecutiveFailures || 0) < DENY_THRESHOLD) return 0;

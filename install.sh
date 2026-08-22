@@ -131,6 +131,7 @@ for HARNESS in $TARGETS; do
       grok plugin uninstall ultracode --confirm
     fi
     grok plugin install "$PLUGIN_ROOT" --trust
+    grok plugin enable ultracode
     echo "Installed Ultracode. Start a new Grok session, then run /init-kit."
     echo "If plugin hooks stay silent, run /hooks-trust or launch with --trust."
     echo "Grok also auto-loads Claude Code plugins. If Ultracode is already installed"

@@ -94,6 +94,23 @@ function isTestPath(targetPath) {
   return TEST_DIR_PATTERN.test(normalized) || TEST_FILE_PATTERN.test(base);
 }
 
+function scopeRecordFor(state, { agent, repoKey = "", repoRoot = "" }) {
+  const scopes = state && state.scopes && state.scopes[agent];
+  if (scopes && typeof scopes === "object") {
+    if (repoKey && scopes[repoKey]) return scopes[repoKey];
+    const records = Object.values(scopes);
+    if (repoRoot) {
+      const resolvedRoot = path.resolve(repoRoot);
+      const match = records.find(
+        (record) => record && record.repoRoot && path.resolve(record.repoRoot) === resolvedRoot,
+      );
+      if (match) return match;
+    }
+    if (records.length === 1) return records[0];
+  }
+  return (state && state.agents && state.agents[agent]) || null;
+}
+
 // Returns { allowed: true } or { allowed: false, reason }. `targetPath` must
 // already be an absolute, resolved path. `ctx` = { repoRoot, sessionDir, info }.
 function checkScope(agent, targetPath, ctx) {
@@ -161,6 +178,7 @@ module.exports = {
   SESSION_ONLY_AGENTS,
   EXTRA_ALLOWED_SUBTREES,
   isTestPath,
+  scopeRecordFor,
   checkScope,
   declaredPathsFrom,
   withinDeclaredScope,

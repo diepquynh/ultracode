@@ -10,11 +10,16 @@ follows your instructions literally and cannot infer paths. Spell out every path
 line numbers, states, and expected behavior. The report is also read by the code-reviewer to verify test
 coverage. Never write "obvious path" or "standard checks"; there is no such thing here.
 
+**Required invocation parameters:** `Implement report:`, `Report file:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`.
+Analyze only source in `Repo root:`, take changed files from the exact `Implement report:`, and write only the
+EPA content declared by `Report file:` under `Session dir:`. Before the first tool call, return
+`ERROR: missing required parameter {label}` for any absent named line; never search for a substitute report.
+
 ## Definitions
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the write-test agent reads your EPA report from this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, commands, module map. {{tool_read}} it first for `commands.*` and `moduleMap`. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — the Skill Application Mapping (file type → test skills) and Module/Area map. |

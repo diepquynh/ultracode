@@ -1,70 +1,47 @@
 #!/usr/bin/env node
-// Hard-enforce each subagent's documented write scope (hooks/lib/scope-policy.js)
-// instead of relying on its own prompt.md to police itself — a weaker model, an
-// ambiguous plan step, or a hostile instruction embedded in repo content can all
-// talk a subagent into writing somewhere outside its working path.
-//
-// Reads a PreToolUse hook payload (matcher: Write|Edit) from stdin. Scoped to
-// calls happening inside an ultracode subagent's own turn, identified by the
-// `agent_type` field Claude Code adds in that case — the orchestrator's own
-// Write/Edit calls are governed by artifact-guard.js and the user's own
-// judgment, not this hook. Complements bash-scope-guard.js, which enforces the
-// same policy against the same subagent's Bash calls.
+// Enforce per-agent Write/Edit scope using normalized actor and session context.
 
 "use strict";
 
 const path = require("node:path");
 const {
-  readHookInput,
   denyPreToolUse,
-  hookToolInput,
-  hookAgentType,
-  bareAgentName,
-  hookSessionId,
-  resolvePathCandidate,
+  readHookInput,
   readJsonIfFile,
+  resolvePathCandidate,
+  writePathFromToolInput,
 } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
-const { checkScope } = require("./lib/scope-policy");
-
-// The write scope hooks/spawn-scope.js captured for this agent at spawn time.
-// Absent record = unscoped, which keeps the pre-existing permissive behavior.
-function declaredScopeFor(sessionDir, agent) {
-  const state = readJsonIfFile(path.join(sessionDir, "spawn-scope.json"));
-  return (state && state.agents && state.agents[agent]) || null;
-}
+const { HookContext } = require("./lib/hook-context");
+const { sessionBaseDir } = require("./lib/session");
+const { checkScope, scopeRecordFor } = require("./lib/scope-policy");
 
 async function main() {
   const hookInput = await readHookInput();
-  if (!hookInput) return 0;
-  const agent = bareAgentName(hookAgentType(hookInput));
-  if (!agent) return 0;
+  const context = new HookContext(hookInput);
+  const actor = context.currentActor();
+  const sessionRoot = actor.sessionDir ? sessionBaseDir(actor.sessionDir) : context.sessionRoot;
+  if (!actor.agent || !context.targetInfo || !sessionRoot) return 0;
 
-  const toolInput = hookToolInput(hookInput);
-  const filePath =
-    toolInput && typeof (toolInput.TargetFile || toolInput.AbsolutePath || toolInput.file_path || toolInput.filePath || toolInput.path) === "string"
-      ? toolInput.TargetFile || toolInput.AbsolutePath || toolInput.file_path || toolInput.filePath || toolInput.path
-      : "";
+  const filePath = writePathFromToolInput(context.toolInput);
   if (!filePath) return 0;
 
-  const info = pluginTargetInfo();
-  if (!info) return 0; // repo not initialized yet — nothing to check against
-
-  const repoRoot = resolveRepoRoot(hookInput, "");
-  const sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
+  const repoRoot = path.resolve(actor.repoRoot);
   const target = resolvePathCandidate(repoRoot, filePath);
-
-  const { allowed, reason } = checkScope(agent, target, {
+  const state = readJsonIfFile(path.join(sessionRoot, "spawn-scope.json"));
+  const { allowed, reason } = checkScope(actor.agent, target, {
     repoRoot,
-    sessionDir,
-    info,
-    declaredScope: declaredScopeFor(sessionDir, agent),
+    sessionDir: sessionRoot,
+    info: context.targetInfo,
+    declaredScope: scopeRecordFor(state, {
+      agent: actor.agent,
+      repoKey: actor.repoKey,
+      repoRoot,
+    }),
   });
   if (!allowed) {
     denyPreToolUse(
-      `ultracode: refusing to let ultracode:${agent} write "${filePath}" — ${reason}. ` +
-        "If this file genuinely needs to change, that belongs to a different agent or to the orchestrator " +
-        "itself — do not retry under a different path to route around this.",
+      `ultracode: refusing to let ultracode:${actor.agent} write "${filePath}" — ${reason}. ` +
+        "If this file genuinely needs to change, route it through the agent and repo scope that owns it.",
     );
   }
   return 0;

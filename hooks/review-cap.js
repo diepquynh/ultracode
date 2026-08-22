@@ -1,67 +1,33 @@
 #!/usr/bin/env node
-// Enforce the "cap at 3 iterations" review-loop rule (skills/orchestrate/prompt.md
-// "Step 4 — Code-review loop") in code rather than relying on the orchestrator to count.
-//
-// Reads a PreToolUse hook payload (matcher: Task|Agent / Agent) from stdin. When the
-// spawn targets ultracode:code-reviewer, counts the "## Iteration N" headers the
-// reviewer agent itself already writes to {session-dir}/ultracode-review-ledger.md
-// (agents/code-reviewer/prompt.md, Step 5.1). At 3 or more prior iterations, denies
-// the spawn instead of letting a 4th review pass start — UNLESS the reviewer's own
-// {session-dir}/ultracode-security-block.json (Step 5.2) still reports blocked:true:
-// a BLOCKER finding (agents/code-reviewer/prompt.md, Step 2.5) has no iteration cap,
-// because capping it would let dangerous code stand simply by outlasting the loop.
+// Enforce the review-loop cap for every code-reviewer spawn in a tool call.
 
 "use strict";
 
 const path = require("node:path");
-const {
-  readHookInput,
-  denyPreToolUse,
-  agentFromToolInput,
-  promptFromToolInput,
-  readTextIfFile,
-  readJsonIfFile,
-  field,
-  isDirectory,
-  hookToolInput,
-  hookSessionId,
-} = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const { denyPreToolUse, readHookInput, readJsonIfFile, readTextIfFile } = require("./lib/common");
+const { HookContext } = require("./lib/hook-context");
 
 const MAX_ITERATIONS = 3;
 
 async function main() {
   const hookInput = await readHookInput();
-  const toolInput = hookToolInput(hookInput);
-  if (!toolInput || typeof toolInput !== "object") return 0;
+  const context = new HookContext(hookInput);
 
-  if (agentFromToolInput(toolInput) !== "code-reviewer") return 0;
-
-  const prompt = promptFromToolInput(toolInput);
-  const repoRoot = resolveRepoRoot(hookInput, prompt);
-
-  let sessionDir = field(prompt, "Session dir");
-  if (!sessionDir || !isDirectory(sessionDir)) {
-    const info = pluginTargetInfo();
-    if (!info) return 0;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
+  for (const spawn of context.spawns.filter((candidate) => candidate.agent === "code-reviewer")) {
+    const sessionDir = spawn.effectiveSessionDir;
+    if (!sessionDir) continue;
+    const ledger = readTextIfFile(path.join(sessionDir, "ultracode-review-ledger.md"));
+    if (!ledger) continue;
+    const iterations = ledger.match(/^## Iteration \d+/gm) || [];
+    if (iterations.length < MAX_ITERATIONS) continue;
+    const block = readJsonIfFile(path.join(sessionDir, "ultracode-security-block.json"));
+    if (block && block.blocked === true) continue;
+    denyPreToolUse(
+      `ultracode: review loop cap reached (${iterations.length}/${MAX_ITERATIONS}) for repo key ` +
+        `"${spawn.repoKey}". Report the remaining findings instead of starting another automatic pass.`,
+    );
+    return 0;
   }
-
-  const ledgerPath = path.join(sessionDir, "ultracode-review-ledger.md");
-  const ledger = readTextIfFile(ledgerPath);
-  if (!ledger) return 0;
-
-  const iterations = ledger.match(/^## Iteration \d+/gm) || [];
-  if (iterations.length < MAX_ITERATIONS) return 0;
-
-  const block = readJsonIfFile(path.join(sessionDir, "ultracode-security-block.json"));
-  if (block && block.blocked === true) return 0;
-
-  denyPreToolUse(
-    `ultracode: review loop cap reached (${iterations.length}/${MAX_ITERATIONS}). ` +
-      "Refusing another review pass — report the remaining findings to the user " +
-      "and ask how to proceed instead of auto-running a 4th iteration.",
-  );
   return 0;
 }
 

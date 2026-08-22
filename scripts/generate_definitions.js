@@ -38,8 +38,12 @@ const COMMON_HOOK_FILES = [
   "build-streak.js",
   "build-streak-gate.js",
   "spawn-scope.js",
+  "subagent-parameters.json",
   "lib/build-signal.js",
   "lib/common.js",
+  "lib/harness.js",
+  "lib/hook-context.js",
+  "lib/subagent-params.js",
   "lib/session.js",
   "lib/scope-policy.js",
   "lib/ledger-policy.js",
@@ -703,11 +707,25 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
   return text;
 }
 
+function codexAgentName(name) {
+  return name.replace(/-/g, "_");
+}
+
+function withCodexSpawnNames(text, definitions) {
+  let out = text;
+  for (const definition of definitions || []) {
+    if (definition.data.kind !== "agent") continue;
+    out = out.split(`ultracode:${definition.data.name}`).join(codexAgentName(definition.data.name));
+  }
+  return out;
+}
+
 function renderCodexAgent(
   definition,
   mapping,
   modelMapping,
   harnessLayout,
+  definitions,
 ) {
   const data = definition.data;
   const config = data.config;
@@ -715,12 +733,15 @@ function renderCodexAgent(
   const sandboxMode = config.tools.some((t) => writeTools.has(t))
     ? "workspace-write"
     : "read-only";
-  const adaptedPrompt = renderHarnessTemplate(
-    definition.prompt,
-    "codex",
-    harnessLayout,
-    modelMapping,
-    mapping,
+  const adaptedPrompt = withCodexSpawnNames(
+    renderHarnessTemplate(
+      definition.prompt,
+      "codex",
+      harnessLayout,
+      modelMapping,
+      mapping,
+    ),
+    definitions,
   );
   const policy = renderHarnessTemplate(
     codexToolPolicy(definition, mapping),
@@ -737,8 +758,8 @@ function renderCodexAgent(
     `# Source timeout_seconds = ${config.timeout_seconds}; context = ${config.context}.`,
     "# Codex role files do not expose per-role timeout or context-mode fields.",
     "# The model router supplies the target model so repo-profile.json remains authoritative.",
-    `name = ${tomlString(data.name)}`,
-    `description = ${tomlString(renderHarnessTemplate(data.description, "codex", harnessLayout, modelMapping, mapping))}`,
+    `name = ${tomlString(codexAgentName(data.name))}`,
+    `description = ${tomlString(withCodexSpawnNames(renderHarnessTemplate(data.description, "codex", harnessLayout, modelMapping, mapping), definitions))}`,
     `model_reasoning_effort = ${tomlString(codexEffort)}`,
     `sandbox_mode = ${tomlString(sandboxMode)}`,
     `developer_instructions = ${tomlString(instructions)}`,
@@ -747,15 +768,18 @@ function renderCodexAgent(
   return lines.join("\n");
 }
 
-function renderCodexSkill(definition, mapping, modelMapping, harnessLayout) {
+function renderCodexSkill(definition, mapping, modelMapping, harnessLayout, definitions) {
   const notes = codexCapabilityNotes(definition.prompt, mapping);
   const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
-  return renderHarnessTemplate(
-    claudeFrontmatter(definition, mapping, modelMapping) + body,
-    "codex",
-    harnessLayout,
-    modelMapping,
-    mapping,
+  return withCodexSpawnNames(
+    renderHarnessTemplate(
+      claudeFrontmatter(definition, mapping, modelMapping) + body,
+      "codex",
+      harnessLayout,
+      modelMapping,
+      mapping,
+    ),
+    definitions,
   );
 }
 
@@ -764,15 +788,19 @@ function renderCodexCommand(
   mapping,
   modelMapping,
   harnessLayout,
+  definitions,
 ) {
   const notes = codexCapabilityNotes(definition.prompt, mapping);
   const body = notes ? `${notes}\n\n${definition.prompt}` : definition.prompt;
-  return renderHarnessTemplate(
-    claudeFrontmatter(definition, mapping, modelMapping) + body,
-    "codex",
-    harnessLayout,
-    modelMapping,
-    mapping,
+  return withCodexSpawnNames(
+    renderHarnessTemplate(
+      claudeFrontmatter(definition, mapping, modelMapping) + body,
+      "codex",
+      harnessLayout,
+      modelMapping,
+      mapping,
+    ),
+    definitions,
   );
 }
 
@@ -1207,12 +1235,12 @@ function render(target, definition, mapping, modelMapping, harnessLayout, defini
     return renderAntigravity(definition, mapping, modelMapping, harnessLayout, definitions);
   }
   if (definition.data.kind === "command") {
-    return renderCodexCommand(definition, mapping, modelMapping, harnessLayout);
+    return renderCodexCommand(definition, mapping, modelMapping, harnessLayout, definitions);
   }
   if (definition.data.kind === "skill") {
-    return renderCodexSkill(definition, mapping, modelMapping, harnessLayout);
+    return renderCodexSkill(definition, mapping, modelMapping, harnessLayout, definitions);
   }
-  return renderCodexAgent(definition, mapping, modelMapping, harnessLayout);
+  return renderCodexAgent(definition, mapping, modelMapping, harnessLayout, definitions);
 }
 
 function writeIfChanged(filePath, content, encoding) {

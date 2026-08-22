@@ -32,6 +32,13 @@ const {
 const { pluginTargetInfo, resolveRepoRoot } = require("./lib/session");
 
 const ORCHESTRATE_SKILL_PATH = /orchestrate[\\/]SKILL\.md/i;
+// Grok/Codex/Antigravity may open the generated command markdown rather than
+// a SKILL.md when loading orchestrate as a skill-like entry.
+const ORCHESTRATE_COMMAND_PATH = /(?:^|[\\/])(?:skills|commands)[\\/]orchestrate(?:\.md|[\\/])/i;
+
+function isOrchestratePath(value) {
+  return ORCHESTRATE_SKILL_PATH.test(value) || ORCHESTRATE_COMMAND_PATH.test(value);
+}
 
 function targetsOrchestrateSkill(toolInput) {
   const skillField = typeof toolInput.skill === "string" ? toolInput.skill : "";
@@ -44,13 +51,13 @@ function targetsOrchestrateSkill(toolInput) {
     (typeof toolInput.filePath === "string" && toolInput.filePath) ||
     (typeof toolInput.path === "string" && toolInput.path) ||
     "";
-  if (pathField && ORCHESTRATE_SKILL_PATH.test(pathField)) return true;
+  if (pathField && isOrchestratePath(pathField)) return true;
 
   const command =
     (typeof toolInput.CommandLine === "string" && toolInput.CommandLine) ||
     (typeof toolInput.command === "string" && toolInput.command) ||
     "";
-  return Boolean(command) && ORCHESTRATE_SKILL_PATH.test(command);
+  return Boolean(command) && isOrchestratePath(command);
 }
 
 // UserPromptExpansion's payload has no tool_input — it carries expansion_type

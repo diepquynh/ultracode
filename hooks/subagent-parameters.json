@@ -1,0 +1,360 @@
+{
+  "schemaVersion": 1,
+  "parameters": {
+    "primary_repo_root": {
+      "labels": [
+        "Primary repo root"
+      ],
+      "type": "absolute-directory",
+      "description": "Repository that owns this harness session's Ultracode state root."
+    },
+    "repo_root": {
+      "labels": [
+        "Repo root"
+      ],
+      "type": "absolute-directory",
+      "description": "Repository whose source, profile, inventory, and skills the subagent operates on."
+    },
+    "session_dir": {
+      "labels": [
+        "Session dir"
+      ],
+      "type": "absolute-path",
+      "description": "State/report directory under the primary repository's Ultracode session root."
+    },
+    "repo_key": {
+      "labels": [
+        "Repo key"
+      ],
+      "type": "repo-key",
+      "description": "Stable lowercase key used to address this repository's session state."
+    },
+    "task": {
+      "labels": [
+        "Task"
+      ],
+      "type": "text",
+      "description": "Self-contained statement of the work this subagent must perform."
+    },
+    "mode": {
+      "labels": [
+        "Mode"
+      ],
+      "type": "enum",
+      "values": [
+        "detect",
+        "adopt",
+        "scout",
+        "propose",
+        "generate-skill",
+        "generate-inventory"
+      ]
+    },
+    "source_harness": {
+      "labels": [
+        "Source harness"
+      ],
+      "type": "text"
+    },
+    "source_runtime_dir": {
+      "labels": [
+        "Source runtime dir"
+      ],
+      "type": "path"
+    },
+    "source_skills_dir": {
+      "labels": [
+        "Source skills dir"
+      ],
+      "type": "path"
+    },
+    "slice": {
+      "labels": [
+        "Slice"
+      ],
+      "type": "text"
+    },
+    "slice_paths": {
+      "labels": [
+        "Slice paths"
+      ],
+      "type": "text"
+    },
+    "stack_reference": {
+      "labels": [
+        "Stack reference"
+      ],
+      "type": "path"
+    },
+    "scout_plan": {
+      "labels": [
+        "Scout plan"
+      ],
+      "type": "path"
+    },
+    "scout_findings": {
+      "labels": [
+        "Scout findings"
+      ],
+      "type": "text"
+    },
+    "skill_name": {
+      "labels": [
+        "Skill name"
+      ],
+      "type": "text"
+    },
+    "skill_kind": {
+      "labels": [
+        "Skill kind"
+      ],
+      "type": "text"
+    },
+    "disposition": {
+      "labels": [
+        "Disposition"
+      ],
+      "type": "text"
+    },
+    "proposal": {
+      "labels": [
+        "Proposal"
+      ],
+      "type": "path"
+    },
+    "generated_skills": {
+      "labels": [
+        "Generated skills"
+      ],
+      "type": "text"
+    },
+    "reused_skills": {
+      "labels": [
+        "Reused skills"
+      ],
+      "type": "text"
+    },
+    "target": {
+      "labels": [
+        "Target"
+      ],
+      "type": "path"
+    },
+    "target_type": {
+      "labels": [
+        "Target type"
+      ],
+      "type": "enum",
+      "values": [
+        "spec",
+        "plan"
+      ]
+    },
+    "spec_file": {
+      "labels": [
+        "Spec file"
+      ],
+      "type": "path"
+    },
+    "phase_file": {
+      "labels": [
+        "Phase file"
+      ],
+      "type": "path"
+    },
+    "no_plan": {
+      "labels": [
+        "No plan"
+      ],
+      "type": "text"
+    },
+    "report_file": {
+      "labels": [
+        "Report file"
+      ],
+      "type": "absolute-path"
+    },
+    "implement_report": {
+      "labels": [
+        "Implement report"
+      ],
+      "type": "path"
+    },
+    "implement_reports": {
+      "labels": [
+        "Implement reports"
+      ],
+      "type": "text"
+    },
+    "epa_report": {
+      "labels": [
+        "EPA report"
+      ],
+      "type": "path"
+    },
+    "changed_files": {
+      "labels": [
+        "Changed files"
+      ],
+      "type": "text"
+    },
+    "change_rationale": {
+      "labels": [
+        "Change rationale"
+      ],
+      "type": "text"
+    },
+    "target_files": {
+      "labels": [
+        "Target files",
+        "Target file"
+      ],
+      "type": "text"
+    }
+  },
+  "agents": {
+    "initializer": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "mode"
+      ],
+      "modes": {
+        "detect": [],
+        "adopt": [
+          "source_harness",
+          "source_runtime_dir",
+          "source_skills_dir"
+        ],
+        "scout": [
+          "slice",
+          "slice_paths",
+          "stack_reference",
+          "scout_plan"
+        ],
+        "propose": [
+          "scout_findings",
+          "scout_plan"
+        ],
+        "generate-skill": [
+          "skill_name",
+          "skill_kind",
+          "disposition",
+          "proposal",
+          "scout_findings"
+        ],
+        "generate-inventory": [
+          "generated_skills",
+          "reused_skills",
+          "proposal",
+          "scout_findings"
+        ]
+      }
+    },
+    "explore": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "task"
+      ]
+    },
+    "generate-spec": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "task"
+      ]
+    },
+    "fact-check": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "target",
+        "target_type"
+      ]
+    },
+    "plan": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "spec_file"
+      ]
+    },
+    "implement": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "report_file"
+      ],
+      "oneOf": [
+        [
+          "phase_file",
+          "no_plan"
+        ]
+      ]
+    },
+    "execution-path-analyzer": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "implement_report",
+        "report_file"
+      ]
+    },
+    "write-test": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "implement_report",
+        "epa_report",
+        "report_file"
+      ]
+    },
+    "code-reviewer": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "changed_files",
+        "change_rationale"
+      ]
+    },
+    "prompt-generation": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "task",
+        "target_files"
+      ]
+    },
+    "module-documentation": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "implement_reports",
+        "report_file"
+      ]
+    }
+  }
+}

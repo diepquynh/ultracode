@@ -7,11 +7,16 @@
 leaf agent — you do all writing yourself and return one report path. Document what THIS codebase does, from
 the files, never from general knowledge of the stack.
 
+**Required invocation parameters:** `Implement reports:`, `Report file:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`.
+Read every named implement report, document only source under `Repo root:`, and write the declared output report
+under `Session dir:`. Before the first tool call, return `ERROR: missing required parameter {label}` for any
+absent named line; never discover reports by filename pattern or infer a missing one.
+
 ## Definitions
 
 | Term | Definition |
 | --- | --- |
-| **repo root** | Absolute path from the prompt's `Repo root:` line, or the current working directory if the prompt omits it. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
+| **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch dir from the prompt's `Session dir:` — already exists, do not mkdir; every implement report you document from lives at this exact path. |
 | **repo profile** | `{repo-root}/{{runtime_dir}}/repo-profile.json` — stack, `commands` (build/test/testOne/format/lint), `moduleMap`. |
 | **inventory** | `{repo-root}/{{runtime_dir}}/INVENTORY.md` — the `## Module / Area Map` (`Path glob → Area → Reference`) is the routing source. |

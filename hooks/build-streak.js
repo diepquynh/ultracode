@@ -29,36 +29,17 @@ const path = require("node:path");
 const {
   readHookInput,
   emitAdditionalContext,
-  hookToolInput,
   hookToolResponse,
   commandFromToolInput,
-  hookAgentType,
-  bareAgentName,
-  hookSessionId,
-  field,
-  isDirectory,
   readJsonIfFile,
   writeJsonAtomic,
-  promptFromToolInput,
   pick,
   isAntigravity,
 } = require("./lib/common");
-const { pluginTargetInfo, resolveRepoRoot, baseSessionDir } = require("./lib/session");
+const { pluginTargetInfo, sessionBaseDir } = require("./lib/session");
+const { HookContext } = require("./lib/hook-context");
 const { isBuildCommand, failedFrom, diagnosticSignature } = require("./lib/build-signal");
-const { toolResultText, selfContext } = require("./lib/agy-transcript");
-
-// Which agent this hook is running inside, and the session dir that agent was
-// given. Every harness but Antigravity states both in the payload (`agent_type`,
-// plus a spawn prompt to read `Session dir:` from); AGY states neither, so they are
-// read back from the identity hooks/model-router.js stamped into the spawn prompt.
-function agentIdentity(hookInput) {
-  const declared = bareAgentName(hookAgentType(hookInput));
-  if (declared) return { agent: declared, sessionDir: "" };
-  const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
-  if (typeof transcriptPath !== "string" || !transcriptPath) return { agent: "", sessionDir: "" };
-  const self = selfContext(transcriptPath);
-  return { agent: self.agent, sessionDir: self.sessionDir };
-}
+const { toolResultText } = require("./lib/agy-transcript");
 
 // What the command printed. Antigravity's PostToolUse payload has no result field
 // at all (only `stepIdx` and, on failure, `error`), so its output is read from the
@@ -109,17 +90,6 @@ function areaFromCommand(command) {
   return null;
 }
 
-function stateFilePath(hookInput, prompt, declaredSessionDir) {
-  const repoRoot = resolveRepoRoot(hookInput, prompt);
-  let sessionDir = field(prompt, "Session dir") || declaredSessionDir || "";
-  if (!sessionDir || !isDirectory(sessionDir)) {
-    const info = pluginTargetInfo();
-    if (!info) return null;
-    sessionDir = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
-  }
-  return { statePath: path.join(sessionDir, STATE_FILE), repoRoot, sessionDir };
-}
-
 function loadProfile(repoRoot) {
   const info = pluginTargetInfo();
   if (!info) return null;
@@ -129,17 +99,18 @@ function loadProfile(repoRoot) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
-  const { agent, sessionDir: declaredSessionDir } = agentIdentity(hookInput);
+  const context = new HookContext(hookInput);
+  const actor = context.currentActor();
+  const agent = actor.agent;
   if (!agent) return 0;
 
-  const toolInput = hookToolInput(hookInput);
-  const command = commandFromToolInput(toolInput);
+  const command = commandFromToolInput(context.toolInput);
   if (!command) return 0;
 
-  const resolved = stateFilePath(hookInput, promptFromToolInput(toolInput || {}), declaredSessionDir);
-  if (!resolved) return 0;
-  const { statePath, repoRoot, sessionDir } = resolved;
-
+  const repoRoot = actor.repoRoot;
+  const sessionDir = actor.sessionDir ? sessionBaseDir(actor.sessionDir) : context.sessionRoot;
+  if (!sessionDir) return 0;
+  const statePath = path.join(sessionDir, STATE_FILE);
   const profile = loadProfile(repoRoot);
   const { build, purpose } = isBuildCommand(command, profile);
   if (!build) return 0;

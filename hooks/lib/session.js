@@ -10,7 +10,8 @@ const {
   isFile,
   isInside,
   hookToolInput,
-  readTextIfFile,
+  writePathFromToolInput,
+  generatedRouting,
   sanitizeSessionId,
   pluginRootFromEnv,
 } = require("./common");
@@ -19,27 +20,17 @@ const {
 // hook shares one source of truth for { target, runtime_dir } instead of
 // re-deriving it (and instead of guessing the harness from env vars).
 function pluginTargetInfo() {
-  const pluginRoot = pluginRootFromEnv();
-  const routingPath = path.join(pluginRoot, "hooks", "model-routing.json");
-  const text = readTextIfFile(routingPath);
-  if (!text) return null;
-  try {
-    const routing = JSON.parse(text);
-    if (!routing || typeof routing.runtime_dir !== "string" || !routing.runtime_dir) {
-      return null;
-    }
-    return {
-      target: routing.target,
-      runtimeDir: routing.runtime_dir,
-      skillsDir: typeof routing.skills_dir === "string" ? routing.skills_dir : null,
-      agentsDir: typeof routing.agents_dir === "string" ? routing.agents_dir : null,
-    };
-  } catch {
-    return null;
-  }
+  const routing = generatedRouting();
+  if (!routing || typeof routing.runtime_dir !== "string" || !routing.runtime_dir) return null;
+  return {
+    target: routing.target,
+    runtimeDir: routing.runtime_dir,
+    skillsDir: typeof routing.skills_dir === "string" ? routing.skills_dir : null,
+    agentsDir: typeof routing.agents_dir === "string" ? routing.agents_dir : null,
+  };
 }
 
-function extractCandidateRoots(hookInput) {
+function extractCandidateRoots(hookInput, { includeToolInput = true } = {}) {
   if (!hookInput || typeof hookInput !== "object") return [];
   const candidates = [];
 
@@ -71,7 +62,7 @@ function extractCandidateRoots(hookInput) {
     }
   }
 
-  const toolInput = hookToolInput(hookInput);
+  const toolInput = includeToolInput ? hookToolInput(hookInput) : null;
   if (toolInput && typeof toolInput === "object") {
     for (const key of ["Cwd", "cwd", "SearchDirectory", "DirectoryPath", "SearchPath"]) {
       if (typeof toolInput[key] === "string" && toolInput[key].trim()) {
@@ -83,6 +74,28 @@ function extractCandidateRoots(hookInput) {
   return candidates;
 }
 
+// The repository that owns this harness session's ephemeral state. It is
+// intentionally independent from a spawn's `Repo root:`: a subagent may work in
+// another checkout, but progress/gates/scope stay under the primary project.
+function resolvePrimaryRepoRoot(hookInput) {
+  const info = pluginTargetInfo();
+  const target = info && info.target;
+  const targetEnv =
+    (target === "claude" && process.env.CLAUDE_PROJECT_DIR) ||
+    (target === "grok" && process.env.GROK_WORKSPACE_ROOT) ||
+    (target === "antigravity" &&
+      (process.env.ANTIGRAVITY_WORKSPACE_ROOT || process.env.AGY_WORKSPACE_ROOT)) ||
+    process.env.WORKSPACE_ROOT ||
+    "";
+  if (targetEnv && isDirectory(targetEnv)) return path.resolve(targetEnv);
+
+  const pluginRoot = pluginRootFromEnv();
+  const roots = extractCandidateRoots(hookInput, { includeToolInput: false })
+    .map((candidate) => path.resolve(candidate))
+    .filter(isDirectory);
+  return roots.find((candidate) => !isInside(pluginRoot, candidate)) || roots[0] || path.resolve(process.cwd());
+}
+
 function resolveRepoRoot(hookInput, prompt) {
   const declared = field(prompt, "Repo root");
   if (declared && isDirectory(declared)) return path.resolve(declared);
@@ -91,16 +104,7 @@ function resolveRepoRoot(hookInput, prompt) {
   const rawCandidates = extractCandidateRoots(hookInput);
   const candidates = rawCandidates.map((c) => path.resolve(c)).filter(isDirectory);
 
-  const toolInput = hookToolInput(hookInput);
-  const targetFile =
-    toolInput && typeof toolInput === "object"
-      ? (typeof toolInput.TargetFile === "string" && toolInput.TargetFile) ||
-        (typeof toolInput.AbsolutePath === "string" && toolInput.AbsolutePath) ||
-        (typeof toolInput.file_path === "string" && toolInput.file_path) ||
-        (typeof toolInput.filePath === "string" && toolInput.filePath) ||
-        (typeof toolInput.path === "string" && toolInput.path) ||
-        ""
-      : "";
+  const targetFile = writePathFromToolInput(hookToolInput(hookInput));
 
   // If targetFile is given and is NOT in plugin root, check if a candidate contains it
   if (targetFile && candidates.length > 1 && !isInside(pluginRoot, path.resolve(targetFile))) {
@@ -199,6 +203,7 @@ function repoStateDir(declaredSessionDir, repoKey) {
 
 module.exports = {
   pluginTargetInfo,
+  resolvePrimaryRepoRoot,
   resolveRepoRoot,
   baseSessionDir,
   matchesSessionDir,

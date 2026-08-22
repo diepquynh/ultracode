@@ -46,26 +46,18 @@ const {
   isDirectory,
   readJsonIfFile,
   writeJsonAtomic,
-  hookSessionId,
   pick,
 } = require("./lib/common");
-const { pluginTargetInfo, baseSessionDir, normalizeRepoKey, repoStateDir } = require("./lib/session");
+const { normalizeRepoKey, repoStateDir } = require("./lib/session");
+const { HookContext } = require("./lib/hook-context");
 const { subagentMessages, subagentVerdicts } = require("./lib/agy-transcript");
 const { recordAgentMessage } = require("./lib/spawn-record");
 
 // Where the verdict belongs: the session dir its own spawn prompt declared, else
 // the formula every prompt derives, rooted at the repo that spawn named.
-function resolveSessionDir(record, hookInput) {
+function resolveSessionDir(record, context) {
   if (record.sessionDir && isDirectory(record.sessionDir)) return record.sessionDir;
-  const info = pluginTargetInfo();
-  if (!info) return null;
-  const workspaces = pick(hookInput, "workspacePaths", "workspace_paths");
-  const repoRoot =
-    (record.repoRoot && isDirectory(record.repoRoot) && record.repoRoot) ||
-    (Array.isArray(workspaces) && typeof workspaces[0] === "string" ? workspaces[0] : "") ||
-    process.cwd();
-  const derived = baseSessionDir(repoRoot, info.runtimeDir, hookSessionId(hookInput));
-  return isDirectory(derived) ? derived : null;
+  return context.sessionRoot || null;
 }
 
 // Same (session dir, repo key) addressing as hooks/factcheck-record.js on every
@@ -96,6 +88,7 @@ function recordVerdict(sessionDir, repoKey, record) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput) return 0;
+  const context = new HookContext(hookInput);
   const transcriptPath = pick(hookInput, "transcriptPath", "transcript_path");
   if (typeof transcriptPath !== "string" || !transcriptPath) {
     emit({});
@@ -113,7 +106,7 @@ async function main() {
   const recorded = [];
   const keyless = [];
   for (const record of latest.values()) {
-    const sessionDir = resolveSessionDir(record, hookInput);
+    const sessionDir = resolveSessionDir(record, context);
     if (!sessionDir) continue;
     const repoKey = normalizeRepoKey(record.repoKey);
     if (!repoKey) {

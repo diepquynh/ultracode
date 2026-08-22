@@ -85,8 +85,10 @@ Give **each repo its own subdirectory** so parallel repos never collide on repor
 mkdir -p "$SESSION_DIR/{repo-key}"
 ```
 
-Every subagent prompt carries three lines that scope the agent to its repo:
+Every subagent prompt carries four lines that separate session ownership from work scope:
 
+- `Primary repo root: {absolute root at $PWD when this session started}` — owns `$SESSION_DIR` and every
+  pipeline-state file, even when this subagent works in another repository.
 - `Repo root: {absolute repo root}` — the agent **changes its working directory to this root before its first
   tool call** and stays there, then resolves every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path (inventory, profile, skills) and every
   source path against it, and runs build/test/format/git there. This is how a subagent reads **that repo's**
@@ -138,10 +140,10 @@ units live **inside** that file as deliverables `D1`, `D2`, … in the Delivery 
   - **The request is a QUICK ANSWER, RESEARCH, VERIFY, or PROMPT task** → no spec, because no plan is produced.
 
 **Rule D2 — generate-spec is one cross-repo agent.** Spawn exactly **one** `ultracode:generate-spec` for the
-whole request, even when several repos are in scope, and even when several explore agents ran. Pass it every
-criteria doc path, every research doc path, the `Repos in scope:` list, `Session dir: {SESSION_DIR}` — the
-root, not a repo subdir, because one spec describes the whole session — and `Repo key: {primary repo key}`. It
-tags each deliverable with one repo key.
+whole request, even when several repos are in scope, and even when several explore agents ran. Pass `Task:`
+with the user's complete request, every criteria doc path, every research doc path, the `Repos in scope:` list,
+`Primary repo root: {primary repo root}`, `Repo root: {primary repo root}`, `Session dir: {SESSION_DIR}` — the root, not a repo subdir — and `Repo key:
+{primary repo key}`. It tags each deliverable with one repo key.
 
 **Rule D3 — Approve the spec before planning, and fold every answer back into it.** The spec file is the
 requirements contract. After `ultracode:generate-spec` returns:
@@ -168,9 +170,9 @@ before spawning `ultracode:plan`. The `repo_key` must be the one the fact-check 
 the hook recorded its verdict, and the tool refuses an approval it cannot find a `PASS` for.
 
 **Rule D4 — One plan agent, given the spec file and nothing else.** After spec approval, spawn exactly **one**
-`ultracode:plan`. Its prompt carries the **one** spec file path, the `Repos in scope:` list (or the single
-`Repo root:`), `Session dir: {SESSION_DIR}` — the root, since one plan covers the whole request — and
-`Repo key: {primary repo key}`. Do **not**
+`ultracode:plan`. Its prompt carries `Spec file: {the one absolute spec path}`, the `Repos in scope:` list,
+`Primary repo root: {primary repo root}`, `Repo root: {primary repo root}`, `Session dir: {SESSION_DIR}` — the root, since one plan covers the whole
+request — and `Repo key: {primary repo key}`. Do **not**
 pass it the research document path, the criteria document path, or any user answer text: all of that is already
 in the spec file, and handing the agent a second requirements document makes it plan against two sources that
 can disagree. The plan agent turns the spec's deliverables into phases and returns one master plan.
@@ -316,14 +318,34 @@ verbatim, prefix included. Each writes a report into the session dir.
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
-**Repo scoping:** every spawn carries `Repo root: {absolute root}`, `Session dir: {SESSION_DIR}/{repo-key}` and
-`Repo key: {repo-key}` (**Session isolation**) — the cross-repo spec and plan stages take `{SESSION_DIR}` itself
+**Repo scoping:** every spawn carries `Primary repo root: {the session's original $PWD}`, `Repo root: {absolute
+work root}`, `Session dir: {SESSION_DIR}/{repo-key}` and `Repo key: {repo-key}` (**Session isolation**) — the cross-repo spec and plan stages take `{SESSION_DIR}` itself
 plus the primary repo's key.
 The agent makes that root its working directory before its first tool call, then resolves every
 `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and source path against it and reads **that repo's** inventory, skills, and profile — so
-route each spawn to the repo whose files it will touch. Never spawn an agent without a `Repo root:` line and
-expect it to find the right tree: skills resolve against the working directory, so an agent that never moves
-there loads no skills.
+route each spawn to the repo whose files it will touch. `Repo root:` is the work repo; `Session dir:` always
+stays under the primary repo's `$SESSION_DIR`. Never derive session state from the work repo and never spawn an
+agent without the three common parameters.
+
+**Required spawn parameters (hook-enforced).** Parameter names are literal `Label: value` lines. The guard
+validates every entry in a batched spawn before any subagent starts.
+
+| Agent | Required beyond `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:` |
+| --- | --- |
+| `explore` | `Task:` |
+| `generate-spec` | `Task:` |
+| `fact-check` | `Target:`, `Target type:` (`spec` or `plan`) |
+| `plan` | `Spec file:` |
+| `implement` | `Report file:` and one of `Phase file:` / `No plan:` |
+| `execution-path-analyzer` | `Implement report:`, `Report file:` |
+| `write-test` | `Implement report:`, `EPA report:`, `Report file:` |
+| `code-reviewer` | `Changed files:`, `Change rationale:` |
+| `prompt-generation` | `Task:`, `Target files:` |
+| `module-documentation` | `Implement reports:`, `Report file:` |
+
+Do not rely on unlabeled prose for these values. Put the same paths/facts in the named parameters, then add any
+extra instructions below them. A denied spawn names the missing parameter; repair that spawn rather than
+removing another parameter or moving its session dir to the work repo.
 
 **Skill loading:** `ultracode:implement` and `ultracode:write-test` load skills on demand via {{tool_skill}}.
 For every inline invocation and every fix, include a `Required skills:` line whose contents you derive from the
@@ -593,7 +615,7 @@ remain, report them to the user and ask how to proceed. Do not auto-run a 4th fo
    `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Route by its tables, by name — never by skill descriptions,
    never with another repo's tables.
 3. **Self-contained prompts.** Subagents cannot see this conversation; include every needed path and fact,
-   plus `Repo root:`, `Session dir:` and `Repo key:` — all three, in every spawn. Every agent works **from**
+   plus `Primary repo root:`, `Repo root:`, `Session dir:` and `Repo key:` — all four, in every spawn. Every agent works **from**
    its `Repo root:` — it moves its working
    directory there before its first tool call, because {{tool_skill}} resolves skills relative to the working
    directory and an agent left where the harness started it loads none of that repo's skills. The `Repo key:`
