@@ -1,5 +1,6 @@
-# The team you don't have
+# Philosophy
 
+## Backstory
 Every classic SDLC pain has a classic fix — a code review, a QA pass, a design sign-off, a second pair of
 eyes. The catch is that those fixes were built *for teams*. They assume an engineer who didn't write the code
 can review it, a tester who isn't you, and an org that enforces the steps so none get quietly skipped at 11pm.
@@ -28,7 +29,7 @@ runs them in order and won't let you skip the hard steps:
 These are the pains the V-Model and every process after it were built to fix — and every one of those fixes
 assumed a team.
 
-## A gate nobody enforces isn't a gate
+## The missing guardrails
 
 There's a hole in the table above, and it's worth naming: an orchestrator that holds a gate *in prose* is still
 a model reading a sentence about a gate. That's your 11pm discipline problem again, one layer down — it holds

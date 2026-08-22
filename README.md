@@ -1,15 +1,10 @@
 # Ultracode
 
-**Burn more tokens — on purpose, for better software.** Ultracode turns a one-shot coding request into a full
-end-to-end engineering pipeline: a fleet of specialist subagents that explore, plan, implement and review — then,
-when you ask for it, trace execution paths, test, review again, and document — every stage grounded in your repo's
-own conventions. One cheap prompt becomes many deliberate ones, and you trade tokens for correctness, coverage,
-and code that matches how your team already writes.
-
-Concretely, it's a portable Claude Code, Grok Build, Codex, and Antigravity plugin: a **repo-agnostic agentic engineering
-pipeline** plus a **codebase-scouting initializer** that generates per-repo skills and a routing inventory for
-whatever language and framework a repo uses. Install it once; run `/init-kit` on Claude Code, Grok Build, or Antigravity, or
-`$init-kit` on Codex, to bootstrap any repo.
+Ultracode turns a one-shot coding request into a full end-to-end engineering pipeline: a fleet of specialist
+subagents that explore, plan, implement and review — then, when you ask for it, trace execution paths, test,
+review again, and document — every stage grounded in your repo's own conventions. One cheap prompt becomes
+many deliberate ones, and you trade tokens for correctness, coverage, and code that matches how your team
+already writes.
 
 ## Why Ultracode?
 
@@ -73,30 +68,21 @@ your conventions instead of a framework's defaults:
 | `module-documentation` | A brief write-up of how each method works, refreshed as the final step. |
 | `prompt-generation` | CoT-following prompt authoring — for when the thing you're building is itself an agent. |
 
-**Model routing — the part that pays for itself.** Set the model per role once in `repo-profile.json`; a
-`PreToolUse` hook applies it on every spawn and denies one that disagrees, so you never say it in a prompt
-again. Thinking stages run `advanced`, review runs `balanced`, and `implement`/`write-test` follow the plan
-phase's complexity — cheap for low and medium. The expensive models buy the plan; the bulk of the token volume
-runs on the cheap tier. It's per-repo and per-agent, so a tier can point at a gateway, Bedrock, or Vertex —
-[Tested models](docs/tested-models.md) has the field notes to seed it.
+**Model router** - driving your subagents at the most efficient model. See [Model routing](docs/model-routing.md)
 
-**Tools and hooks** — the strict part. Approval gates, per-agent write scopes, and unwaivable security findings
-are enforced in code, not by asking a subagent to police its own prompt. A build-failure circuit breaker cuts
-off an agent grinding on the same broken command, and a repo-scoped memory means a subagent that failed
-remembers the lesson next session, like humans :p
+**Tools and hooks** — strict guardrails that prevent the subagents from going haywire, and tools
+that helps them learn and improve, just like humans :p
 
 ## Documentation
 
-The deep dives live under [`docs/`](docs/):
-
-- [The team you don't have](docs/philosophy.md) — the SDLC pains Ultracode's roles map to, and why they were built for teams.
-- [Installation](docs/installation.md) — published, manual, and local development installation flows.
-- [Architecture](docs/architecture.md) — the plugin/per-repo split, inventory-based routing, how agents communicate, and design notes.
-- [Agents](docs/agents.md) — every `subagent_type`, its role, the namespace prefix rule, and how existing skills are re-used.
-- [Model routing](docs/model-routing.md) — the `models` block, how a phase picks its tier, and why a bad route denies the spawn.
-- [Tested models](docs/tested-models.md) — field notes per role, per model, to seed your `repo-profile.json` `models` block.
-- [Definition authoring](docs/definitions.md) — edit harness-neutral agent, skill, and command sources and generate either target.
-- [Extending & publishing](docs/extending.md) — add a new stack reference, and publish/validate the plugin.
+- [Philosophy](docs/philosophy.md)
+- [Installation](docs/installation.md)
+- [Architecture](docs/architecture.md)
+- [Agents](docs/agents.md)
+- [Model routing](docs/model-routing.md)
+- [Tested models](docs/tested-models.md)
+- [Definition authoring](docs/definitions.md)
+- [Extending & publishing](docs/extending.md)
 
 ## Install
 
@@ -127,7 +113,7 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.
 
 See [Installation](docs/installation.md) for manual installation and uninstall.
 
-## Use
+## Usage
 
 | Action | Claude Code | Grok Build | Codex | Antigravity |
 | --- | --- | --- | --- | --- |
@@ -139,21 +125,8 @@ See [Installation](docs/installation.md) for manual installation and uninstall.
 | Runtime inventory and profile | `.ultracode/` | `.ultracode/` | `.ultracode/` | `.ultracode/` |
 | Generated project skills | `.claude/skills/` | `.grok/skills/` | `.agents/skills/` | `.agents/skills/` |
 
-Run the initializer once per repository, reload the harness, then invoke the orchestrator yourself — it's the
-only entry point into the pipeline, and it only runs when you ask for it (there's no session-start nag and no
-auto-activation on an arbitrary coding request). Explicitly invoke it with `/ultracode:orchestrate`, or ask for
-it in plain language, and it takes it from there. Individual stages (`explore`, `generate-spec`, `fact-check`,
-`plan`, `implement`, `code-review`, `epa`, `write-test`, `module-docs`, `prompt-gen`) are internal subagents the
-orchestrator spawns on your behalf; they aren't separate slash commands, so you never need to know which one to
-run.
-
-Commit the generated runtime files so your team shares them: `.ultracode/` (the inventory, profile, and repo
-memory — shared by every harness) plus the generated skills, which stay in the harness's own discovery dir:
-`.claude/skills/` for Claude Code, `.grok/skills/` for Grok Build, `.agents/skills/` for Codex and
-Antigravity. Grok also auto-loads Claude Code plugins; if Ultracode is already installed for Claude, install only
-one copy so skills and hooks do not double-fire.
-
-For the agent roster, architecture, model notes, and how to extend Ultracode to a new stack, see [`docs/`](docs/).
+Generated Ultracode artifacts can be committed to your repository (except sessions artifacts), so you don't need
+to worry about handover or moving to a new machine.
 
 ## How much does it actually cost in a real-world task?
 
