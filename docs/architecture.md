@@ -242,7 +242,10 @@ skill set. A user-approval gate sits between scouting and generation.
   - **Current harness limitations (live, 2026-08-22):**
     - Claude Code 2.1.220 and Antigravity CLI 1.1.18 dispatch Ultracode plugin spawn hooks. Claude rewrites must
       live only in `hookSpecificOutput.updatedInput` — a top-level `overwrite` fails Claude's hook schema and is
-      discarded. Claude leaf `PostToolUse` Bash events also often omit `agent_type`, so `build-streak.js` /
+      discarded. Claude's `Agent` tool is async by default: `PostToolUse:Agent` sees only the launch ack
+      (`Async agent launched successfully…`), so `hooks/factcheck-record.js` also registers on `SubagentStop`
+      (`matcher: ^ultracode:fact-check$`) and records from `last_assistant_message` plus the leaf transcript's
+      spawn prompt. Claude leaf `PostToolUse` Bash events also often omit `agent_type`, so `build-streak.js` /
       `build-streak-gate.js` cannot attribute failures inside a forked implement/write-test turn even when the
       matching PreToolUse Bash call carried the actor.
     - Grok CLI 1.0.5 currently discovers the Ultracode plugin (`has_hooks=true`) but expands **zero** plugin

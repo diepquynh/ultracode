@@ -122,6 +122,17 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "^ultracode:fact-check$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/factcheck-record.js\""
+          }
+        ]
+      }
     ]
   }
 }

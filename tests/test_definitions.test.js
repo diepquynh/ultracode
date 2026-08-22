@@ -3273,6 +3273,91 @@ test("factcheck-record captures fact-check verdicts under the spawn's repo key",
   factcheckRecordTest("grok");
 });
 
+test("factcheck-record records Claude SubagentStop verdicts from last_assistant_message", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-fcrecord-subagent-stop-"));
+  const repo = tempDir;
+  const runtimeDir = HARNESS_LAYOUT.layouts.claude.runtime_dir;
+  const pluginRoot = pluginRootFor("claude");
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const prompt =
+    `Primary repo root: ${repo}\n` +
+    `Repo root: ${repo}\n` +
+    `Session dir: ${path.join(sessionDir, "backend")}\n` +
+    "Repo key: backend\n" +
+    "Target type: spec";
+  const agentTranscript = path.join(tempDir, "agent-factcheck.jsonl");
+  fs.writeFileSync(
+    agentTranscript,
+    `${JSON.stringify({
+      type: "user",
+      message: { role: "user", content: prompt },
+    })}\n`,
+    "utf-8",
+  );
+  const statePath = path.join(sessionDir, "backend", "factcheck.json");
+
+  // Async Agent PostToolUse only sees the launch ack — must not invent a verdict.
+  runHook(
+    path.join(pluginRoot, "hooks", "factcheck-record.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      hook_event_name: "PostToolUse",
+      tool_input: { subagent_type: "ultracode:fact-check", prompt },
+      tool_response: {
+        content: [
+          {
+            type: "text",
+            text: "Async agent launched successfully. agentId: deadbeef (internal ID)",
+          },
+        ],
+      },
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+  assert.equal(fs.existsSync(statePath), false);
+
+  runHook(
+    path.join(pluginRoot, "hooks", "factcheck-record.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      hook_event_name: "SubagentStop",
+      agent_id: "deadbeef",
+      agent_type: "ultracode:fact-check",
+      agent_transcript_path: agentTranscript,
+      last_assistant_message: JSON.stringify({
+        verdict: "PASS",
+        target: "spec",
+        repo: "backend",
+        findings: [],
+      }),
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+
+  const factcheck = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+  assert.equal(factcheck.spec.verdict, "PASS");
+  assert.equal(factcheck.spec.rounds, 1);
+  assert.equal(factcheck.spec.repo, "backend");
+  assert.equal(factcheck.spec.source, "subagent-stop");
+  assert.equal(factcheck.spec.agentId, "deadbeef");
+
+  const hooks = JSON.parse(
+    fs.readFileSync(path.join(pluginRoot, "hooks", "hooks.json"), "utf-8"),
+  );
+  const subagentStop = hooks.hooks.SubagentStop || [];
+  assert.ok(
+    subagentStop.some(
+      (entry) =>
+        entry.matcher === "^ultracode:fact-check$" &&
+        (entry.hooks || []).some((hook) => /factcheck-record\.js/.test(hook.command)),
+    ),
+    "Claude hooks.json must register factcheck-record on SubagentStop",
+  );
+});
+
 function progressTrackerTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-progress-${target}-`));
   const repo = tempDir;
