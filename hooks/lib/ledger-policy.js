@@ -135,6 +135,23 @@ function checkLedger(agent, targetPath) {
   return { allowed: true };
 }
 
+// The review ledger a spawn's review loop belongs to, from its `Phase:` value.
+// The cap in hooks/review-cap.js is per review loop, and a session runs one loop
+// per phase's implementation plus one per phase's requested tests, so each gets
+// its own ledger — a shared file would count phase 1's iterations against phase
+// 2's first review, and a phase's implementation passes against its test passes.
+// A review not tied to a plan phase ("none") keeps the unsuffixed name.
+function reviewLedgerName(phase) {
+  const value = String(phase || "").trim().toLowerCase();
+  return /^\d+(-tests)?$/.test(value)
+    ? `ultracode-review-ledger-phase-${value}.md`
+    : "ultracode-review-ledger.md";
+}
+
+// Matches every review ledger name reviewLedgerName can produce, for callers
+// enumerating a session dir rather than resolving one spawn's ledger.
+const REVIEW_LEDGER_PATTERN = /^ultracode-review-ledger(?:-phase-(\d+(?:-tests)?))?\.md$/;
+
 // One regex matching every protected ledger name, for callers that must scan
 // free text rather than a path — hooks/lib/plugin-policy.js looks for a ledger
 // named inside an interpreter's inline code, where there is no path argument to
@@ -147,4 +164,12 @@ function ledgerNamePattern() {
   return new RegExp(`(?:${sources.join("|")})`, "i");
 }
 
-module.exports = { checkLedger, ledgerNamePattern, HOOK_OWNED, TOOL_OWNED, AGENT_OWNED };
+module.exports = {
+  checkLedger,
+  ledgerNamePattern,
+  reviewLedgerName,
+  REVIEW_LEDGER_PATTERN,
+  HOOK_OWNED,
+  TOOL_OWNED,
+  AGENT_OWNED,
+};

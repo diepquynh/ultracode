@@ -314,7 +314,7 @@ verbatim, prefix included. Each writes a report into the session dir.
 | `ultracode:implement` | Code must be written/modified/deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
 | `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4); analyze paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
 | `ultracode:write-test` | After every EPA is back, in the same requested test stage (Rules T2–T4); write tests. **One phase at a time** — never two in a message (Rule T4). Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
-| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop or the closing test stage. Every spawn carries `Changed files:` and `Change rationale:` alongside `Repo root:`/`Session dir:`/`Repo key:`. | JSON (inline) |
+| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed — via the per-phase loop or the closing test stage. Every spawn carries `Changed files:`, `Change rationale:` and `Phase:` alongside `Repo root:`/`Session dir:`/`Repo key:`. | JSON (inline) + `ultracode-review-ledger-phase-{Phase}.md` |
 | `ultracode:prompt-generation` | Create/edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass; update area/module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
@@ -339,7 +339,7 @@ validates every entry in a batched spawn before any subagent starts.
 | `implement` | `Report file:` and one of `Phase file:` / `No plan:` |
 | `execution-path-analyzer` | `Implement report:`, `Report file:` |
 | `write-test` | `Implement report:`, `EPA report:`, `Report file:` |
-| `code-reviewer` | `Changed files:`, `Change rationale:` |
+| `code-reviewer` | `Changed files:`, `Change rationale:`, `Phase:` (`{N}`, `{N}-tests`, or `none`) |
 | `prompt-generation` | `Task:`, `Target files:` |
 | `module-documentation` | `Implement reports:`, `Report file:` |
 
@@ -580,9 +580,12 @@ and test (fix agent = `ultracode:write-test`). Run this loop per repo, judging *
 rules. Both:
 
 1. Spawn `ultracode:code-reviewer` with the phase's `Repo root:`, `Session dir:`, `Changed files: {the files this
-   step changed}`, and `Change rationale: {the phase's intent, or the fix instruction just applied}` — every
-   code-reviewer spawn carries these two lines, so the reviewer judges the diff against a
-   stated intent rather than a bare git diff. Parse JSON.
+   step changed}`, `Change rationale: {the phase's intent, or the fix instruction just applied}`, and
+   `Phase: {this loop's identity}` — every code-reviewer spawn carries these three lines, so the reviewer judges
+   the diff against a stated intent rather than a bare git diff, and appends to the ledger of the loop it belongs
+   to. `Phase:` names the **loop**, not the pass: `{N}` in phase N's implementation loop, `{N}-tests` in phase N's
+   closing test loop, `none` for a no-plan task or a direct edit. It stays identical across that loop's
+   iterations — never a count of reviews, never renumbered mid-loop. Parse JSON.
 2. If it passed (`securityBlock: false`, no findings) → exit loop (proceed to EPA, or to next phase / format+docs).
 3. **`securityBlock: true` (any `BLOCKER` finding) — handle before anything else, every iteration.** This is
    never optional and never something a user request can waive: `BLOCKER` findings are ultracode:code-reviewer's
@@ -601,11 +604,15 @@ rules. Both:
 4. Split the remaining (non-`BLOCKER`) findings by the INVENTORY Review Rule Set: **auto-fixable** IDs (those
    marked auto-fixable) vs the rest.
 5. Apply auto-fixable findings yourself via {{tool_edit}} using the reviewer's exact old→new fix. These skip re-review.
-6. For remaining HIGH/MEDIUM findings, spawn the fix agent with ONLY those findings + the `Required skills:` line.
-7. Re-spawn `ultracode:code-reviewer` with the same context. Repeat.
+6. For remaining HIGH/MEDIUM findings, spawn the fix agent with ONLY those findings + the `Required skills:` line
+   + this loop's review-ledger path (`{SESSION_DIR}/{repo-key}/ultracode-review-ledger-phase-{Phase}.md` for a
+   phase value, `…/ultracode-review-ledger.md` when `Phase:` is `none`), so the fix agent records its
+   `FIXED`/`WONTFIX` rationale in the same ledger the reviewer reads on the next pass.
+7. Re-spawn `ultracode:code-reviewer` with the same context, including the same `Phase:`. Repeat.
 
-Do not exit with unresolved HIGH/MEDIUM findings. **Cap at 3 iterations** for HIGH/MEDIUM/LOW; if findings
-remain, report them to the user and ask how to proceed. Do not auto-run a 4th for those.
+Do not exit with unresolved HIGH/MEDIUM findings. **Cap at 3 iterations per loop** for HIGH/MEDIUM/LOW — the cap
+counts the iterations in that loop's own ledger, so each phase, and each phase's test loop, starts at zero; if
+findings remain, report them to the user and ask how to proceed. Do not auto-run a 4th for those.
 `BLOCKER` findings have no iteration cap and no "ask how to proceed".
 
 ## Hard rules

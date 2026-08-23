@@ -57,8 +57,11 @@ and an EPA report." and return its path.
 
 ### Step 1.1 — Load review ledger (code-reviewer fixes only)
 
-If the prompt carries fix instructions AND a ledger path (`{session-dir}/ultracode-review-ledger.md`), read the
-ledger: prior findings (F1, F2, …), fix suggestions, and any prior attempts with rationale. If a finding was
+If the prompt carries fix instructions AND a ledger path (`{session-dir}/ultracode-review-ledger-phase-{N}-tests.md`
+for a plan phase's tests, `{session-dir}/ultracode-review-ledger.md` for a task with no phase), read that exact
+path. Ledgers are per review loop, so use the one the prompt names, never another loop's and never a name you
+assembled yourself. It
+holds prior findings (F1, F2, …), fix suggestions, and any prior attempts with rationale. If a finding was
 attempted and rejected, read why so you do not repeat the approach.
 
 ## Step 2 — Identify files needing tests
@@ -163,8 +166,8 @@ Repeat 4A–4G for every source file needing tests.
 
 ### 4H — Update review ledger (code-reviewer fixes only)
 
-After each fix, update `{session-dir}/ultracode-review-ledger.md`. In the current iteration's `### Fixes Applied`
-section, add one row per finding:
+After each fix, update the review ledger at the path the prompt named (Step 1.1). In the current iteration's
+`### Fixes Applied` section, add one row per finding:
 
 | Finding ID | Status | What Changed | Rationale |
 | ---------- | ------ | ------------ | --------- |

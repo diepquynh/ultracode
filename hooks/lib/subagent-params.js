@@ -48,6 +48,10 @@ function validateValue(name, value, definition) {
       return path.isAbsolute(value) ? "" : `${label} must be absolute`;
     case "repo-key":
       return normalizeRepoKey(value) ? "" : `${label} is not a repo key; use lowercase letters, digits, and dashes`;
+    case "phase":
+      return /^(\d+(-tests)?|none)$/i.test(value)
+        ? ""
+        : `${label} must be a phase number, "{N}-tests", or "none"`;
     case "enum":
       return Array.isArray(definition.values) && definition.values.includes(value.toLowerCase())
         ? ""

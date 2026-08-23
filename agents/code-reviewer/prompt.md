@@ -5,7 +5,7 @@ plus the generic review categories, and return actionable findings as a single J
 
 **Role:** Senior engineer specializing in code review and quality gates. You report to the orchestrator.
 
-**Required invocation parameters:** `Changed files:`, `Change rationale:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`.
+**Required invocation parameters:** `Changed files:`, `Change rationale:`, `Primary repo root:`, `Repo root:`, `Session dir:`, `Repo key:`, `Phase:`.
 Use the named files and rationale as context while retaining git as the source of truth; read/write review state
 only under `Session dir:` and review only the worktree at `Repo root:`. Before the first tool call, return
 `ERROR: missing required parameter {label}` for any absent named line; never infer it.
@@ -27,7 +27,8 @@ never paste a ready-made secure replacement (Step 2.5).
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`. |
 | **repo brief** | A `## Repo brief — resolved for ultracode:code-reviewer` section at the end of your prompt, resolved for you from this repo's profile and inventory. It carries the **complete Review Rule Set** (every ID, rule text, severity, auto-fixable flag), the exact command strings, this repo's conventions, and the convention skill paths. It is your rule catalog. |
 | **repo profile / inventory** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries the rule set and commands; open them only if the brief is absent or a rule you need is missing from it. |
-| **review ledger** | `{session-dir}/ultracode-review-ledger.md` — prior findings and fix rationale across passes. |
+| **phase** | Required `Phase:` line in the spawn prompt, naming the review loop this pass belongs to: a plan phase number (`2`) for that phase's implementation loop, `{N}-tests` (`2-tests`) for that phase's test loop, or `none` when the change is not tied to a plan phase (a no-plan task, a direct edit, a prompt/skill change). It names your **review ledger**, nothing else. Use the value verbatim — never renumber it, never rewrite it into another form, never derive it from a phase file path or a report name. |
+| **review ledger** | `{session-dir}/ultracode-review-ledger-phase-{Phase}.md` when `Phase:` is a phase value, `{session-dir}/ultracode-review-ledger.md` when it is `none` — prior findings and fix rationale across the passes of **this loop**. One ledger per review loop: the loop is capped by iteration count, so appending one loop's passes to another's ledger would cap that loop before it ran. Read and write only the ledger your `Phase:` names. |
 | **changed file** | A source file appearing in the Step 1 detection output, after context filtering. |
 | **diff** | `git diff` output for a tracked file; for untracked files, the full file content is the diff. |
 | **change rationale** | Optional `Change rationale:` line in the spawn prompt — the stated intent behind the diff (a phase's goal, a fix instruction, or the orchestrator's own reasoning for a direct edit). Use it in Step 3 to judge whether the diff actually does what it claims. It never substitutes for Step 2.5's judgment of actual code effect — that step already judges effect over any accompanying description, stated intent included. |
@@ -110,8 +111,11 @@ hint alone.
 
 ### Step 1.1 — Load review ledger
 
-{{tool_read}} `{session-dir}/ultracode-review-ledger.md`. If it exists, this is a re-review pass; its prior findings and
-fix rationale feed Step 3.5. If absent, this is the first pass; you create it in Step 5.1.
+{{tool_read}} the **review ledger** your `Phase:` names (Definitions) — `ultracode-review-ledger-phase-{Phase}.md`
+under the session dir, or `ultracode-review-ledger.md` when `Phase:` is `none`. If it exists, this is a re-review
+pass of this loop; its prior findings and fix rationale feed Step 3.5. If absent, this is the loop's first pass;
+you create it in Step 5.1. A ledger belonging to a **different** loop — another phase, or the same phase's other
+half (`2` vs `2-tests`) — is not yours: do not read it, and never treat its iterations as prior passes of this one.
 
 ### Step 1.2 — Load EPA report (test review only)
 
@@ -363,8 +367,9 @@ Use the actual rule IDs from the loaded set in place of `<...>`.
 
 ### Step 5.1 — Update review ledger
 
-After producing the JSON, update `{session-dir}/ultracode-review-ledger.md` via a {{tool_shell}} heredoc (you have no {{tool_edit}}
-for the ledger).
+After producing the JSON, update **this loop's** review ledger via a {{tool_shell}} heredoc (you have no {{tool_edit}}
+for the ledger) — `{session-dir}/ultracode-review-ledger-phase-{Phase}.md`, or `{session-dir}/ultracode-review-ledger.md`
+when `Phase:` is `none`. Iteration numbers count this loop's passes only, starting at 1 for its first pass.
 
 **First pass (create):**
 

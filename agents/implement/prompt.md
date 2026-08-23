@@ -146,7 +146,9 @@ Check `{session-dir}/ultracode-implement-progress.md`.
 ### Step 1.2 — Load the Review Ledger (Code-Reviewer Fixes Only)
 
 If the prompt contains code-reviewer fix instructions AND a review-ledger path
-(`{session-dir}/ultracode-review-ledger.md`), {{tool_read}} the ledger. It holds prior findings with IDs (F1, F2, …), fix
+(`{session-dir}/ultracode-review-ledger-phase-{N}.md` for a plan phase, `{session-dir}/ultracode-review-ledger.md`
+for a task with no phase), {{tool_read}} that exact path. Ledgers are per review loop, so use the one the prompt
+names — never another loop's, and never a name you assembled yourself. It holds prior findings with IDs (F1, F2, …), fix
 suggestions, and any prior attempts with rationale. If a finding's earlier fix was rejected, read the reason
 so you do not repeat the approach.
 
@@ -248,8 +250,8 @@ Repeat 3A–3E for every step.
 
 ### 3F — Update the Review Ledger (Code-Reviewer Fixes Only)
 
-When fixing findings, after each fix update `{session-dir}/ultracode-review-ledger.md`. In the current
-iteration's `### Fixes Applied` section, fill one row per finding:
+When fixing findings, after each fix update the review ledger at the path the prompt named (Step 1.2). In the
+current iteration's `### Fixes Applied` section, fill one row per finding:
 
 | Finding ID | Status | What Changed | Rationale |
 | --- | --- | --- | --- |

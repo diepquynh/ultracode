@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { readHookInput, readTextIfFile, readJsonIfFile } = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
+const { REVIEW_LEDGER_PATTERN } = require("./lib/ledger-policy");
 
 function formatRecord(record) {
   const phase = record.phase ? ` ${record.phase}` : "";
@@ -25,16 +26,35 @@ function formatRecord(record) {
 // factcheck.json, progress.json and the review ledger are per repo key. Printing
 // whatever is present in each place keeps this readable against a session from
 // either layout rather than going silent on the other one.
+// Review loops are per phase — one for its implementation, one for its tests — so
+// a session dir holds a ledger per loop. Report each separately: the cap is counted
+// per ledger, and a merged count would misstate where any of them stands against it.
+function reviewLines(sessionDir, label) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(sessionDir);
+  } catch {
+    return [];
+  }
+  const lines = [];
+  for (const entry of entries.sort()) {
+    const match = REVIEW_LEDGER_PATTERN.exec(entry);
+    if (!match) continue;
+    const ledger = readTextIfFile(path.join(sessionDir, entry));
+    if (!ledger) continue;
+    const iterations = (ledger.match(/^## Iteration \d+/gm) || []).length;
+    const scope = match[1] ? `phase ${match[1]} ` : "";
+    lines.push(`  ${label}${scope}review iterations so far: ${iterations}/3`);
+  }
+  return lines;
+}
+
 function reportFor(sessionDir, label) {
   const lines = [];
   const progress = readJsonIfFile(path.join(sessionDir, "progress.json"));
   const records = progress && Array.isArray(progress.records) ? progress.records : [];
   if (records.length) lines.push(`  ${label}last spawn: ${formatRecord(records[records.length - 1])}`);
-  const ledger = readTextIfFile(path.join(sessionDir, "ultracode-review-ledger.md"));
-  if (ledger) {
-    const iterations = (ledger.match(/^## Iteration \d+/gm) || []).length;
-    lines.push(`  ${label}review iterations so far: ${iterations}/3`);
-  }
+  lines.push(...reviewLines(sessionDir, label));
   const gates = readJsonIfFile(path.join(sessionDir, "gates.json"));
   for (const gate of ["spec", "plan"]) {
     if (gates && gates[gate]) lines.push(`  ${label}${gate} gate: ${gates[gate].decision}`);

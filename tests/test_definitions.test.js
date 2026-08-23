@@ -1413,29 +1413,44 @@ function reviewCapTest(target) {
   const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
-  const prompt = `Repo root: ${repo}.\nSession dir: ${sessionDir}.`;
-  const hookInput = {
-    cwd: repo,
-    session_id: "testsess",
-    tool_input: { subagent_type: "ultracode:code-reviewer", prompt },
-  };
-  const run = () =>
-    runHook(path.join(pluginRoot, "hooks", "review-cap.js"), hookInput, {
-      PLUGIN_ROOT: pluginRoot,
-    });
+  const run = (phase) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "review-cap.js"),
+      {
+        cwd: repo,
+        session_id: "testsess",
+        tool_input: {
+          subagent_type: "ultracode:code-reviewer",
+          prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase: ${phase}.`,
+        },
+      },
+      { PLUGIN_ROOT: pluginRoot },
+    );
 
-  assert.equal(run(), ""); // no ledger yet — first pass allowed
+  assert.equal(run("1"), ""); // no ledger yet — first pass allowed
 
-  const ledgerPath = path.join(sessionDir, "ultracode-review-ledger.md");
+  const ledgerPath = path.join(sessionDir, "ultracode-review-ledger-phase-1.md");
   fs.writeFileSync(
     ledgerPath,
     "## Iteration 1 (context: implementation)\n\n## Iteration 2 (context: implementation)\n",
     "utf-8",
   );
-  assert.equal(run(), ""); // 2 prior iterations — still allowed
+  assert.equal(run("1"), ""); // 2 prior iterations — still allowed
 
   fs.appendFileSync(ledgerPath, "\n## Iteration 3 (context: implementation)\n", "utf-8");
-  assertDenied(JSON.parse(run()), /review loop cap reached \(3\/3\)/);
+  assertDenied(JSON.parse(run("1")), /review loop cap reached \(3\/3\) for phase 1 /);
+
+  // A different loop keeps its own count: phase 1 being exhausted must not cap
+  // phase 2's first review, nor phase 1's closing test review.
+  assert.equal(run("2"), "");
+  assert.equal(run("1-tests"), "");
+  assert.equal(run("none"), "");
+
+  // ...and each of those caps on its own ledger.
+  const testLedger = path.join(sessionDir, "ultracode-review-ledger-phase-1-tests.md");
+  fs.writeFileSync(testLedger, "## Iteration 1\n## Iteration 2\n## Iteration 3\n", "utf-8");
+  assertDenied(JSON.parse(run("1-tests")), /review loop cap reached \(3\/3\) for phase 1-tests /);
+  assert.equal(run("2"), ""); // phase 2 still untouched by either exhausted loop
 }
 
 test("review-cap denies a 4th code-review iteration", () => {
@@ -1553,6 +1568,37 @@ test("session-guard enforces primary repo, session dir, repo key, and agent para
   sessionGuardTest("claude");
   sessionGuardTest("codex");
   sessionGuardTest("grok");
+});
+
+// Phase: addresses the review ledger review-cap.js counts, so an absent or
+// malformed value is refused rather than silently pooling two loops into one
+// ledger and capping the second before it runs.
+test("session-guard requires a well-formed Phase: on every code-reviewer spawn", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-reviewphase-"));
+  const pluginRoot = pluginRootFor("claude");
+  const runtimeDir = HARNESS_LAYOUT.layouts.claude.runtime_dir;
+  const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess", "backend");
+  const run = (phaseLine) =>
+    runHook(
+      path.join(pluginRoot, "hooks", "session-guard.js"),
+      {
+        cwd: repo,
+        session_id: "testsess",
+        tool_input: {
+          subagent_type: "ultracode:code-reviewer",
+          prompt:
+            `Primary repo root: ${repo}.\nRepo root: ${repo}.\nSession dir: ${sessionDir}.\n` +
+            `Repo key: backend.\nChanged files: src/app.ts.\nChange rationale: phase intent.${phaseLine}`,
+        },
+      },
+      { PLUGIN_ROOT: pluginRoot },
+    );
+
+  for (const phase of ["1", "12", "2-tests", "none"]) {
+    assert.equal(run(`\nPhase: ${phase}.`), "", `Phase: ${phase} should be accepted`);
+  }
+  assertDenied(JSON.parse(run("")), /no Phase:/);
+  assertDenied(JSON.parse(run("\nPhase: second.")), /must be a phase number/);
 });
 
 function bashGuardTest(target) {
@@ -3546,11 +3592,45 @@ function progressTrackerTest(target) {
   assert.equal(progress.records[0].phase, "phase-2");
   assert.equal(progress.records[0].status, "stuck");
 
+  // A code-reviewer spawn names its loop with `Phase:` rather than a phase file,
+  // so the record comes from that value — including the test loop, which has no
+  // phase-{N} path anywhere in its prompt to read.
+  runHook(
+    path.join(pluginRoot, "hooks", "spawn-log.js"),
+    {
+      cwd: repo,
+      session_id: "testsess",
+      tool_input: {
+        subagent_type: "ultracode:code-reviewer",
+        prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase: 2-tests.`,
+      },
+      tool_response: "Code review passed",
+    },
+    { PLUGIN_ROOT: pluginRoot },
+  );
+  const withReview = JSON.parse(fs.readFileSync(path.join(sessionDir, "progress.json"), "utf-8"));
+  assert.equal(withReview.records[1].agent, "code-reviewer");
+  assert.equal(withReview.records[1].phase, "phase-2-tests");
+
+  // Each review loop's ledger is reported on its own line, against its own cap.
+  fs.writeFileSync(
+    path.join(sessionDir, "ultracode-review-ledger-phase-2.md"),
+    "## Iteration 1\n## Iteration 2\n",
+    "utf-8",
+  );
+  fs.writeFileSync(
+    path.join(sessionDir, "ultracode-review-ledger-phase-2-tests.md"),
+    "## Iteration 1\n",
+    "utf-8",
+  );
+
   const resumeOutput = runHook(path.join(pluginRoot, "hooks", "session-resume.js"), {
     cwd: repo,
     session_id: "testsess",
   });
-  assert.match(resumeOutput, /implement phase-2 \[stuck\]/);
+  assert.match(resumeOutput, /code-reviewer phase-2-tests \[ok\]/);
+  assert.match(resumeOutput, /phase 2 review iterations so far: 2\/3/);
+  assert.match(resumeOutput, /phase 2-tests review iterations so far: 1\/3/);
 }
 
 test("spawn-log records structured progress.json read back by session-resume", () => {

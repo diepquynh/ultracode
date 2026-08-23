@@ -29,6 +29,13 @@
       "type": "repo-key",
       "description": "Stable lowercase key used to address this repository's session state."
     },
+    "phase": {
+      "labels": [
+        "Phase"
+      ],
+      "type": "phase",
+      "description": "Review loop this spawn belongs to: the plan phase number, \"{N}-tests\" for that phase's closing test loop, or \"none\" when the work is not tied to a plan phase. Scopes per-loop session state so one loop's iterations are never counted against another's."
+    },
     "task": {
       "labels": [
         "Task"
@@ -332,6 +339,7 @@
         "repo_root",
         "session_dir",
         "repo_key",
+        "phase",
         "changed_files",
         "change_rationale"
       ]

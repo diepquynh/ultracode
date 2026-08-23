@@ -30,7 +30,7 @@
           "items": { "type": "string", "minLength": 1 }
         },
         "type": {
-          "enum": ["text", "path", "absolute-path", "absolute-directory", "repo-key", "enum"]
+          "enum": ["text", "path", "absolute-path", "absolute-directory", "repo-key", "phase", "enum"]
         },
         "values": {
           "type": "array",

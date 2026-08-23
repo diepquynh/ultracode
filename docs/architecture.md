@@ -189,9 +189,11 @@ its report, and returns the path; the orchestrator reads it and decides what run
 Reports are written for the next agent to consume — exact paths, full signatures, patterns shown in full.
 Some channels are structured rather than prose:
 
-- **Review ledger** — one review loop per phase's implementation and per requested phase's tests, held through
-  one file. `code-reviewer` logs findings (`F1`, `F2`…); `implement`/`write-test` responds `FIXED`/`WONTFIX`
-  with a rationale; the reviewer re-raises or closes on the next pass. Capped so it can't spin forever.
+- **Review ledger** — one review loop per phase's implementation and per requested phase's tests, each held
+  through its own file (`ultracode-review-ledger-phase-{N}.md`, `…-phase-{N}-tests.md`) named by the
+  `Phase:` the spawn carries. `code-reviewer` logs findings (`F1`, `F2`…); `implement`/`write-test` responds
+  `FIXED`/`WONTFIX` with a rationale; the reviewer re-raises or closes on the next pass. Capped so it can't
+  spin forever — per loop, so an exhausted loop never caps the next one before it runs.
 - **JSON findings** — `code-reviewer` returns one machine-parseable object so the orchestrator can split
   findings by severity and rule ID. **Auto-fixable** findings carry an exact replacement the orchestrator
   applies directly, skipping a fix-agent round trip.

@@ -18,14 +18,21 @@ async function main() {
 
   for (const spawn of context.spawns) {
     if (!spawn.agent || !spawn.effectiveSessionDir) continue;
+    // A spawn that declares its loop with `Phase:` (code-reviewer) is recorded
+    // from that value; the rest keep the phase read off the phase file they name.
+    const declaredPhase = String(spawn.parameters.phase || "").trim().toLowerCase();
     const phaseFile = spawn.parameters.phase_file || "";
     const phaseMatch = (phaseFile || spawn.prompt).match(/phase-(\d+)/);
+    const phase =
+      declaredPhase && declaredPhase !== "none"
+        ? `phase-${declaredPhase}`
+        : phaseMatch && `phase-${phaseMatch[1]}`;
     const record = {
       ts: new Date().toISOString(),
       agent: spawn.agent,
       repoKey: spawn.repoKey || null,
       repoRoot: spawn.workRepoRoot,
-      phase: phaseMatch ? `phase-${phaseMatch[1]}` : null,
+      phase: phase || null,
       status,
       summary,
       ...(parentAgent ? { spawnedBy: parentAgent } : {}),
