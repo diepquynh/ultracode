@@ -8,14 +8,15 @@
 // explore, fact-check, generate-spec) are hard-confined to their session
 // directory. initializer and module-documentation get one extra named subtree
 // each, matching the exact paths their prompt.md documents. implement,
-// prompt-generation, and write-test keep full repo-root write access beyond
-// that — their jobs genuinely require writing anywhere in the repo, and their
-// legitimate file-naming conventions vary too widely (fixtures, conftest.py,
-// snapshots, arbitrary source files carrying prompt text) to allowlist safely
-// without breaking real work. implement additionally may never touch a path
-// that looks like a test file — agents/implement/prompt.md Constraint 6 — which
-// is enforced here rather than only in the implement agent's own prompt so a
-// weaker or misled model cannot talk its way around it.
+// prompt-generation, and write-test keep full work-repo-root write access beyond
+// that — their jobs genuinely require writing anywhere in the checkout, and a
+// phase file's path list is only a hint (plans miss skill-required companions
+// such as DTOs, enums, wiring). hooks/spawn-scope.js still records those paths
+// for observability; this policy does not deny writes for leaving that set.
+// implement additionally may never touch a path that looks like a test file —
+// agents/implement/prompt.md Constraint 6 — which is enforced here rather than
+// only in the implement agent's own prompt so a weaker or misled model cannot
+// talk its way around it.
 
 "use strict";
 
@@ -183,26 +184,10 @@ function checkScope(agent, targetPath, ctx) {
     };
   }
 
-  // Phase-scoped confinement for the agents that would otherwise hold the whole
-  // repo root. Applies ONLY when this spawn's phase file was found and actually
-  // declared paths (hooks/spawn-scope.js records that). A no-plan task, or a
-  // phase file that names nothing concrete, stays unscoped — the alternative
-  // would block legitimate inline work that never had a phase file to scope to.
-  const declared = ctx.declaredScope;
-  if (declared && declared.phaseFileFound && (declared.files || []).length) {
-    if (!withinDeclaredScope(targetPath, declared)) {
-      return {
-        allowed: false,
-        reason:
-          "outside the file set this phase declares — " +
-          `${(declared.files || []).length} path(s) in "${declared.phaseFile}" and the directories they ` +
-          "live in are writable for this spawn. If this file genuinely belongs to the phase, the phase " +
-          "file is what is wrong: report that instead of writing outside the declared scope, so the plan " +
-          "and the change stay in agreement",
-      };
-    }
-  }
-
+  // Phase-declared paths are a hint for implement/write-test, not a write
+  // allowlist. spawn-scope.js still records them; confining to that set blocked
+  // skill-driven companions the plan omitted. Repo-root / session-only /
+  // subtree / test-path rules above remain the hard boundaries.
   return { allowed: true };
 }
 

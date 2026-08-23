@@ -240,9 +240,10 @@ skill set. A user-approval gate sits between scouting and generation.
     Reports, gates, fact-checks, progress, scope, and build-streak state stay in that primary root even when the
     work repo is another checkout, preventing fragmented pipeline state.
   - Write/Edit/Bash scope guards therefore safeguard **two** roots for a leaf spawn: the primary session dir
-    (reports/state only) and the work `Repo root:` (source, constrained further by the phase allowlist when
-    present). `currentActor()` prefers transcript `Repo root:` / `Repo key:` / `Session dir:` over the harness
-    cwd so a Claude secondary-repo implement is not confined to the primary checkout.
+    (reports/state only) and the work `Repo root:` (source). A phase file's path list is recorded in
+    `spawn-scope.json` as a hint for implementers — skills may require companion files the plan omitted — not
+    as a write allowlist. `currentActor()` prefers transcript `Repo root:` / `Repo key:` / `Session dir:` over
+    the harness cwd so a Claude secondary-repo implement is not confined to the primary checkout.
   - **Current harness limitations (live, 2026-08-22):**
     - Claude Code 2.1.220 and Antigravity CLI 1.1.18 dispatch Ultracode plugin spawn hooks. Claude rewrites must
       live only in `hookSpecificOutput.updatedInput` — a top-level `overwrite` fails Claude's hook schema and is

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Capture every orchestrator spawn's declared write scope in the primary repo's
-// session root. The work repo is recorded separately, so cross-repo agents read
-// one shared state file without losing which checkout they may modify.
+// Capture every orchestrator spawn's phase-declared paths in the primary repo's
+// session root. The list is a hint for implementers (and for observability), not
+// a write allowlist — scope-guard.js still confines agents to the work repo /
+// session / role subtree, but does not deny paths the phase omitted. The work
+// repo is recorded separately so cross-repo agents keep which checkout they may
+// modify.
 
 "use strict";
 

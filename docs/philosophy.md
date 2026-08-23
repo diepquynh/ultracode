@@ -43,7 +43,7 @@ can talk itself past a sentence; it can't talk itself past a denied tool call.
 | The spec is approved before `plan` runs; the plan is approved before `implement` does | `pipeline-gate.js` |
 | No approval is recorded at all without a `fact-check` `PASS` | the `ultracode_gate` MCP tool |
 | A `BLOCKER` security finding can't be waived — not by the orchestrator, not by you | `security-block.js` |
-| Each subagent writes only inside the scope its own plan phase declared, shell writes included | `spawn-scope.js` records it; `scope-guard.js` and `bash-scope-guard.js` hold it |
+| Each leaf write stays inside the work `Repo root:` (plus the primary session dir for reports); phase path lists are hints, not allowlists | `spawn-scope.js` records work-repo identity + phase hints; `scope-guard.js` and `bash-scope-guard.js` hold the roots |
 | Spec and plan files are never hand-edited — a change re-spawns the agent that owns the file | `artifact-guard.js` |
 | The review loop caps at 3 iterations instead of spinning | `review-cap.js` |
 | A subagent that has failed its build 5 times running is refused the 6th and must hand back `STUCK:` | `build-streak.js` counts; `build-streak-gate.js` refuses |

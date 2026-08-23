@@ -410,8 +410,10 @@ and risks disagreeing with the profile. Name the *paths* the task concerns and t
 
 **An `ultracode:implement` spawn must declare its plan.** Pass either `Phase file: {absolute path}` — the
 normal path once the plan is approved — or, for a genuinely small inline change, `No plan: {one line saying
-why}`. A spawn with neither is refused. Beyond gating, a `Phase file:` also confines that agent's writes to the
-files the phase declares, so prefer it: a planned spawn is both gated and scoped, and a bare one is neither.
+why}`. A spawn with neither is refused. Prefer `Phase file:`: it gates the spawn and gives the implementer a
+path list as a **hint** for what to touch. That list is not a write allowlist — loaded skills may require
+companion files the plan omitted (DTOs, wiring, config), and the implementer may add them under `Repo root:`
+so long as they stay on the phase's intent and list every extra path in the change report.
 
 **You name each report, not the agent.** For `ultracode:implement`, `ultracode:write-test`,
 `ultracode:execution-path-analyzer` and `ultracode:module-documentation`, add a

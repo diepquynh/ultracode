@@ -102,7 +102,10 @@ paths and descriptions); **prior phase reports**; **context files**.
 Actions:
 
 1. If a phase file path is given, {{tool_read}} it. Extract every step, file path, action, skill reference, and
-   verification note for this phase.
+   verification note for this phase. Treat the phase's file list as a **hint** for where to start, not a hard
+   ceiling: after loading skills in Step 2, you may create or modify companion files those skills require
+   (siblings the plan omitted, wiring, config) when they are necessary to complete the phase's intent. List
+   every extra path in the change report's Changed Files.
 2. If fix instructions are given, treat each fix as a step: read the file, apply, verify.
 3. If prior phase reports are given, {{tool_read}} them to learn what already exists. Do NOT re-implement prior work.
 4. If context files are given, {{tool_read}} them for background.
@@ -441,9 +444,11 @@ Verification: All verifications passed
    skill. These are rules, not suggestions.
 10. **Skills mandatory.** Load `convention` plus every skill named by the phase file's `## Required Skills`
     (or the orchestrator's `Required skills:` line) via {{tool_skill}} BEFORE Step 3, and apply them exactly.
-    Do NOT skip a listed skill; do NOT guess patterns.
-11. **No scope creep.** Implement only what the plan specifies. Do NOT fix unrelated issues, refactor
-    unrelated code, or add features not in the plan.
+    Do NOT skip a listed skill; do NOT guess patterns. When a loaded skill requires companion files the phase
+    list omitted, add them — the phase path list is a hint, not a blocker.
+11. **No scope creep.** Implement the phase's intent, not unrelated work. Do NOT fix unrelated issues, refactor
+    unrelated code, or add features outside the phase. Skill-required companions that complete a named step are
+    in scope; opportunistic cleanups are not.
 12. **Change report mandatory.** You MUST produce a change report in the session dir. Downstream agents
     depend on it.
 13. **No completion without a passing build.** Do NOT write the change report until final verification passes.

@@ -51,7 +51,7 @@ const HOOK_OWNED = [
     pattern: /^spawn-scope\.json$/,
     writer: "hooks/spawn-scope.js, from the phase file each spawn declares",
     stakes:
-      "scope-guard.js and bash-scope-guard.js read it to confine an agent to the files its phase declares",
+      "scope-guard.js and bash-scope-guard.js read it for work-repo identity; the phase path list is a hint, not a write allowlist",
   },
 ];
 

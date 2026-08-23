@@ -2754,11 +2754,11 @@ test("ultracode_report writes the declared path and gates on unrecorded lessons"
   reportToolTest("grok");
 });
 
-// A Write/Edit inside a subagent's turn carries no spawn prompt, so the phase
-// file's declared file set has to be captured at spawn time (spawn-scope.js) and
-// read back by the guards. Measured justification: of implement runs whose phase
-// file survived on disk, 100% of written paths were derivable from it, while 71%
-// were NOT derivable from the spawn prompt alone.
+// A Write/Edit inside a subagent's turn carries no spawn prompt, so work-repo
+// identity and the phase path hint are captured at spawn time (spawn-scope.js).
+// The path list is recorded for observability; it is not a write allowlist —
+// skill-required companions the plan omitted must remain writable under the
+// work repo. Hard boundaries stay: session reports, work-repo root, test paths.
 function phaseScopeTest(target) {
   const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
     target,
@@ -2810,7 +2810,7 @@ function phaseScopeTest(target) {
     `${target}: an explicit No plan: is accepted`,
   );
 
-  // Recording the scope, then holding the agent to it.
+  // Recording the phase path hint; writes are not confined to that set.
   runHook(hook("spawn-scope.js"), {
     ...base,
     tool_input: {
@@ -2839,18 +2839,18 @@ function phaseScopeTest(target) {
       }, env),
     );
   assert.equal(write(path.join(repo, "core/src/main/java/com/example/order/OrderService.java")), null);
-  // A sibling in a declared directory is allowed: implementing a named service
-  // legitimately adds types no plan enumerates line by line.
+  // A sibling the plan omitted stays writable — skill-driven companions are in scope.
   assert.equal(write(path.join(repo, "core/src/main/java/com/example/order/OrderStatus.java")), null);
-  assert.match(
+  // Another module under the same work repo is also writable; the phase list is a hint.
+  assert.equal(
     write(path.join(repo, "billing/src/main/java/com/example/billing/Invoice.java")),
-    /outside the file set this phase declares/,
-    `${target}: an unrelated module is refused`,
+    null,
+    `${target}: phase path list does not block other work-repo paths`,
   );
   // Its own session report stays writable.
   assert.equal(write(path.join(sessionDir, "ultracode-implement-phase-3.md")), null);
 
-  // Shell writes are confined identically, so Bash is not an escape hatch.
+  // Shell writes follow the same root rules, not the phase path list.
   const bash = (command) =>
     reasonOf(
       runHook(hook("bash-scope-guard.js"), {
@@ -2860,10 +2860,9 @@ function phaseScopeTest(target) {
       }, env),
     );
   assert.equal(bash(`echo x > ${repo}/core/src/main/java/com/example/order/Foo.java`), null);
-  assert.match(bash(`echo x > ${repo}/billing/src/Evil.java`), /outside the file set/);
+  assert.equal(bash(`echo x > ${repo}/billing/src/Evil.java`), null);
 
-  // No phase file = nothing to scope to, so behavior stays as it was. A guard
-  // that denied here would break every legitimate inline task.
+  // No phase file = nothing to record as a hint; work-repo writes still succeed.
   fs.rmSync(path.join(sessionDir, "spawn-scope.json"));
   runHook(hook("spawn-scope.js"), {
     ...base,
@@ -2882,7 +2881,7 @@ function phaseScopeTest(target) {
   );
 }
 
-test("phase-scoped allowlist confines implement to the files its phase declares", () => {
+test("spawn-scope records phase path hints without confining work-repo writes", () => {
   phaseScopeTest("claude");
   phaseScopeTest("codex");
   phaseScopeTest("grok");
@@ -2990,21 +2989,16 @@ function crossRepoScopeTest(target) {
   // the harness payload only knows the primary cwd/agent_type.
   assert.equal(write(path.join(work, "src/pallet_ai_lambda/registry/prompt_const.py")), null);
   assert.equal(write(path.join(workSessionDir, "ultracode-implement-phase-6.md")), null);
-  assert.match(
-    write(path.join(work, "src", "other.py")),
-    /outside the file set this phase declares/,
-  );
+  // Phase path list is a hint — undeclared paths under the work repo stay writable.
+  assert.equal(write(path.join(work, "src", "other.py")), null);
   assert.equal(bash(`echo x > ${path.join(work, "src/pallet_ai_lambda/registry/user_prompts.py")}`), null);
   // A primary absolute path with no actor repoKey still binds to the primary
-  // spawn-scope record that owns that checkout — undeclared primary files stay denied.
-  assert.match(
-    bash(`echo x > ${path.join(primary, "src", "Evil.java")}`),
-    /outside the file set/,
-  );
+  // spawn-scope record that owns that checkout; phase hints do not deny it.
+  assert.equal(bash(`echo x > ${path.join(primary, "src", "Evil.java")}`), null);
 
   // Claude leaf transcripts carry Repo root / Session dir / Repo key on the first
   // user turn; currentActor must prefer those over the primary cwd so a secondary
-  // spawn cannot fall through into the primary phase allowlist.
+  // spawn cannot fall through into the primary work-repo root.
   const transcriptPath = path.join(sessionDir, "agent-ai-lambda.jsonl");
   fs.writeFileSync(
     transcriptPath,
