@@ -2142,6 +2142,49 @@ test("a placeholder like <ID> in command text is not read as a redirect", () => 
   assert.deepEqual(extractWriteTargets("cmd 2> /repo/err.log"), ["/repo/err.log"]);
 });
 
+test("a heredoc body handed to a data sink is content, not commands", () => {
+  const { extractWriteTargets } = require(
+    path.join(CLAUDE_PLUGIN_ROOT, "hooks", "lib", "shell-paths.js"),
+  );
+  // The recorded plan-agent denial: the phase file's markdown body contained
+  // `<!-- AWS START --> ... <!-- AWS END -->`, which read as a redirect into
+  // "..." while the real (dynamic) redirect target was skipped — so the only
+  // extracted target was prose, and a legitimate session write was refused.
+  assert.deepEqual(
+    extractWriteTargets(
+      'S=/repo/.ultracode/session/s1\ncat > "$S/plan-phase-1.md" <<\'EOF\'\n' +
+        "the `<!-- AWS START --> ... <!-- AWS END -->` dependency group\nrm /etc/passwd\nEOF",
+    ),
+    [],
+  );
+  // A literal command-line redirect target stays visible; the body does not.
+  assert.deepEqual(
+    extractWriteTargets("cat > /sess/plan.md <<'EOF'\nprose --> ... arrows\nrm /repo/x\nEOF"),
+    ["/sess/plan.md"],
+  );
+  // Commands after the terminator are scanned again, and `<<-` strips tabs.
+  assert.deepEqual(
+    extractWriteTargets("cat > /a.md <<'EOF'\nbody\nEOF\necho x > /b.md"),
+    ["/a.md", "/b.md"],
+  );
+  assert.deepEqual(
+    extractWriteTargets("cat > /a.md <<-EOF\n\tbody > ...\n\tEOF\nrm /c.md"),
+    ["/a.md", "/c.md"],
+  );
+  // A body fed to a shell or interpreter EXECUTES, so those lines stay visible —
+  // directly or downstream of a pipe.
+  assert.deepEqual(extractWriteTargets("bash <<'EOF'\nrm /repo/src/App.ts\nEOF"), [
+    "/repo/src/App.ts",
+  ]);
+  assert.deepEqual(extractWriteTargets("cat <<'EOF' | bash\necho x > /repo/hacked.ts\nEOF"), [
+    "/repo/hacked.ts",
+  ]);
+  // A here-string is not a heredoc; following lines are still commands.
+  assert.deepEqual(extractWriteTargets("grep x <<< 'EOF'\nrm /d.md"), ["/d.md"]);
+  // Dot-only tokens are prose (`--> ...`), never a write target.
+  assert.deepEqual(extractWriteTargets("echo 'a --> ... done'"), []);
+});
+
 // spawn-log.js opens a progress.json record when a spawn returns, which on AGY is
 // before the agent has said anything — so every AGY spawn was logged as
 // `status: "ok"` with an empty summary, including agents that handed back STUCK.
@@ -3200,6 +3243,28 @@ function bashScopeGuardTest(target) {
   assert.equal(
     run(`cat <<'EOF' > ${path.join(sessionDir, "ledger.md")}\nhi\nEOF`, "ultracode:code-reviewer"),
     "",
+  );
+  // ...even when the heredoc body contains markdown prose that parses like a
+  // redirect (`--> ...`) or names shell commands — the body is file content.
+  assert.equal(
+    run(
+      `cat > ${path.join(sessionDir, "plan-phase-1.md")} <<'EOF'\n` +
+        "the `<!-- AWS START --> ... <!-- AWS END -->` group\nrm -rf /somewhere\nEOF",
+      "ultracode:plan",
+    ),
+    "",
+    `${target}: heredoc body prose is not read as a write target`,
+  );
+  // OS-temp scratch outside every governed root is fine for session-only agents...
+  assert.equal(
+    run("sort spec.md > /tmp/ultracode-test-got.txt", "ultracode:generate-spec"),
+    "",
+    `${target}: session-only agents may write temp scratch`,
+  );
+  // ...but repo-writing agents keep strict confinement, temp included.
+  assertDenied(
+    JSON.parse(run("echo x > /tmp/ultracode-test-scratch.log", "ultracode:implement")),
+    /outside the repo root/,
   );
   // ...but writing project source through Bash instead of Write/Edit is still denied.
   assertDenied(

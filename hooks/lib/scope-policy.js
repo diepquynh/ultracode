@@ -6,7 +6,9 @@
 // The policy is deliberately conservative: agents whose own prompt.md says they
 // never touch project source (code-reviewer, plan, execution-path-analyzer,
 // explore, fact-check, generate-spec) are hard-confined to their session
-// directory. initializer and module-documentation get one extra named subtree
+// directory, plus OS-temp scratch outside every governed root — the shell is a
+// first-class way to produce a session artifact, not a loophole around the
+// write tool. initializer and module-documentation get one extra named subtree
 // each, matching the exact paths their prompt.md documents. implement,
 // prompt-generation, and write-test keep full work-repo-root write access beyond
 // that — their jobs genuinely require writing anywhere in the checkout, and a
@@ -20,6 +22,7 @@
 
 "use strict";
 
+const os = require("node:os");
 const path = require("node:path");
 const { isInside } = require("./common");
 
@@ -162,6 +165,18 @@ function checkScope(agent, targetPath, ctx) {
   if (sessionDir && isInside(sessionDir, targetPath)) return { allowed: true };
 
   if (!repoRoot || !isInside(repoRoot, targetPath)) {
+    // Session-only agents may use OS-temp scratch outside every governed root:
+    // it is not project source, and ledger basenames stay protected wherever
+    // they sit (ledger-policy.js). Denying it forced generate-spec, verifying
+    // its own artifact (`sort … > /tmp/got.txt`), to contort shell work into
+    // pipes or route every intermediate file through the write tool. Repo-
+    // writing agents (implement, write-test, …) keep strict confinement.
+    if (
+      SESSION_ONLY_AGENTS.has(agent) &&
+      (isInside(os.tmpdir(), targetPath) || isInside("/tmp", targetPath))
+    ) {
+      return { allowed: true };
+    }
     return { allowed: false, reason: `outside the repo root ("${repoRoot}")` };
   }
 

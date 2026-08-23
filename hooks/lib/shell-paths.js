@@ -16,6 +16,31 @@
 const IGNORED_TOKENS = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "&1", "&2", "-"]);
 const DESTRUCTIVE_COMMANDS = new Set(["rm", "mv", "cp", "truncate", "shred"]);
 
+// Commands that EXECUTE a heredoc body instead of storing it: `bash <<EOF`
+// runs the body's `rm …` lines, so those bodies must stay visible to the scan.
+// Interpreter bodies stay too — hooks/lib/plugin-policy.js reads the raw
+// command text for its write/spawn patterns, and dropping the body here would
+// be a second, disagreeing reading of the same command.
+const BODY_EXECUTING_COMMANDS =
+  /^(?:sh|bash|zsh|dash|ksh|fish|node|nodejs|bun|deno|ts-node|tsx|python[23]?|perl|ruby|php|Rscript|osascript)$/i;
+
+const HEREDOC_WRAPPERS = new Set([
+  "sudo",
+  "doas",
+  "env",
+  "nohup",
+  "nice",
+  "ionice",
+  "stdbuf",
+  "time",
+  "timeout",
+  "command",
+  "exec",
+]);
+
+// `<<WORD`, `<<-WORD`, `<<'WORD'` — but not the `<<` inside a `<<<` here-string.
+const HEREDOC_START = /(?<!<)<<(-?)\s*(["'`]?)(\w+)\2/g;
+
 function stripQuotes(token) {
   if (token.length >= 2) {
     const first = token[0];
@@ -34,7 +59,62 @@ function looksDynamic(token) {
 function candidatePaths(rawToken) {
   const cleaned = stripQuotes(rawToken.trim());
   if (!cleaned || IGNORED_TOKENS.has(cleaned) || looksDynamic(cleaned)) return [];
+  // A dot-only token is prose, not a path: markdown's `--> ...` reads as a
+  // redirect into "...", which denied a plan write for a file it never named.
+  if (/^\.+$/.test(cleaned)) return [];
   return [cleaned];
+}
+
+// True when any command in `line` would execute a heredoc body handed to it —
+// either as the heredoc's own command (`bash <<EOF`) or downstream of a pipe
+// (`cat <<EOF | bash`).
+function lineExecutesHeredocBody(line) {
+  for (const segment of line.split(/&&|\|\||[;|]/)) {
+    for (const raw of tokenize(segment)) {
+      const token = stripQuotes(raw);
+      if (!token || /^[A-Za-z_]\w*=/.test(token) || token.startsWith("-")) continue;
+      const word = token.replace(/^.*\//, "");
+      if (HEREDOC_WRAPPERS.has(word)) continue;
+      if (BODY_EXECUTING_COMMANDS.test(word)) return true;
+      break;
+    }
+  }
+  return false;
+}
+
+// A heredoc body handed to a data sink (`cat > "$f" <<'EOF' … EOF`) is file
+// content, not shell — yet splitSegments treats its lines as commands, so a
+// body line of markdown prose (`<!-- AWS START --> ...`) read as a redirect
+// into "..." and denied a plan agent's legitimate session-artifact write. Drop
+// such bodies before extraction; the redirect target on the command line
+// itself stays visible. Bodies fed to a shell or interpreter are kept — those
+// lines really do run. An unmatched `<<` in quoted prose hides the rest of the
+// command, which fails open like every other dynamic token here.
+function stripHeredocBodies(command) {
+  if (!command.includes("<<")) return command;
+  const kept = [];
+  const pending = [];
+  let active = null; // { word, allowTabs, keepBody }
+  for (const line of command.split("\n")) {
+    if (active) {
+      if (active.keepBody) kept.push(line);
+      const check = active.allowTabs ? line.replace(/^\t+/, "") : line;
+      if (check === active.word) active = pending.shift() || null;
+      continue;
+    }
+    kept.push(line);
+    HEREDOC_START.lastIndex = 0;
+    let match;
+    while ((match = HEREDOC_START.exec(line))) {
+      pending.push({
+        word: match[3],
+        allowTabs: match[1] === "-",
+        keepBody: lineExecutesHeredocBody(line),
+      });
+    }
+    if (pending.length) active = pending.shift();
+  }
+  return kept.join("\n");
 }
 
 function splitSegments(command) {
@@ -95,7 +175,7 @@ function targetsFromSegment(segment) {
 
 function extractWriteTargets(command) {
   const targets = [];
-  for (const segment of splitSegments(command)) {
+  for (const segment of splitSegments(stripHeredocBodies(command))) {
     targets.push(...targetsFromSegment(segment));
   }
   return targets;

@@ -305,10 +305,12 @@ reflection/serialization registration; a data-model change without a matching mi
 with no consumer; breaking referential integrity on relationship changes. Fold in any impact/blast-radius
 data gathered in Step 2, and any contract mismatch Step 2 found.
 
-## Step 7 — {{tool_write}} plan files
+## Step 7 — Write plan files
 
-{{tool_write}} the master plan file first, then each phase file, into `{session-dir}` (from the prompt's `Session
-dir:`). Use the Step 1 run stamp in every file name. Substitute real values everywhere braces appear.
+Write the master plan file first, then each phase file, into `{session-dir}` (from the prompt's `Session
+dir:`). You have no {{tool_write}} — write each file with a {{tool_shell}} quoted heredoc, one file per call:
+`cat > "{session-dir}/{file}" <<'PLAN_EOF' … PLAN_EOF`. Use the Step 1 run stamp in every file name.
+Substitute real values everywhere braces appear.
 
 | File | Path |
 | --- | --- |
