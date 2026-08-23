@@ -1406,6 +1406,31 @@ test("model router denies a malformed profile", () => {
   }
 });
 
+// The cap is a budget, not a safety rule, so the capped spawn is handed to the
+// user rather than refused: an ask wherever the harness has one, a denial only
+// on Grok, which has none (its PreToolUse decisions are allow/deny and an
+// unknown value fails open, which would drop the gate entirely).
+function assertCapAsked(payload, pattern, target) {
+  const label = `${target}: capped review spawn goes to the user`;
+  if (target === "antigravity") {
+    // force_ask, not ask: plain "ask" honors AGY's always-allow cache, so a user
+    // who once chose always-allow for spawns would never see the question.
+    assert.equal(payload.decision, "force_ask", label);
+    assert.equal(payload.hookSpecificOutput, undefined, "AGY must receive no unknown fields");
+    assert.match(payload.reason, pattern, label);
+    return;
+  }
+  if (target === "grok") {
+    assert.equal(payload.decision, "deny", label);
+    assert.match(payload.reason, pattern, label);
+    assert.match(payload.reason, /Do not start another automatic pass/, label);
+    return;
+  }
+  assert.equal(payload.hookSpecificOutput.permissionDecision, "ask", label);
+  assert.match(payload.hookSpecificOutput.permissionDecisionReason, pattern, label);
+  assert.notEqual(payload.hookSpecificOutput.permissionDecision, "deny", label);
+}
+
 function reviewCapTest(target) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-reviewcap-${target}-`));
   const repo = tempDir;
@@ -1413,19 +1438,40 @@ function reviewCapTest(target) {
   const pluginRoot = pluginRootFor(target);
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess");
   fs.mkdirSync(sessionDir, { recursive: true });
+  const spawnPrompt = (phase) =>
+    `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase: ${phase}.`;
+  const payloadFor = (phase) =>
+    target === "antigravity"
+      ? {
+          cwd: repo,
+          conversationId: "testsess",
+          toolCall: {
+            name: "invoke_subagent",
+            args: {
+              Subagents: [
+                {
+                  Role: "Code Reviewer",
+                  TypeName: "ultracode-code-reviewer",
+                  Prompt: spawnPrompt(phase),
+                },
+              ],
+            },
+          },
+        }
+      : {
+          cwd: repo,
+          session_id: "testsess",
+          tool_input: {
+            subagent_type: "ultracode:code-reviewer",
+            prompt: spawnPrompt(phase),
+          },
+        };
+  const env =
+    target === "antigravity"
+      ? { PLUGIN_ROOT: pluginRoot, ANTIGRAVITY_PLUGIN_ROOT: pluginRoot }
+      : { PLUGIN_ROOT: pluginRoot };
   const run = (phase) =>
-    runHook(
-      path.join(pluginRoot, "hooks", "review-cap.js"),
-      {
-        cwd: repo,
-        session_id: "testsess",
-        tool_input: {
-          subagent_type: "ultracode:code-reviewer",
-          prompt: `Repo root: ${repo}.\nSession dir: ${sessionDir}.\nPhase: ${phase}.`,
-        },
-      },
-      { PLUGIN_ROOT: pluginRoot },
-    );
+    runHook(path.join(pluginRoot, "hooks", "review-cap.js"), payloadFor(phase), env);
 
   assert.equal(run("1"), ""); // no ledger yet — first pass allowed
 
@@ -1438,7 +1484,7 @@ function reviewCapTest(target) {
   assert.equal(run("1"), ""); // 2 prior iterations — still allowed
 
   fs.appendFileSync(ledgerPath, "\n## Iteration 3 (context: implementation)\n", "utf-8");
-  assertDenied(JSON.parse(run("1")), /review loop cap reached \(3\/3\) for phase 1 /);
+  assertCapAsked(JSON.parse(run("1")), /review loop cap reached \(3\/3\) for phase 1 /, target);
 
   // A different loop keeps its own count: phase 1 being exhausted must not cap
   // phase 2's first review, nor phase 1's closing test review.
@@ -1449,14 +1495,19 @@ function reviewCapTest(target) {
   // ...and each of those caps on its own ledger.
   const testLedger = path.join(sessionDir, "ultracode-review-ledger-phase-1-tests.md");
   fs.writeFileSync(testLedger, "## Iteration 1\n## Iteration 2\n## Iteration 3\n", "utf-8");
-  assertDenied(JSON.parse(run("1-tests")), /review loop cap reached \(3\/3\) for phase 1-tests /);
+  assertCapAsked(
+    JSON.parse(run("1-tests")),
+    /review loop cap reached \(3\/3\) for phase 1-tests /,
+    target,
+  );
   assert.equal(run("2"), ""); // phase 2 still untouched by either exhausted loop
 }
 
-test("review-cap denies a 4th code-review iteration", () => {
+test("review-cap puts a 4th code-review iteration to the user", () => {
   reviewCapTest("claude");
   reviewCapTest("codex");
   reviewCapTest("grok");
+  reviewCapTest("antigravity");
 });
 
 function sessionGuardTest(target) {

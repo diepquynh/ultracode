@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 // Enforce the review-loop cap for every code-reviewer spawn in a tool call.
+//
+// The cap stops the loop from spinning on its own budget; it is not a safety
+// rule, and a 4th pass is sometimes exactly what the work needs. So the spawn
+// past the cap is put to the user rather than refused: the hook asks, and the
+// pass runs or does not by their answer. The reason doubles as the orchestrator's
+// hint — on a rejection (and in headless runs, where nobody can be prompted) it
+// comes back as the tool-call failure, so the loop stops with the cap named
+// instead of stalling silently. See askPreToolUse in lib/common.js for what each
+// harness does with it.
+//
+// Known gap: the ask does not work on Grok. It has no ask decision — both shapes
+// fail open there, which would delete the cap rather than soften it — so Grok
+// gets the denial below and its user cannot approve a 4th pass at the prompt at
+// all; only the orchestrator can put that question to them.
 
 "use strict";
 
 const path = require("node:path");
-const { denyPreToolUse, readHookInput, readJsonIfFile, readTextIfFile } = require("./lib/common");
+const { askPreToolUse, readHookInput, readJsonIfFile, readTextIfFile } = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
 const { reviewLedgerName } = require("./lib/ledger-policy");
 
@@ -28,9 +42,14 @@ async function main() {
     const block = readJsonIfFile(path.join(sessionDir, "ultracode-security-block.json"));
     if (block && block.blocked === true) continue;
     const scope = /^\d+(-tests)?$/i.test(phase) ? `phase ${phase} of repo key` : "repo key";
-    denyPreToolUse(
+    const capped =
       `ultracode: review loop cap reached (${iterations.length}/${MAX_ITERATIONS}) for ${scope} ` +
-        `"${spawn.repoKey}". Report the remaining findings instead of starting another automatic pass.`,
+      `"${spawn.repoKey}".`;
+    askPreToolUse(
+      `${capped} Approve to spend one more pass on it, or reject to end the loop — rejecting means ` +
+        "the findings still open get reported to you as they stand rather than fixed automatically.",
+      `${capped} Do not start another automatic pass: report the findings still open to the user, ` +
+        "and let them decide whether another review pass is worth it.",
     );
     return 0;
   }

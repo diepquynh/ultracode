@@ -36,7 +36,9 @@ a model reading a sentence about a gate. That's your 11pm discipline problem aga
 right until there's a plausible reason not to.
 
 So the rules that matter don't live in a prompt. They're `PreToolUse` hooks that deny the call outright. A model
-can talk itself past a sentence; it can't talk itself past a denied tool call.
+can talk itself past a sentence; it can't talk itself past a denied tool call. One of them is a budget rather
+than a safety rule — the review-loop cap — and that one asks you instead of refusing: the harness prompts, and
+the extra pass runs only if you say so.
 
 | Rule | Enforced by |
 | --- | --- |
@@ -45,7 +47,7 @@ can talk itself past a sentence; it can't talk itself past a denied tool call.
 | A `BLOCKER` security finding can't be waived — not by the orchestrator, not by you | `security-block.js` |
 | Each leaf write stays inside the work `Repo root:` (plus the primary session dir for reports); phase path lists are hints, not allowlists | `spawn-scope.js` records work-repo identity + phase hints; `scope-guard.js` and `bash-scope-guard.js` hold the roots |
 | Spec and plan files are never hand-edited — a change re-spawns the agent that owns the file | `artifact-guard.js` |
-| The review loop caps at 3 iterations instead of spinning | `review-cap.js` |
+| The review loop stops auto-iterating at 3 instead of spinning — a 4th pass is put to you, not taken | `review-cap.js` |
 | A subagent that has failed its build 5 times running is refused the 6th and must hand back `STUCK:` | `build-streak.js` counts; `build-streak-gate.js` refuses |
 
 That last one came out of counting rather than taste. Across 912 recorded subagent runs, 15 of them — 1.6% —

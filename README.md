@@ -79,6 +79,7 @@ that helps them learn and improve, just like humans :p
 - [Installation](docs/installation.md)
 - [Architecture](docs/architecture.md)
 - [Agents](docs/agents.md)
+- [Harness limitations](docs/harness-limitations.md)
 - [Model routing](docs/model-routing.md)
 - [Tested models](docs/tested-models.md)
 - [Definition authoring](docs/definitions.md)

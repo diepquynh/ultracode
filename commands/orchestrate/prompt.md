@@ -612,7 +612,12 @@ rules. Both:
 
 Do not exit with unresolved HIGH/MEDIUM findings. **Cap at 3 iterations per loop** for HIGH/MEDIUM/LOW — the cap
 counts the iterations in that loop's own ledger, so each phase, and each phase's test loop, starts at zero; if
-findings remain, report them to the user and ask how to proceed. Do not auto-run a 4th for those.
+findings remain, report them to the user and ask how to proceed. Do not auto-run a 4th for those: the 4th spawn
+is not yours to make. `hooks/review-cap.js` turns it into a question for the **user** — the harness prompts them
+to approve or reject that pass — so a 4th that you launch without asking first takes their decision by surprise.
+Ask them yourself, with the open findings in hand; if they choose another pass, spawn it and the prompt is theirs
+to confirm. If the spawn comes back refused with the cap named (a rejection, or a run with no one to prompt),
+that is the answer: stop the loop and report the findings as they stand.
 `BLOCKER` findings have no iteration cap and no "ask how to proceed".
 
 ## Hard rules

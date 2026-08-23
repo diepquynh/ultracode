@@ -98,6 +98,46 @@ function denyPreToolUse(reason) {
   emit(payload);
 }
 
+// Hands the decision to the user instead of making it in the hook: the harness
+// prompts, and the call runs or not by their answer. For a gate that is a budget
+// rather than a safety rule — the review-loop cap — a refusal the user cannot
+// overturn is the wrong shape; a denial is still right for anything unwaivable.
+//
+// Verified live on 2026-08-23 against Claude Code 2.1.220 and Antigravity CLI
+// 1.1.18:
+//   - Claude honors `permissionDecision: "ask"` even under
+//     --dangerously-skip-permissions: a hook's own ask result is returned as the
+//     decision before bypassPermissions mode can turn it into an allow. In
+//     headless `-p` runs, where there is no one to prompt, it lands as a denial
+//     carrying this reason, so the orchestrator still learns the cap was reached.
+//   - Antigravity takes a top-level decision and offers both "ask" and
+//     "force_ask". This uses force_ask: plain "ask" honors the always-allow
+//     cache, so a user who once chose always-allow for subagent spawns would
+//     never be shown the question. Measured with an allow-rule in place: a
+//     silent hook let the call through, force_ask forced the confirmation.
+//   - Grok has no ask at all — its PreToolUse decisions are allow/deny, and an
+//     unknown value fails open, which would drop the gate entirely. There it
+//     denies with `denyReason`, which should tell the orchestrator to put the
+//     same question to the user itself rather than re-spawning.
+function askPreToolUse(askReason, denyReason) {
+  if (isAntigravity()) {
+    emit({ decision: "force_ask", reason: askReason });
+    return;
+  }
+  if (isGrok()) {
+    denyPreToolUse(denyReason || askReason);
+    return;
+  }
+  emit({
+    reason: askReason,
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "ask",
+      permissionDecisionReason: askReason,
+    },
+  });
+}
+
 // Blocks a UserPromptExpansion (a user typing a skill/command's slash form
 // directly, e.g. "/ultracode:orchestrate") — a different code path from a
 // model-issued tool call, so PreToolUse hooks never see it. This event's
@@ -390,6 +430,7 @@ module.exports = {
   harnessAdapter,
   isAntigravity,
   denyPreToolUse,
+  askPreToolUse,
   denyUserPromptExpansion,
   emitAdditionalContext,
   field,

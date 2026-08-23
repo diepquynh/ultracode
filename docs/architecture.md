@@ -193,7 +193,8 @@ Some channels are structured rather than prose:
   through its own file (`ultracode-review-ledger-phase-{N}.md`, `…-phase-{N}-tests.md`) named by the
   `Phase:` the spawn carries. `code-reviewer` logs findings (`F1`, `F2`…); `implement`/`write-test` responds
   `FIXED`/`WONTFIX` with a rationale; the reviewer re-raises or closes on the next pass. Capped so it can't
-  spin forever — per loop, so an exhausted loop never caps the next one before it runs.
+  spin forever — per loop, so an exhausted loop never caps the next one before it runs. At the cap the next
+  spawn is put to the user (`review-cap.js` asks rather than denies), so a 4th pass is spent only on request.
 - **JSON findings** — `code-reviewer` returns one machine-parseable object so the orchestrator can split
   findings by severity and rule ID. **Auto-fixable** findings carry an exact replacement the orchestrator
   applies directly, skipping a fix-agent round trip.
@@ -246,19 +247,7 @@ skill set. A user-approval gate sits between scouting and generation.
     `spawn-scope.json` as a hint for implementers — skills may require companion files the plan omitted — not
     as a write allowlist. `currentActor()` prefers transcript `Repo root:` / `Repo key:` / `Session dir:` over
     the harness cwd so a Claude secondary-repo implement is not confined to the primary checkout.
-  - **Current harness limitations (live, 2026-08-22):**
-    - Claude Code 2.1.220 and Antigravity CLI 1.1.18 dispatch Ultracode plugin spawn hooks. Claude rewrites must
-      live only in `hookSpecificOutput.updatedInput` — a top-level `overwrite` fails Claude's hook schema and is
-      discarded. Claude's `Agent` tool is async by default: `PostToolUse:Agent` sees only the launch ack
-      (`Async agent launched successfully…`), so `hooks/factcheck-record.js` also registers on `SubagentStop`
-      (`matcher: ^ultracode:fact-check$`) and records from `last_assistant_message` plus the leaf transcript's
-      spawn prompt. Claude leaf `PostToolUse` Bash events also often omit `agent_type`, so `build-streak.js` /
-      `build-streak-gate.js` cannot attribute failures inside a forked implement/write-test turn even when the
-      matching PreToolUse Bash call carried the actor.
-    - Grok CLI 1.0.5 currently discovers the Ultracode plugin (`has_hooks=true`) but expands **zero** plugin
-      handlers into its runtime registry (`total_hooks=0`), so parent Bash/Write denials never fire either —
-      this is broader than the earlier spawn-only bypass. Separately, Grok honors top-level `{decision:"deny"}`
-      and fail-opens on Claude-style `hookSpecificOutput.permissionDecision`; Ultracode emits the Grok shape.
-    - Codex CLI 0.147.0 still does not dispatch plugin handlers for native `spawn_agent` (parent Bash/Write
-      hooks can still fire once trusted). Generated leaf prompts therefore repeat the parameter contract and
-      fail before their first tool call when a required line is missing.
+  - What each harness does *not* dispatch or honor — which spawn hooks reach it, which output shapes it
+    discards, and whether a hook can hand a decision back to the user at all — is measured per CLI in
+    [Harness limitations](harness-limitations.md). Read it before assuming a guard written here is enforced
+    everywhere.
