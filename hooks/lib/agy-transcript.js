@@ -39,7 +39,7 @@
 "use strict";
 
 const fs = require("node:fs");
-const { agentFromToolInput, bareAgentName, extractJsonObject, field } = require("./common");
+const { agentFromToolInput, extractJsonObject, field } = require("./common");
 
 const SPAWN_TOOLS = new Set(["invoke_subagent", "spawn_subagent"]);
 const UUID = "[0-9a-fA-F-]{8,}";
@@ -175,41 +175,15 @@ function subagentVerdicts(transcriptPath) {
   return records;
 }
 
-// Who THIS conversation is, for a hook running inside a subagent's own AGY
-// conversation.
-//
-// AGY sends no `agent_type` (the field every other harness adds inside a
-// subagent's turn) and no session context: a hook firing on the subagent's own
-// build command sees only that conversation's id, which is not the pipeline's
-// session id. Every per-agent hook was therefore inert inside AGY subagents —
-// build-streak counted nothing, and its escalation gate could never fire.
-//
-// The identity comes from the spawn prompt, which is this conversation's own first
-// step: hooks/model-router.js stamps `Ultracode agent:` into every AGY spawn it
-// routes, alongside the `Repo root:`/`Session dir:` lines the orchestrator already
-// writes. Read back here, that gives a hook its agent name and the session dir the
-// pipeline actually uses. A prompt without the stamp yields nulls — callers then
-// behave exactly as they did before, rather than guessing.
-function selfContext(transcriptPath) {
-  const steps = readTranscript(transcriptPath);
-  const first = steps.find((step) => step && step.type === "USER_INPUT" && contentOf(step));
-  const content = first ? contentOf(first) : "";
-  if (!content) return { agent: "", sessionDir: "", repoRoot: "", repoKey: "", primaryRepoRoot: "" };
-  return {
-    agent: bareAgentName(field(content, "Ultracode agent")),
-    sessionDir: field(content, "Session dir"),
-    repoRoot: field(content, "Repo root"),
-    repoKey: field(content, "Repo key"),
-    primaryRepoRoot: field(content, "Ultracode primary repo"),
-  };
-}
-
 // What a tool call printed, for the PostToolUse hooks AGY leaves empty-handed: its
 // payload reports `stepIdx` and (on failure) `error`, never the output. In the
 // transcript the output is the result step's content — "The command exited with
 // code 0.\nOutput:\n…" — and `stepIdx` is that step's own index. The step before
 // it is checked too, since a harness that numbered the call rather than the result
 // would otherwise silently return nothing.
+//
+// Leaf spawn identity (`Repo root:` / `Session dir:` / `Repo key:` / agent stamp)
+// is harness-shared and lives in spawn-identity.js — not here.
 function toolResultText(transcriptPath, stepIdx) {
   if (typeof stepIdx !== "number") return "";
   const steps = readTranscript(transcriptPath);
@@ -226,7 +200,6 @@ function toolResultText(transcriptPath, stepIdx) {
 module.exports = {
   subagentMessages,
   subagentVerdicts,
-  selfContext,
   toolResultText,
   readTranscript,
 };

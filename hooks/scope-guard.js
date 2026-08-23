@@ -6,6 +6,7 @@
 const path = require("node:path");
 const {
   denyPreToolUse,
+  isInside,
   readHookInput,
   readJsonIfFile,
   resolvePathCandidate,
@@ -13,7 +14,7 @@ const {
 } = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
 const { sessionBaseDir } = require("./lib/session");
-const { checkScope, scopeRecordFor } = require("./lib/scope-policy");
+const { checkScope, resolveWriteScope } = require("./lib/scope-policy");
 
 async function main() {
   const hookInput = await readHookInput();
@@ -25,18 +26,19 @@ async function main() {
   const filePath = writePathFromToolInput(context.toolInput);
   if (!filePath) return 0;
 
-  const repoRoot = path.resolve(actor.repoRoot);
-  const target = resolvePathCandidate(repoRoot, filePath);
+  // Resolve against the primary session first so a report path under the primary
+  // checkout is absolute before we pick the work-repo root for code writes.
+  const provisional = resolvePathCandidate(sessionRoot, filePath);
   const state = readJsonIfFile(path.join(sessionRoot, "spawn-scope.json"));
+  const { declaredScope, workRepoRoot } = resolveWriteScope(state, actor, provisional);
+  const target = isInside(workRepoRoot, provisional)
+    ? provisional
+    : resolvePathCandidate(workRepoRoot, filePath);
   const { allowed, reason } = checkScope(actor.agent, target, {
-    repoRoot,
+    repoRoot: workRepoRoot,
     sessionDir: sessionRoot,
     info: context.targetInfo,
-    declaredScope: scopeRecordFor(state, {
-      agent: actor.agent,
-      repoKey: actor.repoKey,
-      repoRoot,
-    }),
+    declaredScope,
   });
   if (!allowed) {
     denyPreToolUse(

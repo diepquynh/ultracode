@@ -15,6 +15,7 @@ const {
   hookToolInput,
   hookToolResponse,
   hookTranscriptPath,
+  isDirectory,
   knownAgents,
 } = require("./common");
 const {
@@ -26,6 +27,7 @@ const {
   sessionBaseDir,
 } = require("./session");
 const { parseParameters } = require("./subagent-params");
+const { spawnContextFromTranscript } = require("./spawn-identity");
 
 class HookContext {
   constructor(hookInput) {
@@ -76,35 +78,44 @@ class HookContext {
     };
   }
 
+  #spawnPromptContext() {
+    const transcriptPath = hookTranscriptPath(this.input);
+    if (!transcriptPath) return null;
+    return spawnContextFromTranscript(transcriptPath);
+  }
+
+  // Actor for a leaf tool call. Claude/Codex/Grok often supply agent_type on the
+  // hook payload but still leave cwd/project rooted at the primary checkout; the
+  // spawn prompt (via transcript) is what names the work Repo root / Repo key /
+  // Session dir. Always prefer those declared lines when present so secondary-repo
+  // implement/write-test can write code under the work checkout while reports stay
+  // under the primary session root.
   currentActor() {
     const declared = bareAgentName(hookAgentType(this.input));
+    const self = this.#spawnPromptContext();
+    const promptRepoRoot =
+      self && self.repoRoot && isDirectory(self.repoRoot) ? path.resolve(self.repoRoot) : "";
+    const promptSessionDir = self && self.sessionDir ? path.resolve(self.sessionDir) : "";
+    const promptRepoKey = normalizeRepoKey(self && self.repoKey);
+
     if (declared) {
       return {
         agent: declared,
-        repoRoot: resolveRepoRoot(this.input, ""),
-        repoKey: "",
-        sessionDir: this.sessionRoot,
-        source: "payload",
+        repoRoot: promptRepoRoot || resolveRepoRoot(this.input, ""),
+        repoKey: promptRepoKey,
+        sessionDir: promptSessionDir || this.sessionRoot,
+        source: promptRepoRoot || promptSessionDir || promptRepoKey ? "payload+transcript" : "payload",
       };
     }
 
-    const transcriptPath = hookTranscriptPath(this.input);
-    if (transcriptPath) {
-      try {
-        const { selfContext } = require("./agy-transcript");
-        const self = selfContext(transcriptPath);
-        if (self.agent) {
-          return {
-            agent: self.agent,
-            repoRoot: self.repoRoot || resolveRepoRoot(this.input, ""),
-            repoKey: normalizeRepoKey(self.repoKey),
-            sessionDir: self.sessionDir || this.sessionRoot,
-            source: "transcript",
-          };
-        }
-      } catch {
-        // No transcript context: return an explicit empty actor below.
-      }
+    if (self && self.agent) {
+      return {
+        agent: self.agent,
+        repoRoot: promptRepoRoot || resolveRepoRoot(this.input, ""),
+        repoKey: promptRepoKey,
+        sessionDir: promptSessionDir || this.sessionRoot,
+        source: "transcript",
+      };
     }
 
     return {

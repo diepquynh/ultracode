@@ -94,15 +94,26 @@ function isTestPath(targetPath) {
   return TEST_DIR_PATTERN.test(normalized) || TEST_FILE_PATTERN.test(base);
 }
 
-function scopeRecordFor(state, { agent, repoKey = "", repoRoot = "" }) {
+function scopeRecordFor(state, { agent, repoKey = "", repoRoot = "", targetPath = "" }) {
   const scopes = state && state.scopes && state.scopes[agent];
   if (scopes && typeof scopes === "object") {
     if (repoKey && scopes[repoKey]) return scopes[repoKey];
-    const records = Object.values(scopes);
+    const records = Object.values(scopes).filter((record) => record && typeof record === "object");
+    // Prefer the spawn whose recorded work-repo contains the write target. Cross-repo
+    // sessions keep several implement/write-test scopes under one spawn-scope.json; a
+    // blank actor.repoKey used to fall through to the first/primary record and confine
+    // a secondary-repo spawn to the wrong phase file.
+    if (targetPath) {
+      const resolvedTarget = path.resolve(targetPath);
+      const byTarget = records.find(
+        (record) => record.repoRoot && isInside(path.resolve(record.repoRoot), resolvedTarget),
+      );
+      if (byTarget) return byTarget;
+    }
     if (repoRoot) {
       const resolvedRoot = path.resolve(repoRoot);
       const match = records.find(
-        (record) => record && record.repoRoot && path.resolve(record.repoRoot) === resolvedRoot,
+        (record) => record.repoRoot && path.resolve(record.repoRoot) === resolvedRoot,
       );
       if (match) return match;
     }
@@ -111,8 +122,28 @@ function scopeRecordFor(state, { agent, repoKey = "", repoRoot = "" }) {
   return (state && state.agents && state.agents[agent]) || null;
 }
 
+// Work-repo root + declared phase scope for one write. Guards use this so a
+// secondary-repo spawn can write code under its own checkout while reports stay
+// under the primary session dir, even when the harness payload only names the
+// primary project as cwd/agent context.
+function resolveWriteScope(state, actor, targetPath) {
+  const declaredScope = scopeRecordFor(state, {
+    agent: actor.agent,
+    repoKey: actor.repoKey || "",
+    repoRoot: actor.repoRoot || "",
+    targetPath,
+  });
+  const workRepoRoot = path.resolve(
+    (declaredScope && declaredScope.repoRoot) || actor.repoRoot || process.cwd(),
+  );
+  return { declaredScope, workRepoRoot };
+}
+
 // Returns { allowed: true } or { allowed: false, reason }. `targetPath` must
 // already be an absolute, resolved path. `ctx` = { repoRoot, sessionDir, info }.
+//
+// Cross-repo spawns safeguard two roots, not one: `sessionDir` (primary pipeline
+// artifacts / reports) and `repoRoot` (the work checkout named by `Repo root:`).
 function checkScope(agent, targetPath, ctx) {
   const { repoRoot, sessionDir, info } = ctx;
 
@@ -126,11 +157,12 @@ function checkScope(agent, targetPath, ctx) {
     };
   }
 
-  if (!isInside(repoRoot, targetPath)) {
+  // Reports live under the primary session dir, which may sit outside the work repo.
+  if (sessionDir && isInside(sessionDir, targetPath)) return { allowed: true };
+
+  if (!repoRoot || !isInside(repoRoot, targetPath)) {
     return { allowed: false, reason: `outside the repo root ("${repoRoot}")` };
   }
-
-  if (isInside(sessionDir, targetPath)) return { allowed: true };
 
   const extra = EXTRA_ALLOWED_SUBTREES[agent];
   if (extra) {
@@ -179,6 +211,7 @@ module.exports = {
   EXTRA_ALLOWED_SUBTREES,
   isTestPath,
   scopeRecordFor,
+  resolveWriteScope,
   checkScope,
   declaredPathsFrom,
   withinDeclaredScope,

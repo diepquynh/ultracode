@@ -8,6 +8,7 @@ const path = require("node:path");
 const {
   commandFromToolInput,
   denyPreToolUse,
+  isInside,
   readHookInput,
   readJsonIfFile,
   resolvePathCandidate,
@@ -15,7 +16,7 @@ const {
 const { HookContext } = require("./lib/hook-context");
 const { sessionBaseDir } = require("./lib/session");
 const { checkLedger } = require("./lib/ledger-policy");
-const { checkScope, scopeRecordFor } = require("./lib/scope-policy");
+const { checkScope, resolveWriteScope } = require("./lib/scope-policy");
 const { extractWriteTargets } = require("./lib/shell-paths");
 
 async function main() {
@@ -38,18 +39,16 @@ async function main() {
 
   const sessionRoot = actor.sessionDir ? sessionBaseDir(actor.sessionDir) : context.sessionRoot;
   if (!actor.agent || !context.targetInfo || !sessionRoot) return 0;
-  const repoRoot = path.resolve(actor.repoRoot);
   const state = readJsonIfFile(path.join(sessionRoot, "spawn-scope.json"));
-  const declaredScope = scopeRecordFor(state, {
-    agent: actor.agent,
-    repoKey: actor.repoKey,
-    repoRoot,
-  });
 
   for (const candidate of writeTargets) {
-    const target = resolvePathCandidate(repoRoot, candidate);
+    const provisional = resolvePathCandidate(sessionRoot, candidate);
+    const { declaredScope, workRepoRoot } = resolveWriteScope(state, actor, provisional);
+    const target = isInside(workRepoRoot, provisional)
+      ? provisional
+      : resolvePathCandidate(workRepoRoot, candidate);
     const { allowed, reason } = checkScope(actor.agent, target, {
-      repoRoot,
+      repoRoot: workRepoRoot,
       sessionDir: sessionRoot,
       info: context.targetInfo,
       declaredScope,

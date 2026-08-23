@@ -2888,6 +2888,173 @@ test("phase-scoped allowlist confines implement to the files its phase declares"
   phaseScopeTest("grok");
 });
 
+// Cross-repo implement safeguards two roots: reports under the primary session
+// dir, code under the work-repo checkout named by Repo root: / spawn-scope.
+function crossRepoScopeTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo: primary, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-crossrepo",
+  );
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-crossrepo-work-${target}-`));
+  fs.mkdirSync(path.join(work, "src", "pallet_ai_lambda", "registry"), { recursive: true });
+  fs.mkdirSync(path.join(work, runtimeDir), { recursive: true });
+  fs.mkdirSync(path.join(primary, "src"), { recursive: true });
+  fs.mkdirSync(path.join(sessionDir, "backend"), { recursive: true });
+  fs.writeFileSync(
+    path.join(primary, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "./mvnw compile" } }),
+    "utf-8",
+  );
+  fs.writeFileSync(
+    path.join(work, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "uv sync" } }),
+    "utf-8",
+  );
+
+  const phaseFile = path.join(sessionDir, "ultracode-phase-6-livestream-moderation-prompt.md");
+  fs.writeFileSync(
+    phaseFile,
+    [
+      "# Phase 6 — livestream moderation prompt",
+      "Modify `src/pallet_ai_lambda/registry/prompt_const.py`.",
+      "Modify `src/pallet_ai_lambda/registry/user_prompts.py`.",
+    ].join("\n\n"),
+    "utf-8",
+  );
+  const workSessionDir = path.join(sessionDir, "ai-lambda");
+  fs.mkdirSync(workSessionDir, { recursive: true });
+
+  const base = { cwd: primary, session_id: sessionId, sessionId };
+  const hook = (name) => path.join(pluginRoot, "hooks", name);
+  const reasonOf = (out) => (out.trim() ? denyReason(JSON.parse(out)) : null);
+
+  // Record BOTH a primary-repo phase and the secondary-repo phase so a blank
+  // actor.repoKey used to latch onto the wrong declared file set.
+  const backendPhase = path.join(sessionDir, "ultracode-phase-1-backend.md");
+  fs.writeFileSync(
+    backendPhase,
+    "# Phase 1\n\nModify `src/App.java`.\n",
+    "utf-8",
+  );
+  runHook(
+    hook("spawn-scope.js"),
+    {
+      ...base,
+      tool_input: {
+        subagent_type: "ultracode:implement",
+        prompt: `Primary repo root: ${primary}\nRepo root: ${primary}\nSession dir: ${sessionDir}/backend\nRepo key: backend\nPhase file: ${backendPhase}`,
+      },
+    },
+    env,
+  );
+  runHook(
+    hook("spawn-scope.js"),
+    {
+      ...base,
+      tool_input: {
+        subagent_type: "ultracode:implement",
+        prompt: `Primary repo root: ${primary}\nRepo root: ${work}\nSession dir: ${workSessionDir}\nRepo key: ai-lambda\nPhase file: ${phaseFile}`,
+      },
+    },
+    env,
+  );
+
+  const write = (filePath, extra = {}) =>
+    reasonOf(
+      runHook(
+        hook("scope-guard.js"),
+        {
+          ...base,
+          agent_type: "ultracode:implement",
+          tool_input: { file_path: filePath },
+          ...extra,
+        },
+        env,
+      ),
+    );
+  const bash = (command, extra = {}) =>
+    reasonOf(
+      runHook(
+        hook("bash-scope-guard.js"),
+        {
+          ...base,
+          agent_type: "ultracode:implement",
+          tool_input: { command },
+          ...extra,
+        },
+        env,
+      ),
+    );
+
+  // Absolute work-repo path: pick the ai-lambda spawn-scope by target, even when
+  // the harness payload only knows the primary cwd/agent_type.
+  assert.equal(write(path.join(work, "src/pallet_ai_lambda/registry/prompt_const.py")), null);
+  assert.equal(write(path.join(workSessionDir, "ultracode-implement-phase-6.md")), null);
+  assert.match(
+    write(path.join(work, "src", "other.py")),
+    /outside the file set this phase declares/,
+  );
+  assert.equal(bash(`echo x > ${path.join(work, "src/pallet_ai_lambda/registry/user_prompts.py")}`), null);
+  // A primary absolute path with no actor repoKey still binds to the primary
+  // spawn-scope record that owns that checkout — undeclared primary files stay denied.
+  assert.match(
+    bash(`echo x > ${path.join(primary, "src", "Evil.java")}`),
+    /outside the file set/,
+  );
+
+  // Claude leaf transcripts carry Repo root / Session dir / Repo key on the first
+  // user turn; currentActor must prefer those over the primary cwd so a secondary
+  // spawn cannot fall through into the primary phase allowlist.
+  const transcriptPath = path.join(sessionDir, "agent-ai-lambda.jsonl");
+  fs.writeFileSync(
+    transcriptPath,
+    `${JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `Primary repo root: ${primary}\n` +
+              `Repo root: ${work}\n` +
+              `Session dir: ${workSessionDir}\n` +
+              `Repo key: ai-lambda\n` +
+              "Implement phase 6.\n",
+          },
+        ],
+      },
+    })}\n`,
+    "utf-8",
+  );
+  assert.equal(
+    write(path.join(work, "src/pallet_ai_lambda/registry/prompt_const.py"), {
+      transcript_path: transcriptPath,
+    }),
+    null,
+  );
+  assert.equal(
+    write(path.join(workSessionDir, "ultracode-implement-progress.md"), {
+      transcript_path: transcriptPath,
+    }),
+    null,
+  );
+  assert.match(
+    write(path.join(primary, "src", "App.java"), { transcript_path: transcriptPath }),
+    /outside the repo root/,
+  );
+  assert.match(
+    bash(`echo x > ${path.join(primary, "src", "App.java")}`, { transcript_path: transcriptPath }),
+    /outside the repo root/,
+  );
+}
+
+test("scope-guard allows primary session reports and secondary work-repo code", () => {
+  crossRepoScopeTest("claude");
+  crossRepoScopeTest("codex");
+  crossRepoScopeTest("grok");
+});
+
 function scopeGuardFixture(target, prefix) {
   const pluginRoot = pluginRootFor(target);
   const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
@@ -3593,6 +3760,7 @@ test("every plugin distribution includes target hooks", () => {
       "ledger-policy.js",
       "plugin-policy.js",
       "agy-transcript.js",
+      "spawn-identity.js",
       "spawn-record.js",
       "build-signal.js",
       "context-brief.js",
