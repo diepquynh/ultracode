@@ -335,15 +335,21 @@ full output.
 
 Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent`
 (`ultracode:implement`), and `content` (the complete markdown below). It writes to the path the orchestrator
-declared for this spawn, so **do not choose a filename and do not {{tool_write}} the report yourself** — the
-code-reviewer, EPA, and write-test agents read that declared path, and a name you invent is a name they cannot
-find.
+declared for this spawn, so **do not choose a filename** — the code-reviewer, EPA, and write-test agents read
+that declared path, and a name you invent is a name they cannot find.
+
+**The declared path is the rule; the tool is not.** If that call stalls, times out, or fails, write the same
+content yourself to the exact `Report file:` path from your prompt — {{tool_write}}, or a {{tool_shell}}
+quoted heredoc (`cat > "{report-file}" <<'REPORT_EOF' … REPORT_EOF`), and for a long report one `>` call
+followed by `>>` calls for the remaining sections. Both routes are accepted at that path and only at that
+path: a report written under any other name in the session dir is refused.
 
 If the tool reports that no path was declared, say so in your return summary and ask the orchestrator for a
 `Report file:` line rather than guessing a name.
 
 If it refuses because you recovered from a build-failure streak without recording the fix, record it first
-(`ultracode_memory` with the same `session_dir`), then call `ultracode_report` again.
+(`ultracode_memory` with the same `session_dir`), then write the report. That gate applies to a hand-written
+report too, so recording the lesson is what unblocks either route.
 
 ```markdown
 # Implementation Report: {Topic Title}

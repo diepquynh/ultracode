@@ -276,6 +276,12 @@ re-walk this step.
 stamp. Do not write an index file. Do not write a second spec file. Substitute real values everywhere braces
 appear.
 
+**Any mechanism may write it; the path is what matters.** A spec is long, and if a single {{tool_write}} call
+stalls, times out, or fails, write the same content with a {{tool_shell}} quoted heredoc
+(`cat > "{session-dir}/{file}" <<'SPEC_EOF' … SPEC_EOF`), one `>` call for the first sections and `>>` calls
+per remaining deliverable. Appending in parts is still one file — it is a second *file* that is prohibited,
+not a second call. Whichever you use, it must land at that exact path under the `Session dir:` you were given.
+
 ````markdown
 # Specification: {Topic Title}
 

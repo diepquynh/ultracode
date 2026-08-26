@@ -418,7 +418,9 @@ so long as they stay on the phase's intent and list every extra path in the chan
 **You name each report, not the agent.** For `ultracode:implement`, `ultracode:write-test`,
 `ultracode:execution-path-analyzer` and `ultracode:module-documentation`, add a
 `Report file: {session-dir}/{name}.md` line; those agents write it through `ultracode_report`, which uses that
-exact path. Choose a name the next stage can predict from the phase — e.g.
+exact path, or — when that call stalls — with their own write tool or a shell heredoc, which the hooks hold to
+that same path. Either way the report lands where you said, so read the path you declared and treat a report
+written by hand there as normal. Choose a name the next stage can predict from the phase — e.g.
 `ultracode-implement-phase-3.md`, `ultracode-epa-phase-3.md`, `ultracode-write-test-phase-3.md` — and reuse
 the same stem across a phase's stages. Agents naming their own reports is why the same output has appeared as
 `ultracode-implement-phase-3.md`, `ultracode-implement-20260818-125425-lambda-yaml-phase-2.md` and

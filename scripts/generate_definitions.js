@@ -47,6 +47,7 @@ const COMMON_HOOK_FILES = [
   "lib/session.js",
   "lib/scope-policy.js",
   "lib/ledger-policy.js",
+  "lib/report-policy.js",
   "lib/plugin-policy.js",
   "lib/agy-transcript.js",
   "lib/spawn-identity.js",

@@ -59,7 +59,10 @@ failures before returning. Skip for SKILL.md/agent files.
 ## Step 7 — Report and return
 
 {{tool_write}} `{session-dir}/ultracode-prompt-gen-*.md` with a Files Changed table and self-review results. Return the
-report path, a one-sentence summary, and the list of files changed.
+report path, a one-sentence summary, and the list of files changed. If that {{tool_write}} call stalls, times
+out, or fails, write the same report with a {{tool_shell}} quoted heredoc
+(`cat > "{session-dir}/{file}" <<'REPORT_EOF' … REPORT_EOF`) — the report must land under the `Session dir:`
+you were given, but any mechanism may put it there.
 
 ## Constraints
 

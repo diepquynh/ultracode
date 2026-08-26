@@ -143,11 +143,15 @@ command once; read its output and fix any failure it surfaces in a file you touc
 `null`, skip formatting.
 
 Write the output report with **`ultracode_report`** — `session_dir` (the prompt's `Session dir:`), `agent`
-(`ultracode:module-documentation`), `content` (the markdown below). It owns the filename; do not choose one
-and do not {{tool_write}} the report yourself. If no path was declared for this spawn, say so in your return
-summary and ask the orchestrator for a `Report file:` line. This applies only to the report — the reference
-files under `{{skills_dir}}/module-hub/references/` are still written with {{tool_write}}/{{tool_edit}} as in
-Step 5.
+(`ultracode:module-documentation`), `content` (the markdown below). It resolves the declared filename; do not
+choose one. If no path was declared for this spawn, say so in your return summary and ask the orchestrator for
+a `Report file:` line.
+
+**The declared path is the rule; the tool is not.** If that call stalls, times out, or fails, write the same
+content yourself to the exact `Report file:` path — {{tool_write}}, or a {{tool_shell}} quoted heredoc
+(`cat > "{report-file}" <<'DOC_EOF' … DOC_EOF`), appending with `>>` if it is long. Both routes are accepted
+at that path and only at that path. This all concerns the report only — the reference files under
+`{{skills_dir}}/module-hub/references/` are still written with {{tool_write}}/{{tool_edit}} as in Step 5.
 ```markdown
 # Module Documentation Report
 **Date:** {YYYY-MM-DD} · **Pipeline position:** final (post-review)

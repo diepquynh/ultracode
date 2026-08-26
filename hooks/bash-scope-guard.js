@@ -17,6 +17,7 @@ const { HookContext } = require("./lib/hook-context");
 const { sessionBaseDir } = require("./lib/session");
 const { checkLedger } = require("./lib/ledger-policy");
 const { checkScope, resolveWriteScope } = require("./lib/scope-policy");
+const { checkReportWrite } = require("./lib/report-policy");
 const { extractWriteTargets } = require("./lib/shell-paths");
 
 async function main() {
@@ -57,6 +58,17 @@ async function main() {
       denyPreToolUse(
         `ultracode: refusing this shell command for ultracode:${actor.agent} — it writes, moves, or deletes ` +
           `"${candidate}", which is ${reason}.`,
+      );
+      return 0;
+    }
+
+    // A shell heredoc is a legitimate way to produce a report — the declared path
+    // is the constraint, not the tool that writes it.
+    const report = checkReportWrite(actor.agent, target, { sessionRoot, declaredScope, state });
+    if (!report.allowed) {
+      denyPreToolUse(
+        `ultracode: refusing this shell command for ultracode:${actor.agent} — it writes "${candidate}", ` +
+          `which is ${report.reason}.`,
       );
       return 0;
     }

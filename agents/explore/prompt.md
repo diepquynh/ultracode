@@ -209,7 +209,13 @@ page answers, or wrote a question with no options → re-walk this step.
 
 ## Step 7 — {{tool_write}} the research document
 
-{{tool_write}} to `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`, using the Step 1 run stamp:
+{{tool_write}} to `{session-dir}/ultracode-research-{run-stamp}-{topic-slug}.md`, using the Step 1 run stamp.
+
+**Any mechanism may write it; the path is what matters.** If a single large {{tool_write}} call stalls, times
+out, or fails, write the same content with a {{tool_shell}} quoted heredoc
+(`cat > "{session-dir}/{file}" <<'DOC_EOF' … DOC_EOF`), one `>` call for the first sections and `>>` calls for
+the rest. Whichever you use, the file must land at that exact path under the `Session dir:` you were given —
+never elsewhere, and never under another repo key's subdirectory.
 
 ```markdown
 # Research: {Topic}
@@ -247,7 +253,8 @@ Open questions live **only** here. The criteria document references them by numb
 
 ## Step 8 — {{tool_write}} the criteria document
 
-{{tool_write}} to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using the same Step 1 run stamp:
+{{tool_write}} to `{session-dir}/ultracode-criteria-{run-stamp}-{topic-slug}.md`, using the same Step 1 run
+stamp and the same choice of mechanisms as Step 7:
 
 ```markdown
 # Requirement Criteria: {Topic}

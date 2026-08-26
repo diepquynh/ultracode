@@ -15,6 +15,7 @@ const {
 const { HookContext } = require("./lib/hook-context");
 const { sessionBaseDir } = require("./lib/session");
 const { checkScope, resolveWriteScope } = require("./lib/scope-policy");
+const { checkReportWrite } = require("./lib/report-policy");
 
 async function main() {
   const hookInput = await readHookInput();
@@ -44,6 +45,15 @@ async function main() {
     denyPreToolUse(
       `ultracode: refusing to let ultracode:${actor.agent} write "${filePath}" — ${reason}. ` +
         "If this file genuinely needs to change, route it through the agent and repo scope that owns it.",
+    );
+    return 0;
+  }
+
+  // Any tool may write the report; the path is what is held fixed.
+  const report = checkReportWrite(actor.agent, target, { sessionRoot, declaredScope, state });
+  if (!report.allowed) {
+    denyPreToolUse(
+      `ultracode: refusing to let ultracode:${actor.agent} write "${filePath}" — it is ${report.reason}.`,
     );
   }
   return 0;

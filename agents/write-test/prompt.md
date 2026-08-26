@@ -192,12 +192,18 @@ After all test files are written, run the profile's full-suite command for the c
 
 Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent` (`ultracode:write-test`),
 and `content` (the complete markdown below). It writes to the path the orchestrator declared for this spawn,
-so **do not choose a filename and do not {{tool_write}} the report yourself** — the code-reviewer reads that
-declared path.
+so **do not choose a filename** — the code-reviewer reads that declared path.
+
+**The declared path is the rule; the tool is not.** If that call stalls, times out, or fails, write the same
+content yourself to the exact `Report file:` path from your prompt — {{tool_write}}, or a {{tool_shell}}
+quoted heredoc (`cat > "{report-file}" <<'REPORT_EOF' … REPORT_EOF`), and for a long report one `>` call
+followed by `>>` calls for the rest. Both routes are accepted at that path and only at that path: a report
+written under any other name in the session dir is refused.
 
 If the tool reports that no path was declared, say so in your return summary and ask the orchestrator for a
 `Report file:` line rather than guessing. If it refuses over an unrecorded failure-recovery lesson, record it
-with `ultracode_memory` (same `session_dir`) and call again.
+with `ultracode_memory` (same `session_dir`) and write the report — that gate applies to a hand-written report
+too.
 
 ```markdown
 # Test Report: {Topic}

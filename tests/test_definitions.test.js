@@ -2894,6 +2894,194 @@ test("ultracode_report writes the declared path and gates on unrecorded lessons"
   reportToolTest("grok");
 });
 
+// A report is often the largest payload a spawn emits, and one stalled write call
+// used to strand the whole spawn behind ultracode_report. So the constraint is the
+// declared path, not the tool that writes it: any mechanism may produce the report
+// as long as it lands exactly where the orchestrator said, with the same lesson
+// gate the tool applies. An invented sibling name stays refused — that is the
+// failure the declared path exists to prevent.
+function handWrittenReportTest(target) {
+  const { pluginRoot, runtimeDir, sessionId, repo, sessionDir, env } = scopeGuardFixture(
+    target,
+    "ultracode-handreport",
+  );
+  fs.writeFileSync(
+    path.join(repo, runtimeDir, "repo-profile.json"),
+    JSON.stringify({ commands: { build: "./mvnw compile" } }),
+    "utf-8",
+  );
+  const agy = target === "antigravity";
+  const reportPath = path.join(sessionDir, "ultracode-implement-phase-3.md");
+  const base = agy
+    ? { cwd: repo, conversationId: sessionId }
+    : { cwd: repo, session_id: sessionId, sessionId };
+  const hook = (name) => path.join(pluginRoot, "hooks", name);
+  const reasonOf = (out) => (out.trim() ? denyReason(JSON.parse(out)) : null);
+  const agent = (name) => (agy ? name.replace("ultracode:", "ultracode-") : name);
+
+  // Each harness names the same three things differently: the spawn envelope, the
+  // write target, and the shell command. Every rule below is asserted through the
+  // shape its own harness actually sends.
+  const spawnPayload = (prompt) =>
+    agy
+      ? {
+          ...base,
+          toolCall: {
+            name: "invoke_subagent",
+            args: { Subagents: [{ TypeName: "ultracode-implement", Prompt: prompt }] },
+          },
+        }
+      : { ...base, tool_input: { subagent_type: "ultracode:implement", prompt } };
+  const writePayload = (filePath, actor) =>
+    agy
+      ? { ...base, agent_type: actor, toolCall: { name: "write_to_file", args: { TargetFile: filePath } } }
+      : { ...base, agent_type: actor, tool_input: { file_path: filePath } };
+  const bashPayload = (command, actor) =>
+    agy
+      ? {
+          ...base,
+          agent_type: actor,
+          toolCall: { name: "run_command", args: { CommandLine: command, Cwd: repo } },
+        }
+      : { ...base, agent_type: actor, tool_input: { command } };
+
+  runHook(
+    hook("spawn-scope.js"),
+    spawnPayload(
+      `Repo root: ${repo}\nSession dir: ${sessionDir}\nRepo key: backend\nNo plan: demo.\n` +
+        `Report file: ${reportPath}`,
+    ),
+    env,
+  );
+
+  const write = (filePath, actor = "ultracode:implement") =>
+    reasonOf(runHook(hook("scope-guard.js"), writePayload(filePath, agent(actor)), env));
+  const bash = (command, actor = "ultracode:implement") =>
+    reasonOf(runHook(hook("bash-scope-guard.js"), bashPayload(command, agent(actor)), env));
+
+  // The declared path is writable by whichever mechanism the agent reaches for.
+  assert.equal(write(reportPath), null, `${target}: write tool may author the declared report`);
+  assert.equal(
+    bash(`cat > "${reportPath}" <<'REPORT_EOF'\n# Implementation Report\nDid the thing.\nREPORT_EOF`),
+    null,
+    `${target}: a heredoc may author the declared report`,
+  );
+  assert.equal(
+    bash(`echo "## More" >> ${reportPath}`),
+    null,
+    `${target}: a long report may be appended in parts`,
+  );
+
+  // A name the agent invented is not, whichever mechanism writes it.
+  const invented = path.join(sessionDir, "ultracode-implement-credentials-uri.md");
+  assert.match(write(invented), /declared for this spawn/, `${target}: invented name refused (write)`);
+  assert.match(bash(`echo x > ${invented}`), /declared for this spawn/, `${target}: invented name refused (shell)`);
+  // Nor is the right basename in the wrong repo-key subdirectory: the next stage
+  // reads the declared path, directory included.
+  assert.match(
+    write(path.join(sessionDir, "frontend", "ultracode-implement-phase-3.md")),
+    /declared for this spawn/,
+    `${target}: the declared directory is part of the path`,
+  );
+
+  // Its own ledgers keep their own ownership rules, and non-artifact scratch is
+  // untouched by this policy.
+  assert.equal(write(path.join(sessionDir, "ultracode-implement-progress.md")), null);
+  assert.equal(write(path.join(sessionDir, "notes.txt")), null);
+  // Another agent's ledger is still ledger-policy's call, not this one's.
+  assert.match(
+    bash(`echo x > ${path.join(sessionDir, "ultracode-security-block.json")}`),
+    /owned by ultracode:code-reviewer/,
+    `${target}: ledger ownership still outranks the report path`,
+  );
+
+  // A second repo key's spawn in the same session declares its own report path.
+  // Both are accepted: a leaf tool call whose `Repo key:` did not survive the
+  // payload must not have its own report read as another repo's invented name.
+  const frontendReport = path.join(sessionDir, "frontend", "ultracode-implement-phase-4.md");
+  runHook(
+    hook("spawn-scope.js"),
+    spawnPayload(
+      `Repo root: ${repo}\nSession dir: ${path.join(sessionDir, "frontend")}\nRepo key: frontend\n` +
+        `No plan: demo.\nReport file: ${frontendReport}`,
+    ),
+    env,
+  );
+  assert.equal(write(frontendReport), null, `${target}: a sibling repo key's declared report is accepted`);
+  assert.equal(write(reportPath), null, `${target}: and so is this spawn's own`);
+
+  // The lesson gate applies to a hand-written report exactly as it does to the tool.
+  // AGY's PostToolUse payload carries no tool result at all, so its build outcome
+  // is read from `error` plus the transcript — the streak has to be driven in that
+  // shape for the gate to be exercised there rather than assumed.
+  const transcriptPath = path.join(repo, "transcript_full.jsonl");
+  let step = 0;
+  const build = (output, failed) => {
+    if (!agy) {
+      return runHook(hook("build-streak.js"), {
+        ...base,
+        agent_type: "ultracode:implement",
+        tool_name: "Bash",
+        tool_input: { command: "./mvnw compile" },
+        tool_response: { result: output, stdout: output, stderr: "", interrupted: false },
+      }, env);
+    }
+    step += 2;
+    fs.writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({ step_index: step, source: "MODEL", type: "GENERIC", content: output })}\n`,
+      "utf-8",
+    );
+    return runHook(hook("build-streak.js"), {
+      ...base,
+      agent_type: "ultracode-implement",
+      transcriptPath,
+      stepIdx: step,
+      ...(failed ? { error: "exit status 1" } : {}),
+      toolCall: { name: "run_command", args: { CommandLine: "./mvnw compile", Cwd: repo } },
+    }, env);
+  };
+  const failure = agy
+    ? "The command exited with code 1.\nOutput:\n[ERROR] /r/Foo.java:[11,2] cannot find symbol"
+    : "Exit code 1\n[ERROR] /r/Foo.java:[11,2] cannot find symbol";
+  for (let i = 0; i < 3; i += 1) build(failure, true);
+  build(agy ? "The command exited with code 0.\nOutput:\nBUILD SUCCESS" : "BUILD SUCCESS", false);
+  const gated = write(reportPath);
+  assert.match(gated, /cannot find symbol/, `${target}: unrecorded recovery blocks a hand-written report`);
+  assert.match(gated, /ultracode_memory/);
+  assert.match(gated, /unrecorded_lesson_reason/, `${target}: the override channel is named`);
+  assert.match(bash(`cat > "${reportPath}" <<'EOF'\nx\nEOF`), /cannot find symbol/);
+
+  const { markLessonsRecorded } = require(path.join(pluginRoot, "hooks", "lib", "report-policy.js"));
+  assert.equal(markLessonsRecorded(sessionDir, "implement"), 1);
+  assert.equal(write(reportPath), null, `${target}: recording the lesson unblocks the hand-written report`);
+
+  // An agent whose report path the orchestrator never declared is unaffected: its
+  // prompt tells it to ask for one, and denying here would strand it over the
+  // orchestrator's omission.
+  fs.rmSync(path.join(sessionDir, "spawn-scope.json"));
+  runHook(
+    hook("spawn-scope.js"),
+    spawnPayload(`Repo root: ${repo}\nSession dir: ${sessionDir}\nRepo key: backend\nNo plan: tiny fix.`),
+    env,
+  );
+  assert.equal(write(invented), null, `${target}: no declared path, no constraint to enforce`);
+  // And an agent that names its own artifacts (explore) is never held to one.
+  assert.equal(
+    write(path.join(sessionDir, "ultracode-research-20260826-auth.md"), "ultracode:explore"),
+    null,
+  );
+}
+
+// One test per harness rather than one loop over four: each is independently
+// selectable with --test-name-pattern, so the four can be run as four processes
+// in parallel, and a failure names the harness in the test title.
+for (const harness of ["claude", "codex", "grok", "antigravity"]) {
+  test(`a report may be written by any tool, but only at the declared path (${harness})`, () => {
+    handWrittenReportTest(harness);
+  });
+}
+
 // A Write/Edit inside a subagent's turn carries no spawn prompt, so work-repo
 // identity and the phase path hint are captured at spawn time (spawn-scope.js).
 // The path list is recorded for observability; it is not a write allowlist —

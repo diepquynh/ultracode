@@ -106,9 +106,15 @@ one ID; missing a path means a missing test downstream.
 
 Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent`
 (`ultracode:execution-path-analyzer`), and `content` (the markdown below). It writes to the path the
-orchestrator declared for this spawn, so **do not choose a filename and do not {{tool_write}} the report
-yourself** — the write-test agent reads that declared path. If no path was declared, say so in your return
-summary and ask the orchestrator for a `Report file:` line rather than guessing. Use this template:
+orchestrator declared for this spawn, so **do not choose a filename** — the write-test agent reads that
+declared path. If no path was declared, say so in your return summary and ask the orchestrator for a
+`Report file:` line rather than guessing.
+
+**The declared path is the rule; the tool is not.** If that call stalls, times out, or fails, write the same
+content yourself to the exact `Report file:` path — {{tool_write}}, or a {{tool_shell}} quoted heredoc
+(`cat > "{report-file}" <<'EPA_EOF' … EPA_EOF`), and for a long analysis one `>` call followed by `>>` calls
+per file section. Both routes are accepted at that path and only at that path: any other name in the session
+dir is refused. Use this template:
 
 ```markdown
 # Execution Path Analysis: {Topic}

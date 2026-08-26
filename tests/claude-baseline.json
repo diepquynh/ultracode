@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "e1b536f38028b6b1b3fe8969c8e97d16b8e31e696a22164c3d790126ea8fbca6"
+      "body_sha256": "a1675d874fcbaf74f777d03c0e5316b0bff7b58f084ed7a55c8455ced8fb7872"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "b06cb6022826c94ce60d8cbddc1778b700bad7ef4bd614747a1f3d9955e084f8"
+      "body_sha256": "2a767eda7f61ed7c4d71d9631f8d642dba6d80d93f8a548893830e2555a27b92"
     },
     "generate-spec": {
       "frontmatter": {
@@ -72,14 +72,14 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0e60333d207dda3837df5bcd603fbfe35546d88c792bb07dca45fff25dec3310"
+      "body_sha256": "2196a261f0d4f5c2d893084d515a7356493293360a1109a3464bfa6d61cceccb"
     },
     "implement": {
       "frontmatter": {
         "name": "implement",
         "description": "Repo-agnostic implementation subagent for ultracode. Spawned by the orchestrator when: (1) a plan exists (from the plan agent or EnterPlanMode) and code must be written, (2) files must be created, modified, or deleted to fulfill a request, (3) the user asks to \"implement\", \"build\", \"code\", \"create\", \"add\", \"modify\", \"fix\", \"refactor\", or \"change\" something, (4) code-reviewer findings must be fixed (the orchestrator re-spawns this agent with fix instructions), (5) verification failures need code changes. It reads the plan, loads the skills the orchestrator names, writes code following the repo's convention skill, verifies each step with the repo profile's build command, and produces a change report for the code-reviewer agent to consume. It does ALL coding itself and does NOT delegate back to the orchestrator.",
         "model": "sonnet",
-        "effort": "low",
+        "effort": "medium",
         "tools": [
           "Read",
           "Edit",
@@ -92,7 +92,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "266db2ad80f7badd3217bc762f272c792c455c0633b4229515a2e9dac717bc61"
+      "body_sha256": "6e9f624a96593f95ba1d221265cc5625d4454050e7c0f674a711f239dd3b68c6"
     },
     "initializer": {
       "frontmatter": {
@@ -111,7 +111,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "fb32d2cb49ea4e9a62b4c0686c07411c21ff3ad4f4af152ff546a51af4d8e79a"
+      "body_sha256": "dfc493244baba8eb57f7fae644b91538767af43661fe53d9bf25c5d7b25191ba"
     },
     "module-documentation": {
       "frontmatter": {
@@ -130,7 +130,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "d7281d7520f5008013752e7f4e49529c6bdfe87e37d9d6f648a71baa748e0aae"
+      "body_sha256": "9d39fc0b2892ab5c0f6e2259c46e5389ba7d3fd65e1c8fe6b7017d7e6e9508d7"
     },
     "plan": {
       "frontmatter": {
@@ -167,14 +167,14 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "fc29609fb6f8b3fe7ff6339feac1c95cd6b578508d0b3df8a9b472e007b7e875"
+      "body_sha256": "edca6e9bfe3cea75c64db52981c52ff2757d13f13851d2fb0eb43fc277e3c50e"
     },
     "write-test": {
       "frontmatter": {
         "name": "write-test",
         "description": "Repo-agnostic test-writing subagent for ultracode. Spawned by the orchestrator only when the user has asked for tests — never on the orchestrator's own initiative, and never between coding phases — so: (1) every coding phase is implemented and reviewed and the user accepted the closing-gate offer to write tests, (2) the user explicitly asks to write or fix tests, (3) code-reviewer findings tied to the test-related rules in the INVENTORY Review Rule Set need to be fixed. It reads the implement report to identify changed files, reads the execution-path-analysis (EPA) report to learn which paths need coverage, loads the test skills named by the orchestrator, and writes tests that strictly follow them. It writes ONLY test code — never implementation code.",
         "model": "sonnet",
-        "effort": "low",
+        "effort": "medium",
         "tools": [
           "Read",
           "Edit",
@@ -187,7 +187,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "cca2d7769b601bbb82001bc1a0f2af2df59021b4bb6177d8f6d296f1bf881d23"
+      "body_sha256": "53dac2bf09b69f23329de0957fd65811f75bf4e8c253a6bbaabc33162cc35b99"
     },
     "fact-check": {
       "frontmatter": {

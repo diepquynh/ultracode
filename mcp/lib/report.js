@@ -3,7 +3,7 @@
 // Pure logic for the ultracode_report MCP tool, split out from mcp/gate-server.js
 // so it is unit-testable without an MCP stdio transport (mirrors mcp/lib/gate.js).
 //
-// WHY A TOOL OWNS REPORT FILENAMES
+// WHY A DECLARED PATH OWNS REPORT FILENAMES
 //
 // Every stage of the pipeline hands its successor a file, and until now each agent
 // invented that file's name. On disk right now: 1,864 ultracode artifacts across 27
@@ -18,6 +18,13 @@
 // captured by hooks/spawn-scope.js) and this tool writes exactly there. The agent
 // never chooses a filename, so there is nothing to guess downstream.
 //
+// This tool is the convenient way to honor that path, not the only permitted one.
+// A report is often the largest single payload an agent emits, and one stalled
+// write call used to strand a whole spawn's work with no fallback. So an agent may
+// also write its report itself — write tool, shell heredoc, chunked appends —
+// while hooks/lib/report-policy.js holds that write to this same declared path and
+// to the same lesson gate below.
+//
 // WHY IT ALSO GATES ON PENDING LESSONS
 //
 // hooks/build-streak.js records a verified failure→recovery transition — a streak
@@ -30,17 +37,21 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { readJsonIfFile, writeJsonAtomic, isInside } = require("../../hooks/lib/common");
+const { readJsonIfFile, isInside } = require("../../hooks/lib/common");
 const { sessionBaseDir } = require("../../hooks/lib/session");
 const { scopeRecordFor } = require("../../hooks/lib/scope-policy");
+// The lesson gate and the agent-name normalization live in hooks/lib/report-policy.js
+// because the same gate now applies to a hand-written report: hooks/scope-guard.js and
+// hooks/bash-scope-guard.js hold a Write/Edit/shell report to the declared path and to
+// this same pending-lesson check, so "write it yourself" is a fallback for a stalled
+// tool call, never a way around the gate.
+const {
+  bareAgent,
+  markLessonsRecorded,
+  pendingLessons,
+} = require("../../hooks/lib/report-policy");
 
 const SPAWN_SCOPE_FILE = "spawn-scope.json";
-const BUILD_STREAK_FILE = "build-streak.json";
-
-function bareAgent(agent) {
-  const value = String(agent || "").trim();
-  return value.startsWith("ultracode:") ? value.slice("ultracode:".length) : value;
-}
 
 function spawnRecord(sessionDir, agent) {
   const baseDir = sessionBaseDir(sessionDir);
@@ -49,45 +60,6 @@ function spawnRecord(sessionDir, agent) {
     agent: bareAgent(agent),
     repoKey: path.relative(baseDir, path.resolve(sessionDir)),
   });
-}
-
-// Recoveries this agent has not yet turned into a lesson.
-function pendingLessons(sessionDir, agent) {
-  const state = readJsonIfFile(path.join(sessionDir, BUILD_STREAK_FILE));
-  const entry = state && state.streaks && state.streaks[bareAgent(agent)];
-  if (!entry || !Array.isArray(entry.recoveredSignatures)) return [];
-  return entry.recoveredSignatures.filter((item) => item && item.lessonRecorded === false);
-}
-
-// Called by the ultracode_memory tool once a lesson is actually recorded, so the
-// gate below reflects reality rather than a flag nobody clears. Marks ALL pending
-// recoveries for the session as recorded: the agent has just written the lesson
-// for the failure it was working on, and leaving a stale pending entry behind
-// would block a later report for work already learned from.
-function markLessonsRecorded(sessionDir, agent) {
-  const statePath = path.join(sessionDir, BUILD_STREAK_FILE);
-  const state = readJsonIfFile(statePath);
-  if (!state || !state.streaks) return 0;
-  const keys = agent ? [bareAgent(agent)] : Object.keys(state.streaks);
-  let cleared = 0;
-  for (const key of keys) {
-    const entry = state.streaks[key];
-    if (!entry || !Array.isArray(entry.recoveredSignatures)) continue;
-    for (const item of entry.recoveredSignatures) {
-      if (item && item.lessonRecorded === false) {
-        item.lessonRecorded = true;
-        cleared += 1;
-      }
-    }
-  }
-  if (cleared) {
-    try {
-      writeJsonAtomic(statePath, state);
-    } catch {
-      return 0;
-    }
-  }
-  return cleared;
 }
 
 // Returns { ok, message, path? }.
