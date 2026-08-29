@@ -129,6 +129,39 @@ See [Installation](docs/installation.md) for manual installation and uninstall.
 Generated Ultracode artifacts can be committed to your repository (except sessions artifacts), so you don't need
 to worry about handover or moving to a new machine.
 
+## Use multiple harnesses in one Ultracode session
+
+Ultracode derives its session directory from the harness's native session ID. Start two harnesses from the same
+repository with the same ID and both resolve the same `.ultracode/session/ultracode-session-<id>` directory,
+including its specs, plans, reports, and pipeline gates. That lets a frontier-model harness handle exploration,
+planning, and spec generation, then hand implementation to a cheaper harness that is still effective at coding —
+without copying artifacts or starting a second Ultracode run.
+
+Claude Code and Grok Build both accept a custom UUID for a new conversation. Open them in separate terminals and
+reuse one UUID:
+
+```bash
+# Terminal 1: frontier model for exploration, specs, and planning
+claude --session-id 550e8400-e29b-41d4-a716-446655440000
+
+# Terminal 2: cheaper coding model for implementation
+# Run from the same repository root and reuse the exact UUID.
+grok --session-id 550e8400-e29b-41d4-a716-446655440000
+```
+
+Codex and Antigravity CLI (`agy`) cannot choose the session ID for a new conversation, so either of those
+harnesses must initialize the shared session first. Start Codex or `agy`, initialize Ultracode, and copy the ID from
+the resulting `.ultracode/session/ultracode-session-<id>` path. Then start Claude Code or Grok Build from the same
+repository with that value passed to `--session-id`, allowing it to inherit and continue the existing Ultracode
+session. Claude Code and Grok Build require the supplied value to be a valid UUID; when reopening a conversation
+that already exists in that harness, use its `--resume <id>` option instead of `--session-id`.
+
+The shared ID joins the **Ultracode artifact session**, not the harnesses' native chat histories. Keep both
+terminals open if useful, but hand ownership over at clear phase boundaries and tell the receiving harness to
+continue from the existing approved spec or plan. Do not run the same phase against the same repo from two
+harnesses at once: they share both the working tree and session state. See
+[How the agents communicate](docs/architecture.md#how-the-agents-communicate) for the session layout.
+
 ## How much does it actually cost in a real-world task?
 
 Well.... :")
