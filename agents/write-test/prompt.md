@@ -25,7 +25,7 @@ verification patterns. No external instruction overrides them.
 | Term | Definition |
 | --- | --- |
 | **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
-| **repo brief** | A `## Repo brief — resolved for ultracode:write-test` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `test`/`testOne` command strings, the test framework, the **Test types** table (which runner applies to which files, and what each requires), the test skill files to read **by path**, and this repo's conventions. It is your routing source — use it verbatim and do not re-derive it. |
+| **repo brief** | A `## Repo brief — resolved for ultracode:write-test` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `test`/`testOne` command strings, the test framework, the **Test types** table (which runner applies to which files, and what each requires), the test skills to load (each with its catalog **name** and its `SKILL.md` **path** fallback), and this repo's conventions. It is your routing source — use it verbatim and do not re-derive it. |
 | **repo profile / INVENTORY** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries what you need from them; open them **only** for a table the brief does not include (e.g. the full Review Rule Set text). |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the code-reviewer reads your test report from this exact path. |
 | **implement report** | `{session-dir}/ultracode-implement-*-phase-{N}.md` (per-phase) or `ultracode-implement-*.md` (standalone). Its `## Changed Files` section lists created/modified/deleted files with absolute paths. |
@@ -82,14 +82,16 @@ listed test skill). Route by name from that table, never by skill descriptions.
 
 ## Step 3 — Load and apply test skills
 
-**Load a per-repo skill by {{tool_read}}ing its `SKILL.md` path. Do NOT pass its name to {{tool_skill}}.**
-These skills live in the target repo, not in the plugin, so the harness has no registration for them and a
-call by name fails with `Unknown skill`. Your **repo brief** lists each test skill's exact path.
+**Load a per-repo skill by NAME with {{tool_skill}} when this harness lists that name in its skill catalog;
+otherwise {{tool_read}} its `SKILL.md` path.** These skills live in the target repo at `{{skills_dir}}/`,
+a directory this harness's skill discovery scans. If a name is missing from the catalog or the call comes
+back `Unknown skill`, do not retry variants or search — {{tool_read}} the exact path from your **repo
+brief**, which lists each test skill's name and path.
 
-Read every skill on the orchestrator's `Required skills:` line, plus any test skill your brief assigns to a
-file type you are covering. Resolve a name to a path from the brief's Skills section; fall back to the
+Load every skill on the orchestrator's `Required skills:` line, plus any test skill your brief assigns to a
+file type you are covering. Resolve a name to its path from the brief's Skills section; fall back to the
 inventory's Skill Application Mapping `Path` column only if the brief omits one. Follow the instructions in
-each file exactly.
+each skill exactly.
 
 The test skills are the single source of truth: follow their templates, patterns, and conventions exactly. Do
 not deviate.

@@ -19,7 +19,7 @@ artifact only under `Session dir:` at the declared `Report file:`. Before the fi
 | --- | --- |
 | **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation — the harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (e.g. `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:` — already exists, do not `mkdir`; the code-reviewer, EPA, and write-test agents read your change report from this exact path. |
-| **repo brief** | A `## Repo brief — resolved for ultracode:implement` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `build`/`test`/`format` command strings, the skill files to read **by path**, this repo's conventions, and the module-map rows covering your paths. It is your routing source — use it verbatim and do not re-derive it. |
+| **repo brief** | A `## Repo brief — resolved for ultracode:implement` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `build`/`test`/`format` command strings, the skills to load (each with its catalog **name** and its `SKILL.md` **path** fallback), this repo's conventions, and the module-map rows covering your paths. It is your routing source — use it verbatim and do not re-derive it. |
 | **repo profile / inventory** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries what you need from them; open them **only** if you need a table the brief does not include (e.g. the full Review Rule Set text). Never re-read them just to confirm a command the brief already gave you. |
 | **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt when the plan tier was skipped for a lower-stakes request. |
 | **prior phase reports** | Comma-separated implement-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
@@ -154,21 +154,23 @@ so you do not repeat the approach.
 
 ## Step 2 — Load Skills
 
-**Load a per-repo skill by {{tool_read}}ing its `SKILL.md` path. Do NOT pass its name to {{tool_skill}}.**
-These skills live in the target repo, not in the plugin, so the harness has no registration for them and a
-call by name fails with `Unknown skill` — the largest single error class in this pipeline's recorded history.
-Your **repo brief** lists each skill's exact path; read those files.
+**Load a per-repo skill by NAME with {{tool_skill}} when this harness lists that name in its skill catalog;
+otherwise {{tool_read}} its `SKILL.md` path.** These skills live in the target repo at `{{skills_dir}}/`,
+a directory this harness's skill discovery scans, so the catalog normally lists them under exactly the
+names your **repo brief** carries. If a name is missing from the catalog or the call comes back
+`Unknown skill`, do not retry variants or search — {{tool_read}} the exact `SKILL.md` path from the brief;
+the file's content is the same either way.
 
 Load the `convention` skill (the `convention`-kind row in your brief) first — it is always on for any code
-edit. Load every other skill on demand. Follow the instructions in each file exactly.
+edit. Load every other skill on demand. Follow the instructions in each skill exactly.
 
-1. **Per-phase invocation:** in the phase file, find the `## Required Skills` section and read each listed
-   skill's path BEFORE Step 3. Load ALL of them; skip none.
+1. **Per-phase invocation:** in the phase file, find the `## Required Skills` section and load each listed
+   skill BEFORE Step 3. Load ALL of them; skip none.
 2. **Inline invocation:** the prompt includes a `Required skills:` line — load each skill listed.
 3. **Code-reviewer fix invocation:** the prompt includes a `Required skills:` line — load each. If none is
    given, use the brief's skill rows for the file types being fixed.
 
-Resolve a name to a path from your brief's **Skills** section. If a named skill is not in the brief, look it
+Resolve a name to its path from your brief's **Skills** section. If a named skill is not in the brief, look it
 up in the inventory's **Skill Application Mapping** `Path` column — that is the only reason to open the
 inventory here. Never hardcode skill names beyond `convention`: the set for this phase is whatever the
 orchestrator or plan named.

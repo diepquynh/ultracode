@@ -701,18 +701,18 @@ test("codex and grok load skills by reading SKILL.md, not a Skill tool", () => {
   assert.equal(skill.claude, "Skill");
   assert.equal(skill.codex, "exec_command on the skill's SKILL.md");
   assert.equal(skill.grok, "read_file on the skill's SKILL.md");
-  assert.match(skill.codex_strategy, /Codex has no Skill tool/);
-  assert.match(skill.grok_strategy, /Grok Build has no Skill tool/);
+  assert.match(skill.codex_strategy, /Codex has no tool for local skills/);
+  assert.match(skill.grok_strategy, /default toolset has no skill tool/);
 
   const implementGrok = fs.readFileSync(
     path.join(GROK_PLUGIN_ROOT, "agents", "implement.md"),
     "utf-8",
   );
-  assert.match(implementGrok, /Grok Build has no Skill tool/);
+  assert.match(implementGrok, /SUBAGENTS receive no catalog/);
   assert.match(implementGrok, /read_file on the skill's SKILL.md/);
   assert.match(implementGrok, /\.grok\/skills\/\{name\}\/SKILL\.md/);
   assert.doesNotMatch(implementGrok, /NEVER read a skill's `SKILL\.md`/);
-  assert.doesNotMatch(implementGrok, /skill discovery/);
+  assert.match(implementGrok, /Load a per-repo skill by NAME/);
   assert.match(
     implementGrok,
     /^tools: read_file, search_replace, search_replace, run_terminal_command, grep, list_dir$/m,
@@ -728,11 +728,11 @@ test("codex and grok load skills by reading SKILL.md, not a Skill tool", () => {
   const implementCodex = parseToml(
     fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implement.toml"), "utf-8"),
   ).developer_instructions;
-  assert.match(implementCodex, /Codex has no Skill tool/);
+  assert.match(implementCodex, /Codex has no tool for local skills/);
   assert.match(implementCodex, /exec_command on the skill's SKILL.md/);
   assert.match(implementCodex, /\.agents\/skills\/\{name\}\/SKILL\.md/);
   assert.doesNotMatch(implementCodex, /NEVER read a skill's `SKILL\.md`/);
-  assert.doesNotMatch(implementCodex, /skill discovery/);
+  assert.match(implementCodex, /Load a per-repo skill by NAME/);
   assert.match(
     implementCodex,
     /Limit direct tool use in this role to these Codex capabilities: `exec_command`, `apply_patch`/,
@@ -1309,12 +1309,12 @@ function contextBriefTest(target) {
   const brief = updated.prompt;
   assert.match(brief, /## Repo brief — resolved for ultracode:explore/);
   assert.ok(brief.startsWith(explorePrompt), `${target}: brief appends, never replaces the prompt`);
-  // Profile-only facts are carried, by path for skills.
+  // Profile-only facts are carried: skills by name AND path.
   assert.ok(
-    brief.includes(`${skillsDir}/convention/SKILL.md`),
-    `${target}: brief carries the convention skill's path`,
+    brief.includes(`\`convention\` — \`${skillsDir}/convention/SKILL.md\``),
+    `${target}: brief carries the convention skill's name and path`,
   );
-  assert.match(brief, /does NOT resolve per-repo skill names/);
+  assert.match(brief, /name first, path as fallback/);
   assert.match(brief, /maven-wrapper/);
   // Module map is narrowed to the path the prompt names.
   assert.match(brief, /Core domain/);
@@ -4564,7 +4564,7 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.match(orchestrate, /subagent_type/);
   assert.match(orchestrate, /# Grok Notes/);
   assert.match(orchestrate, /There is no structured question tool/);
-  assert.match(orchestrate, /Grok Build has no Skill tool/);
+  assert.match(orchestrate, /default toolset has no skill tool/);
 
   const initKit = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "commands", "init-kit.md"), "utf-8");
   assert.match(initKit, /# \/init-kit/);

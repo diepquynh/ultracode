@@ -163,8 +163,8 @@ function printReport(report, options) {
   for (const [kind, count] of kinds) console.log(`  ${pad(count, 6)}  ${kind}`);
   if (totals.unknownSkill) {
     console.log(
-      `  NOTE: ${totals.unknownSkill} "Unknown skill" errors — per-repo skills are not Skill-tool` +
-        " resolvable; route by repo-profile.json skills[].path instead.",
+      `  NOTE: ${totals.unknownSkill} "Unknown skill" errors — a name the harness catalog does not` +
+        " list; agents should fall back to reading repo-profile.json skills[].path.",
     );
   }
 }

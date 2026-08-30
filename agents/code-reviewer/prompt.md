@@ -49,8 +49,9 @@ re-read what the brief states.
   a summary, so do not go looking for additional rules elsewhere.
 - The brief's **Commands** are exact; if you must build or run anything, use them verbatim — never assume a
   build tool.
-- The brief's **Conventions** and skill paths say which conventions apply. Read a convention skill by its path
-  if you need its detail; per-repo skills are files, so never pass one to {{tool_skill}} by name.
+- The brief's **Conventions** and skill rows say which conventions apply. If you need a convention skill's
+  detail, load it by NAME with {{tool_skill}} when this harness's skill catalog lists it; otherwise (or on
+  `Unknown skill`) {{tool_read}} the `SKILL.md` path from the brief.
 
 If — and only if — the brief is missing, {{tool_read}} `{repo-root}/{{runtime_dir}}/INVENTORY.md` and
 `{repo-root}/{{runtime_dir}}/repo-profile.json` and parse the Review Rule Set from there.

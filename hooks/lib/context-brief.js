@@ -137,7 +137,8 @@ function skillRowsFor(agent, skills, inventoryText) {
       skill.componentType && !statedIn(inventoryText, skill.componentType)
         ? ` — use for ${truncate(skill.componentType, 48)}`
         : "";
-    return `- \`${skill.path}\`${componentType}`;
+    const name = typeof skill.name === "string" && skill.name ? `\`${skill.name}\` — ` : "";
+    return `- ${name}\`${skill.path}\`${componentType}`;
   });
 }
 
@@ -210,9 +211,10 @@ function buildBrief({ agent, prompt, repoRoot, runtimeDir }) {
     if (rows.length) {
       out.push(
         "",
-        "### Skills — read these by path",
-        "`skills[].path` values from the machine profile. The Skill tool does NOT resolve per-repo " +
-          "skill names, so read the file at the path; do not call a skill by name and do not search for it.",
+        "### Skills — name first, path as fallback",
+        "`skills[].name` — `skills[].path` from the machine profile. Load a skill by its name via the " +
+          "harness skill tool when its catalog lists that name; if it does not (or answers unknown-skill), " +
+          "read the file at the path. Never search for skills or guess paths.",
         rows.join("\n"),
       );
     }

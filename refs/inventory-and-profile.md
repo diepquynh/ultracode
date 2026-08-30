@@ -5,17 +5,18 @@ orchestrator and every subagent read. Both files live in the target repo at `{{r
 
 **Design principle — route by inventory, not by description.** Harnesses do not reliably route off
 skill front-matter `description` fields. Therefore the single source of truth is `INVENTORY.md`, a plain
-markdown file that every agent is instructed to **Read** first. Skill discovery (which requires a session
-reload) is a convenience layer on top; the inventory works the instant it is written because it is just a file.
+markdown file that every agent is instructed to **Read** first. Harness skill discovery is a loading
+mechanism, not a routing source; the inventory works the instant it is written because it is just a file.
 
-**Design principle — load a per-repo skill by PATH, never by name.** A generated skill lives in the target
-repo (`{{skills_dir}}/{name}/SKILL.md`); it is not a plugin skill, and the harness's skill tool cannot resolve
-it until a session reload has registered it — which never happens inside a subagent's turn. An agent that calls
-the skill tool with a bare per-repo skill name gets `Unknown skill` and has to recover, so every skill row in
-this contract carries an explicit `path`, and consumers read that path. This is not a style preference: it was
-the single largest error class in the recorded corpus (178 failed skill loads across 912 subagent runs, all of
-them per-repo skill names), and every one of those calls was avoidable. Plugin-provided skills (`meta-author`)
-are a different case and remain loadable by name.
+**Design principle — every skill row carries BOTH a name and a path.** A per-repo skill lives in the target
+repo at `{{skills_dir}}/{name}/SKILL.md`, a directory the harness's own skill discovery scans, so harnesses
+with a named-skill mechanism list these skills in their catalog — for main sessions and, where verified, for
+spawned subagents too. Consumers therefore load a skill by NAME through the harness skill tool when the
+catalog lists it, and fall back to reading the `path` when the harness has no named-skill mechanism or
+answers `Unknown skill`. The explicit `path` column is load-bearing, not decoration: it is the universal
+fallback, and on path-read harnesses it is the only mechanism — never drop it, and never let an agent guess
+a path. (History: an earlier revision forbade name calls outright after 178 `Unknown skill` failures across
+912 subagent runs; those predated skills moving under the harness-scanned `{{skills_dir}}` locations.)
 
 ---
 
