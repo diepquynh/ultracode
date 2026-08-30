@@ -67,6 +67,14 @@ not yet exist and was never claimed to.
 
 ## Step 3 — Output
 
+{{#codex,grok}}
+**Record your verdict FIRST (this harness only).** On this harness your final message never reliably
+reaches the parent-side hook that normally records verdicts. Before returning your JSON, call the
+`ultracode_factcheck` MCP tool once with `session_dir` and `repo_key` exactly as your prompt's `Session
+dir:` / `Repo key:` lines state them, plus the same `target`, `verdict`, and `findings` (each finding as a
+one-line string). A verdict you do not record this way does not exist to `ultracode_gate` — approval will
+refuse and the pipeline stalls. This tool call is the one exception to this role's direct-tool limit.
+{{/codex,grok}}
 Return a single valid JSON object. No markdown, no code fences, no text before or after.
 
 ```json

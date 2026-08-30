@@ -77,6 +77,7 @@ async function main() {
       denyPreToolUse(
         `ultracode: refusing this shell command for ultracode:${actor.agent} — it writes "${candidate}", ` +
           `which is ${report.reason}.`,
+        report.compact && `ultracode: ${report.compact}`,
       );
       return 0;
     }

@@ -54,6 +54,7 @@ async function main() {
   if (!report.allowed) {
     denyPreToolUse(
       `ultracode: refusing to let ultracode:${actor.agent} write "${filePath}" — it is ${report.reason}.`,
+      report.compact && `ultracode: ${report.compact}`,
     );
   }
   return 0;

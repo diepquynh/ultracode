@@ -12,6 +12,7 @@ const { pluginTargetInfo } = require("../hooks/lib/session");
 const { recordLesson, recallLessons, deleteLesson } = require("./lib/memory");
 const { recordGateDecision } = require("./lib/gate");
 const { writeReport, markLessonsRecorded } = require("./lib/report");
+const { registerSealedChannelTools, sealedChannelDefaultDeps } = require("./sealed-channel-tools");
 
 const SERVER_NAME = "ultracode-gate";
 const SERVER_VERSION = "1.0.0";
@@ -24,6 +25,7 @@ const defaultDeps = {
   recordGateDecision,
   writeReport,
   markLessonsRecorded,
+  ...sealedChannelDefaultDeps,
 };
 
 function missingRuntimeDirError() {
@@ -185,6 +187,11 @@ function registerCoreTools(server, deps = defaultDeps) {
       };
     },
   );
+
+  // The codex sealed-channel tools (ultracode_spawn_ticket, ultracode_factcheck)
+  // live in mcp/sealed-channel-tools.js — one file for the whole "no hook can
+  // read a codex spawn prompt or child result" story.
+  registerSealedChannelTools(server, deps);
 
   server.registerTool(
     "ultracode_memory_recall",

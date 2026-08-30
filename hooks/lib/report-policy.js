@@ -162,6 +162,11 @@ function checkReportWrite(agent, targetPath, ctx) {
         "The next stage reads that exact path, so a name you choose is a name it cannot find. " +
         "Write your report there instead — with any mechanism you like, including a shell heredoc " +
         "or chunked appends if a single large write call stalls",
+      // Compact form for reason-capped harnesses (hooks/lib/grok-hooks.js):
+      // the declared path IS the correction and must survive a 256-char clip.
+      compact:
+        `"${path.basename(targetPath)}" is not this spawn's declared report path. ` +
+        `Write to "${declared}" instead.`,
     };
   }
 
@@ -175,6 +180,9 @@ function checkReportWrite(agent, targetPath, ctx) {
         `"${first.signature}" and have not recorded what fixed it. ${LESSON_GATE_HINT} ` +
         "This exact diagnostic recurs across sessions in this repo; recording it is what stops the " +
         "next run re-deriving it",
+      compact:
+        `report blocked: first record the lesson for "${first.signature.slice(0, 60)}" with ` +
+        "ultracode_memory, or write through ultracode_report with unrecorded_lesson_reason.",
     };
   }
 

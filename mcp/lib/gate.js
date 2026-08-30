@@ -27,6 +27,45 @@ function factCheckVerdict(sessionDir, repoKey, gate) {
   return (factcheck && factcheck[gate] && factcheck[gate].verdict) || null;
 }
 
+// The ultracode_factcheck tool's writer: the fact-check agent records its own
+// verdict through plaintext MCP arguments. On harnesses that seal inter-agent
+// messages (codex with OpenAI models) the verdict never appears in any hook
+// payload — the spawn result is an async ack and the FINAL_ANSWER arrives as
+// an agent message, not a tool result — so hooks/factcheck-record.js has
+// nothing to read there. Same file, same shape, same rounds accounting as
+// that hook, so recordGateDecision cannot tell the writers apart.
+function recordFactcheckVerdict(sessionDir, repoKey, target, verdict, findings) {
+  const key = normalizeRepoKey(repoKey);
+  const stateDir = key ? repoStateDir(sessionDir, key) : "";
+  if (!stateDir) {
+    return {
+      ok: false,
+      message:
+        `ultracode: refusing to record a fact-check verdict — repo_key ` +
+        `"${repoKey === undefined || repoKey === null ? "" : repoKey}" is not a repo key. Pass the ` +
+        "exact `Repo key:` value from your spawn prompt so the verdict lands where ultracode_gate reads it.",
+    };
+  }
+  const factcheckPath = path.join(stateDir, "factcheck.json");
+  const current = readJsonIfFile(factcheckPath) || {};
+  const priorRounds = (current[target] && current[target].rounds) || 0;
+  current[target] = {
+    verdict,
+    rounds: priorRounds + 1,
+    findings: Array.isArray(findings) ? findings : [],
+    repo: key,
+    ts: new Date().toISOString(),
+    source: "factcheck-tool",
+  };
+  writeJsonAtomic(factcheckPath, current);
+  return {
+    ok: true,
+    message:
+      `Recorded fact-check ${verdict} for "${target}" (round ${priorRounds + 1}) in ${factcheckPath}. ` +
+      "Now return the same {verdict, target, findings} JSON as your final message.",
+  };
+}
+
 function recordGateDecision(sessionDir, repoKey, gate, decision, notes) {
   const key = normalizeRepoKey(repoKey);
   if (!key) {
@@ -66,4 +105,4 @@ function recordGateDecision(sessionDir, repoKey, gate, decision, notes) {
   };
 }
 
-module.exports = { factCheckVerdict, recordGateDecision };
+module.exports = { factCheckVerdict, recordGateDecision, recordFactcheckVerdict };

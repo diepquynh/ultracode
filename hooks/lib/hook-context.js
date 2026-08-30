@@ -27,6 +27,7 @@ const {
   sessionBaseDir,
 } = require("./session");
 const { parseParameters } = require("./subagent-params");
+const { resolveSealedContract, sealedWorkRepoRoot } = require("./codex-spawn");
 const { spawnContextFromTranscript } = require("./spawn-identity");
 
 class HookContext {
@@ -55,9 +56,18 @@ class HookContext {
   }
 
   #withSpawnContext(spawn) {
-    const parameters = parseParameters(spawn.prompt);
+    // A sealed spawn message (lib/codex-spawn.js) has no readable Label:
+    // lines; its contract comes from the spawn ticket, so every policy hook
+    // sees the same parameters a plaintext prompt would have carried.
+    const { parameters, ticket } = resolveSealedContract(
+      this.target,
+      this.sessionId,
+      spawn,
+      parseParameters(spawn.prompt),
+    );
     const repoKey = normalizeRepoKey(parameters.repo_key);
-    const workRepoRoot = resolveRepoRoot(this.input, spawn.prompt);
+    const workRepoRoot =
+      sealedWorkRepoRoot(spawn, parameters) || resolveRepoRoot(this.input, spawn.prompt);
     const primaryRepoRoot = parameters.primary_repo_root
       ? path.resolve(parameters.primary_repo_root)
       : this.primaryRepoRoot;
@@ -70,6 +80,7 @@ class HookContext {
     return {
       ...spawn,
       parameters,
+      ticket,
       repoKey,
       workRepoRoot,
       primaryRepoRoot,

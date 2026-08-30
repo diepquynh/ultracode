@@ -16,6 +16,7 @@ const {
   readTextIfFile,
 } = require("./lib/common");
 const { augmentPrompt } = require("./lib/context-brief");
+const { forkTurnsPin, promptRewritable, skipSealedRouting } = require("./lib/codex-spawn");
 const { HookContext } = require("./lib/hook-context");
 
 function phaseTier(phaseFile) {
@@ -106,6 +107,8 @@ async function main() {
     const agent = spawn.agent;
     if (!agent || !(agent in routing.defaults)) continue;
 
+    if (skipSealedRouting(spawn)) continue;
+
     const profilePath = path.join(spawn.workRepoRoot, routing.runtime_dir, "repo-profile.json");
     const exempt = agent === "initializer" || agent === "fact-check";
     let route;
@@ -127,19 +130,23 @@ async function main() {
       route = present ? computed : spawn.model || "default";
     }
 
+    // A sealed prompt is never rewritten (lib/codex-spawn.js); the child gets
+    // the brief's substance through its role instructions instead.
     let prompt = spawn.prompt;
-    try {
-      const augmented = augmentPrompt({
-        agent,
-        prompt: spawn.prompt,
-        repoRoot: spawn.workRepoRoot,
-        runtimeDir: routing.runtime_dir,
-      });
-      prompt = typeof augmented === "string" ? augmented : spawn.prompt;
-    } catch {
-      prompt = spawn.prompt;
+    if (promptRewritable(spawn)) {
+      try {
+        const augmented = augmentPrompt({
+          agent,
+          prompt: spawn.prompt,
+          repoRoot: spawn.workRepoRoot,
+          runtimeDir: routing.runtime_dir,
+        });
+        prompt = typeof augmented === "string" ? augmented : spawn.prompt;
+      } catch {
+        prompt = spawn.prompt;
+      }
+      prompt = stampedPrompt(routing.target, spawn.primaryRepoRoot, spawn, prompt);
     }
-    prompt = stampedPrompt(routing.target, spawn.primaryRepoRoot, spawn, prompt);
 
     const [action, model] = resolveModel(route, routing, agent);
     if (action === "error" || (action === "model" && !model)) {
@@ -158,7 +165,12 @@ async function main() {
 
     const patch = {};
     if (prompt !== spawn.prompt) patch.prompt = prompt;
+    // On codex this injected model IS the route — role TOMLs deliberately
+    // carry no model, because a role-file model would override this argument
+    // unconditionally (docs/model-routing.md, cross-harness section).
     if (action === "model") patch.model = model;
+    const pin = forkTurnsPin(routing.target, spawn);
+    if (pin) patch.assign = pin;
     if (Object.keys(patch).length) patches.set(spawn.index, patch);
   }
 

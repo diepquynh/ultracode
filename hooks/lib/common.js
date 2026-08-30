@@ -79,12 +79,23 @@ function isGrok() {
   return Boolean(process.env.GROK_PLUGIN_ROOT || process.env.GROK_SESSION_ID);
 }
 
-function denyPreToolUse(reason) {
+// `compactReason` is an optional pre-authored variant for harnesses that cap
+// the deny reason (grok clips at 256 chars): a hook whose long denial would
+// lose its essential values or instruction to the generic refit supplies the
+// short form itself. Most denials survive fitGrokReason fine and omit it.
+function denyPreToolUse(reason, compactReason) {
   // Antigravity and Grok honor a top-level decision. Claude/Codex honor
   // hookSpecificOutput.permissionDecision; a top-level "deny" there is not a
   // valid Claude decision value and can drop the whole payload.
-  if (isAntigravity() || isGrok()) {
+  if (isAntigravity()) {
     emit({ decision: "deny", reason });
+    return;
+  }
+  if (isGrok()) {
+    // Grok clips the reason at 256 chars from the front (lib/grok-hooks.js,
+    // fact 1) — refit it so the corrective instruction survives.
+    const { fitGrokReason } = require("./grok-hooks");
+    emit({ decision: "deny", reason: fitGrokReason(compactReason || reason) });
     return;
   }
   const payload = {
@@ -115,17 +126,27 @@ function denyPreToolUse(reason) {
 //     cache, so a user who once chose always-allow for subagent spawns would
 //     never be shown the question. Measured with an allow-rule in place: a
 //     silent hook let the call through, force_ask forced the confirmation.
-//   - Grok has no ask at all — its PreToolUse decisions are allow/deny, and an
-//     unknown value fails open, which would drop the gate entirely. There it
-//     denies with `denyReason`, which should tell the orchestrator to put the
-//     same question to the user itself rather than re-spawning.
+//   - Grok supports ask as a first-class PreToolUse decision (source-verified
+//     2026-08-30 against xai-org/grok-build@main: runner/mod.rs
+//     DecisionToken::classify accepts "ask" and tool_calls.rs routes
+//     HookDecision::Ask into the normal permission prompt). Earlier grok
+//     builds treated "ask" as unknown — which FAILS the hook, and a failed
+//     gate hook is ignored (dispatcher.rs, fail-open) — so on a stale binary
+//     this gate silently disappears; `denyReason` is no longer used there.
+//     Ask reasons are clipped at 256 chars like denials, so refit first.
 function askPreToolUse(askReason, denyReason) {
   if (isAntigravity()) {
     emit({ decision: "force_ask", reason: askReason });
     return;
   }
   if (isGrok()) {
-    denyPreToolUse(denyReason || askReason);
+    emit({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: require("./grok-hooks").fitGrokReason(askReason),
+      },
+    });
     return;
   }
   emit({

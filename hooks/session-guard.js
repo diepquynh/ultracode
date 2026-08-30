@@ -11,6 +11,8 @@ const { HookContext } = require("./lib/hook-context");
 const { validateSubagentParameters } = require("./lib/subagent-params");
 const { matchesSessionDir, sessionBaseDir } = require("./lib/session");
 const { isAdoptedSessionDir } = require("./lib/session-link");
+const { consumeSealedTicket, sealedSpawnDenial } = require("./lib/codex-spawn");
+const { truncatedSpawnDenial } = require("./lib/grok-hooks");
 
 function spawnLabel(spawn, count) {
   return count > 1 ? `ultracode:${spawn.agent} (Subagents[${spawn.index}])` : `ultracode:${spawn.agent}`;
@@ -18,11 +20,26 @@ function spawnLabel(spawn, count) {
 
 async function main() {
   const hookInput = await readHookInput();
+  // Truncated payload (lib/grok-hooks.js): grok replaces an oversized
+  // tool_input with a string, so the spawns list below would be empty and
+  // this guard would fail open. Refuse the uninspectable contract instead.
+  const truncatedDenial = truncatedSpawnDenial(hookInput);
+  if (truncatedDenial) {
+    denyPreToolUse(truncatedDenial);
+    return 0;
+  }
   const context = new HookContext(hookInput);
   const routedAgents = knownAgents();
   const spawns = context.spawns.filter((spawn) => routedAgents.has(spawn.agent));
 
   for (const spawn of spawns) {
+    // Sealed spawn message (lib/codex-spawn.js): the contract is enforced
+    // from a single-use spawn ticket instead of the unreadable prompt.
+    const sealedDenial = sealedSpawnDenial(spawn, context.sessionId, spawnLabel(spawn, spawns.length));
+    if (sealedDenial) {
+      denyPreToolUse(sealedDenial);
+      return 0;
+    }
     const validation = validateSubagentParameters(spawn.agent, spawn.parameters);
     if (!validation.ok) {
       const missing = validation.errors.map((error) => `- ${error}`).join("\n");
@@ -32,6 +49,8 @@ async function main() {
       );
       return 0;
     }
+
+    consumeSealedTicket(spawn);
 
     if (!context.targetInfo) continue;
     const declaredSessionDir = validation.values.session_dir;

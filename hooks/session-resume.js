@@ -5,13 +5,21 @@
 // current review-loop iteration count so the orchestrator can resume instead
 // of re-deriving (or losing) pipeline state from a compacted summary.
 //
-// Never fails the session: this hook only prints context.
+// On Grok Build the same checkpoint takes a detour (lib/grok-hooks.js, fact
+// 3): grok never reads an Observe hook's stdout and its SessionStart source
+// is never "compact", so this file is registered there on PreCompact (record
+// a compaction marker) and on PreToolUse matcher "*" (consume the marker once
+// and emit the checkpoint as additionalContext — the one channel grok feeds
+// back to the model).
+//
+// Never fails the session: this hook only provides context.
 
 "use strict";
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { readHookInput, readTextIfFile, readJsonIfFile } = require("./lib/common");
+const { emit, pick, readHookInput, readTextIfFile, readJsonIfFile } = require("./lib/common");
+const { recordCompaction, consumeCompactionMarker } = require("./lib/grok-hooks");
 const { HookContext } = require("./lib/hook-context");
 const { REVIEW_LEDGER_PATTERN } = require("./lib/ledger-policy");
 
@@ -68,14 +76,9 @@ function reportFor(sessionDir, label) {
   return lines;
 }
 
-async function main() {
-  const hookInput = await readHookInput();
-  if (!hookInput) return 0;
-
-  const context = new HookContext(hookInput);
+function checkpointLines(context) {
   const baseDir = context.sessionRoot;
-  if (!baseDir) return 0;
-
+  if (!baseDir) return [];
   const found = [...reportFor(baseDir, "")];
   let repoKeys = [];
   try {
@@ -89,12 +92,51 @@ async function main() {
   for (const key of repoKeys) {
     found.push(...reportFor(path.join(baseDir, key), `${key}: `));
   }
+  return found;
+}
 
-  if (found.length) {
-    console.log("ultracode :: resuming after compaction — pipeline checkpoint:");
-    for (const line of found) console.log(line);
-    console.log("Resume from here; do not redo work these records show as finished.");
+function checkpointText(context) {
+  const found = checkpointLines(context);
+  if (!found.length) return "";
+  return [
+    "ultracode :: resuming after compaction — pipeline checkpoint:",
+    ...found,
+    "Resume from here; do not redo work these records show as finished.",
+  ].join("\n");
+}
+
+async function main() {
+  const hookInput = await readHookInput();
+  if (!hookInput) return 0;
+
+  const context = new HookContext(hookInput);
+  const eventName = String(pick(hookInput, "hook_event_name", "hookEventName") || "");
+
+  if (context.target === "grok") {
+    if (/^pre_?compact$/i.test(eventName)) {
+      recordCompaction(context.target, context.sessionId);
+      return 0;
+    }
+    if (/^pre_?tool_?use$/i.test(eventName)) {
+      if (!consumeCompactionMarker(context.target, context.sessionId)) return 0;
+      const text = checkpointText(context);
+      if (text) {
+        emit({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "allow",
+            additionalContext: text,
+          },
+        });
+      }
+      return 0;
+    }
+    // Any other grok event has no model-visible channel for this text.
+    return 0;
   }
+
+  const text = checkpointText(context);
+  if (text) console.log(text);
   return 0;
 }
 

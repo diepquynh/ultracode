@@ -40,6 +40,8 @@ const COMMON_HOOK_FILES = [
   "spawn-scope.js",
   "subagent-parameters.json",
   "lib/build-signal.js",
+  "lib/codex-spawn.js",
+  "lib/grok-hooks.js",
   "lib/common.js",
   "lib/harness.js",
   "lib/hook-context.js",
@@ -53,6 +55,7 @@ const COMMON_HOOK_FILES = [
   "lib/agy-transcript.js",
   "lib/spawn-identity.js",
   "lib/spawn-record.js",
+  "lib/spawn-ticket.js",
   "lib/context-brief.js",
   "lib/shell-paths.js",
 ];
@@ -662,6 +665,16 @@ function codexCapabilityNotes(promptRaw, mapping) {
 
 function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mapping) {
   const layout = harnessLayout.layouts[target];
+  // {{#codex}}…{{/codex}} (any harness name, or a comma list like
+  // {{#codex,grok}}…{{/codex,grok}}): the block is emitted verbatim into the
+  // named harnesses' dists and dropped entirely from every other dist — a
+  // harness-specific procedure costs zero tokens on the harnesses that can
+  // never take it, instead of shipping as an "if you are X" paragraph all
+  // four copies must read past.
+  text = text.replace(
+    /[ \t]*\{\{#((?:claude|codex|grok|antigravity)(?:,(?:claude|codex|grok|antigravity))*)\}\}\n?([\s\S]*?)[ \t]*\{\{\/\1\}\}\n?/g,
+    (whole, names, body) => (names.split(",").includes(target) ? body : ""),
+  );
   const replacements = {
     "{{state_dir}}": layout.state_dir,
     "{{runtime_dir}}": layout.runtime_dir,
@@ -735,6 +748,40 @@ function withCodexSpawnNames(text, definitions) {
   return out;
 }
 
+let subagentContractsCache;
+function subagentContracts() {
+  if (subagentContractsCache === undefined) {
+    subagentContractsCache = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "..", "hooks", "subagent-parameters.json"), "utf-8"),
+    );
+  }
+  return subagentContractsCache;
+}
+
+// Codex with OpenAI models delivers the spawn message end-to-end encrypted:
+// the parent-side hooks verify the contract from a spawn ticket, but only the
+// child model ever reads the actual delivered text. This preamble delegates
+// the last verification step to the one party that can perform it — the child
+// checks its own task message for the literal contract lines and exits before
+// spending any tool calls if they are missing.
+function codexContractSelfCheck(definition) {
+  const manifest = subagentContracts();
+  const contract = manifest.agents && manifest.agents[definition.data.name];
+  if (!contract) return "";
+  const label = (name) => `\`${manifest.parameters[name].labels[0]}:\``;
+  const lines = (contract.required || []).map(label);
+  const oneOf = (contract.oneOf || []).map((group) => group.map(label).join(" or "));
+  return [
+    "# Task Contract Self-Check",
+    "",
+    "Your task message may have been delivered through an encrypted channel that no hook could inspect.",
+    `Before your first tool call, confirm the message itself contains each of these literal lines: ${lines.join(", ")}${
+      oneOf.length ? `, plus one of ${oneOf.join("; ")}` : ""
+    }.`,
+    "If any is missing, make no tool calls: reply exactly `ultracode: contract missing — exiting` and stop.",
+  ].join("\n");
+}
+
 function renderCodexAgent(
   definition,
   mapping,
@@ -765,7 +812,8 @@ function renderCodexAgent(
     modelMapping,
     mapping,
   );
-  const instructions = `${policy}\n\n${adaptedPrompt}`;
+  const selfCheck = codexContractSelfCheck(definition);
+  const instructions = `${policy}\n\n${selfCheck ? `${selfCheck}\n\n` : ""}${adaptedPrompt}`;
   const codexEffort =
     config.reasoning_effort.codex ?? config.reasoning_effort.claude;
   const lines = [
@@ -774,15 +822,15 @@ function renderCodexAgent(
     "# SPAWN CONTRACT: spawn_agent with agent_type only — NEVER pass fork_turns.",
     "# Ultracode's `context: fork` means the agent runs FORKED OFF: self-contained,",
     "# never seeing the parent conversation (its prompt carries everything it may",
-    "# see). Codex's fork_turns is the opposite — it copies the parent's turns into",
-    "# the child — which leaks orchestration context into a leaf agent and",
-    "# duplicates the whole session per spawn.",
-    "# `model` is this role's tier default, baked in because no hook can route a",
-    "# codex spawn: without it the child INHERITS the spawner's model (measured —",
-    "# a sol orchestrator ran every leaf on sol). repo-profile.json model routes",
-    "# therefore do not apply on codex; this static tier default does.",
+    "# see). Codex's fork_turns DEFAULTS to \"all\" when absent, so ultracode's",
+    "# model-router hook rewrites every spawn to fork_turns = \"none\".",
+    "# NO `model` HERE, ON PURPOSE: a role-file model unconditionally overrides",
+    "# the spawn-time model argument, which is where the model-router hook",
+    "# injects the repo-profile route. Adding a model to this file would freeze",
+    "# this role to it and disable dynamic routing. The router denies any spawn",
+    "# it cannot route, so a missing route fails loudly instead of silently",
+    "# inheriting the spawner's model.",
     `name = ${tomlString(codexAgentName(data.name))}`,
-    `model = ${tomlString(modelMapping.tiers[config.model_tier].codex)}`,
     `description = ${tomlString(withCodexSpawnNames(renderHarnessTemplate(data.description, "codex", harnessLayout, modelMapping, mapping), definitions))}`,
     `model_reasoning_effort = ${tomlString(codexEffort)}`,
     `sandbox_mode = ${tomlString(sandboxMode)}`,

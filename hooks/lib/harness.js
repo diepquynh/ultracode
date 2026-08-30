@@ -113,6 +113,20 @@ function canonicalAgent(rawValues, knownAgents) {
   return candidates.find((name) => knownAgents.has(name)) || candidates[0] || "";
 }
 
+// True when a spawn prompt is a sealed ciphertext blob rather than text.
+// Codex with OpenAI models returns collaboration spawn_agent arguments
+// encrypted (a single Fernet-style token, `gAAAA…`); the client — and
+// therefore every hook — never sees the plaintext. A legitimate ultracode
+// spawn prompt always contains spaces, newlines, and `Label:` lines, so a
+// single unbroken base64url token cannot be a false positive.
+function isOpaqueCiphertext(prompt) {
+  return (
+    typeof prompt === "string" &&
+    prompt.length >= 80 &&
+    /^gAAAA[A-Za-z0-9_=-]+$/.test(prompt)
+  );
+}
+
 function writeField(object, existingKeys, preferredKey, value) {
   const key = existingKeys.find((candidate) => typeof object[candidate] === "string") || preferredKey;
   return { ...object, [key]: value };
@@ -166,21 +180,25 @@ class HarnessAdapter {
     if (Array.isArray(toolInput.Subagents)) {
       return toolInput.Subagents.map((raw, index) => {
         const subagent = raw && typeof raw === "object" ? raw : {};
+        const prompt = firstString(subagent, SUBAGENT_PROMPT_KEYS);
         return {
           index,
           shape: "subagents",
           agent: canonicalAgent(SUBAGENT_AGENT_KEYS.map((key) => subagent[key]), knownAgents),
-          prompt: firstString(subagent, SUBAGENT_PROMPT_KEYS),
+          prompt,
+          promptOpaque: isOpaqueCiphertext(prompt),
           model: firstString(subagent, SUBAGENT_MODEL_KEYS),
           raw: subagent,
         };
       });
     }
+    const prompt = firstString(toolInput, this.definition.flatPromptKeys);
     return [{
       index: 0,
       shape: "flat",
       agent: canonicalAgent(AGENT_KEYS.map((key) => toolInput[key]), knownAgents),
-      prompt: firstString(toolInput, this.definition.flatPromptKeys),
+      prompt,
+      promptOpaque: isOpaqueCiphertext(prompt),
       model: firstString(toolInput, this.definition.flatModelKeys),
       raw: toolInput,
     }];
@@ -201,6 +219,8 @@ class HarnessAdapter {
           if (patch.model !== undefined) {
             updated = writeField(updated, SUBAGENT_MODEL_KEYS, "Model", patch.model);
           }
+          Object.assign(updated, patch.assign || {});
+          for (const key of patch.remove || []) delete updated[key];
           return updated;
         }),
       };
@@ -215,6 +235,8 @@ class HarnessAdapter {
     if (patch.model !== undefined) {
       updated = writeField(updated, this.definition.flatModelKeys, this.definition.flatModelKeys[0], patch.model);
     }
+    Object.assign(updated, patch.assign || {});
+    for (const key of patch.remove || []) delete updated[key];
     return updated;
   }
 
@@ -227,11 +249,13 @@ class HarnessAdapter {
     // discarded even though the spawn itself may still proceed. Keep the
     // rewrite inside hookSpecificOutput.updatedInput only.
     const hookSpecificOutput = { hookEventName: "PreToolUse", updatedInput };
-    if (this.target === "codex") hookSpecificOutput.permissionDecision = "allow";
-    if (this.target === "grok") {
-      // Grok's documented deny path is top-level decision; mirror that for
-      // allow+rewrite once plugin hooks are actually discovered.
-      return { decision: "allow", overwrite: updatedInput, hookSpecificOutput };
+    // Grok parses the same shape (xai-grok-hooks/src/runner/mod.rs
+    // GateHookJson); its rewrite is schema-validated against the tool's input
+    // schema and an unusable one BLOCKS the call, so nothing extra may ride
+    // along. A top-level `overwrite` is not a grok field — it was only ever
+    // warned-and-ignored.
+    if (this.target === "codex" || this.target === "grok") {
+      hookSpecificOutput.permissionDecision = "allow";
     }
     return { hookSpecificOutput };
   }
@@ -247,4 +271,5 @@ module.exports = {
   adapterFor,
   bareAgentName,
   firstString,
+  isOpaqueCiphertext,
 };

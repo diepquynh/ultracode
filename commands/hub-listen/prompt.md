@@ -90,6 +90,15 @@ an agent id or task name), wait on **that specific id** with a single generous t
 research and implementation legitimately run many minutes — never repeated short waits in a loop, and close
 the finished agent afterwards on harnesses where children linger as separate threads.
 
+{{#codex}}
+**Spawn tickets (MANDATORY before every spawn):** this harness seals spawn messages in transit, so
+before **every** subagent spawn call `ultracode_spawn_ticket` with `harness_session_id: $SESSION_ID`, the
+agent name, and `parameters` carrying exactly the spawn prompt's `Label: value` lines under snake_case keys
+(`repo_root`, `session_dir`, `repo_key`, `primary_repo_root`, `task`, and the agent-specific fields). The
+`session_dir` is the **adopted** session dir. Tickets are single-use — file a fresh one per spawn,
+including re-spawns after a denial.
+{{/codex}}
+
 Two rules are absolute:
 
 1. **Work in the adopted session dir.** Once you have adopted the shared session, that dir is your

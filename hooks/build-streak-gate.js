@@ -81,6 +81,11 @@ async function main() {
       "Do not describe this as done, and do not retry under a different command spelling " +
       "to get around this refusal — the orchestrator can supply what you are missing, " +
       "and that answer becomes a recorded lesson so the next run does not repeat this.",
+    // Compact form for reason-capped harnesses: the STUCK instruction is the
+    // one part of this denial that must survive a 256-char clip.
+    `ultracode: ${entry.consecutiveFailures} consecutive build/test failures for ultracode:${agent} — ` +
+      "stop retrying. Return a report whose FIRST line is: STUCK: <one line naming the failure>." +
+      (signature ? ` Last diagnostic: "${signature.slice(0, 70)}".` : ""),
   );
   return 0;
 }

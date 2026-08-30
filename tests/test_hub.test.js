@@ -1167,7 +1167,7 @@ test("hub daemon: msg_wait long-poll resolves when a concurrent send lands", asy
   assert.equal(waited.messages[0].body, "report ready at ultracode-implement-phase-1.md");
 });
 
-test("hub daemon: MCP-over-HTTP lists all 15 tools and core tools behave as on stdio", async (t) => {
+test("hub daemon: MCP-over-HTTP lists all 17 tools and core tools behave as on stdio", async (t) => {
   const fixture = makeFixture(t);
   await startDaemon(t);
   const config = require(path.join(ROOT, "mcp", "lib", "hub", "config.js"));
@@ -1187,6 +1187,7 @@ test("hub daemon: MCP-over-HTTP lists all 15 tools and core tools behave as on s
   const { tools } = await mcpClient.listTools();
   const names = tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [
+    "ultracode_factcheck",
     "ultracode_gate",
     "ultracode_memory",
     "ultracode_memory_forget",
@@ -1199,6 +1200,7 @@ test("hub daemon: MCP-over-HTTP lists all 15 tools and core tools behave as on s
     "ultracode_session_list",
     "ultracode_session_query",
     "ultracode_session_register",
+    "ultracode_spawn_ticket",
     "ultracode_task_claim",
     "ultracode_task_complete",
     "ultracode_task_publish",
@@ -1287,7 +1289,7 @@ test("hub shim: offline boot serves core tools and actionable hub-tool errors", 
   });
 
   const { tools } = await shim.listTools();
-  assert.equal(tools.length, 15, "hub tools stay registered even offline");
+  assert.equal(tools.length, 17, "hub tools stay registered even offline");
 
   const gate = await shim.callTool({
     name: "ultracode_gate",

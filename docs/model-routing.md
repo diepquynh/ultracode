@@ -141,17 +141,33 @@ spawn instructions therefore use names prefixed `ultracode_` such as `ultracode_
 adapter normalizes those aliases back to canonical `fact-check` before routing and policy lookup. Claude/Grok
 keep `ultracode:{agent}`, while Antigravity uses `ultracode-{agent}`.
 
-**Codex gets static tier defaults only — the dynamic layer of this document does not reach it.** Confirmed
-in the open-source tree (2026-08-30, docs/harness-limitations.md for file citations): a child with no role
-model INHERITS the spawner's model (measured — a sol orchestrator ran every leaf on sol), so each generated
-Codex role TOML bakes its tier default in; the spawn handler applies the role layer AFTER any per-call
-`model` argument and the role's model unconditionally overwrites it, so per-spawn overrides cannot re-route
-a baked role — codex itself advertises the role's model as "cannot be changed" in the spawn tool spec. The
-model-router hook does not currently interpose either: spawn hooks reach v2 collaboration tools under a
-namespaced flat name that ultracode's matcher only now targets (re-trust in `/hooks` required; live denial
-verification still open). Consequence: editing a repo profile's `models` block retunes Claude/Antigravity
-spawns immediately, but a Codex session's spawns follow the tiers baked at generation time — re-run the
-installer (or regenerate the dist) to change them.
+**Codex is dynamically routed like everyone else — via the injected spawn argument, with the role TOMLs
+kept model-free on purpose.** The chain, source-confirmed (2026-08-30, openai/codex@main): the v2
+`spawn_agent` args struct carries `model` unconditionally (the `expose_spawn_agent_model_overrides`
+feature flag only hides it from the tool schema, so a hook-injected key still parses), the handler applies
+it with no feature gate (`apply_requested_spawn_agent_model_overrides`), and the role layer overwrites
+`config.model` ONLY when the role file has one (`agent/role.rs build_next_config`). A role-file model
+would override the argument unconditionally — which is why the generated TOMLs must never carry one; the
+router (dispatch confirmed live 2026-08-30; re-trust in `/hooks` after matcher updates) injects the
+resolved route as the spawn's `model` and pins `fork_turns: "none"` (codex treats an ABSENT fork_turns as
+`"all"`). Two codex-specific caveats. First, the handler validates the injected name against codex's own
+model list and fails the spawn on an unknown name — a route pointing at a custom gateway model codex has
+never heard of breaks the spawn there, loudly. Second, a role with no model INHERITS the spawner's model
+(measured — a sol orchestrator ran every leaf on sol), so if the hooks are not running (untrusted, stale
+plugin cache), nothing re-routes and every leaf silently bills at the orchestrator's tier: on codex,
+working hooks are what the routing economics stand on. With OpenAI models the spawn message itself is
+end-to-end encrypted, so the router never touches the prompt on codex — the repo brief would corrupt the
+ciphertext; contract enforcement runs through `ultracode_spawn_ticket` instead (see
+harness-limitations.md).
+
+**Grok Build routes the same way** (source-confirmed 2026-08-30, xai-org/grok-build@main): the spawn tool's
+input has a first-class `model` slug field, the router's `updatedInput` rewrite carries it, and the generated
+agent files stay model-free so the definition never outranks the profile. Two grok caveats mirror codex's.
+First, a `TaskModelValidator` checks the slug before spawn, so a route naming a model grok doesn't serve
+fails the spawn loudly. Second, grok schema-validates every hook rewrite and *blocks the call* on an
+unusable one — which is why the router's patch must add nothing beyond what `TaskToolInput` declares (no
+`fork_turns` on grok), and why the rewrite lives only in `hookSpecificOutput.updatedInput`. As on codex, if
+the hooks are not running, a model-less spawn inherits the parent's model and nothing re-routes.
 
 The generated routing table carries the tier→model map for the harness it was built for, plus aliases from
 every *other* harness's model names to the local equivalent. Write `"opus"` in a profile and run it on Codex,

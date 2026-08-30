@@ -29,6 +29,16 @@ it copies every parent turn into the child, leaking orchestration context into a
 whole session per spawn). On a harness whose finished agents linger as separate threads, close each one after
 collecting its result.
 
+{{#codex}}
+**Spawn tickets (MANDATORY before every spawn).** This harness seals spawn messages in transit, so
+ultracode's hooks cannot read the prompt's `Label: value` lines and will refuse the spawn outright.
+Immediately before **every** subagent spawn, call `ultracode_spawn_ticket` with `harness_session_id:
+$SESSION_ID`, the agent name, and `parameters` holding exactly the values the spawn prompt carries
+(snake_case keys: `repo_root`, `session_dir`, `repo_key`, `primary_repo_root`, `task`, plus the
+agent-specific fields such as `spec_file`, `phase_file`, `report_file`). Tickets are single-use and expire
+in minutes: one ticket, then one spawn, every time — including re-spawns after a denial.
+{{/codex}}
+
 ## Step 0 — Build the repo registry (MANDATORY, before anything else)
 
 A session targets one or more **repos** (repositories). Establish the set of in-scope repos, then load each

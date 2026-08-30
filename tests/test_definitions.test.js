@@ -101,6 +101,13 @@ function parseToml(text) {
 
 function adaptForTarget(text, targetName) {
   const target = HARNESS_LAYOUT.layouts[targetName];
+  // Mirror the generator's harness-conditional blocks: {{#codex}}…{{/codex}}
+  // (or a comma list like {{#codex,grok}}) survives only in the named
+  // harnesses' copies and is dropped from every other.
+  text = text.replace(
+    /[ \t]*\{\{#((?:claude|codex|grok|antigravity)(?:,(?:claude|codex|grok|antigravity))*)\}\}\n?([\s\S]*?)[ \t]*\{\{\/\1\}\}\n?/g,
+    (whole, names, body) => (names.split(",").includes(targetName) ? body : ""),
+  );
   const replacements = {
     "{{state_dir}}": target.state_dir,
     "{{runtime_dir}}": target.runtime_dir,
@@ -595,7 +602,6 @@ test("codex agents are valid TOML", () => {
     const parsed = parseToml(fs.readFileSync(generated, "utf-8"));
     const expectedKeys = new Set([
       "name",
-      "model",
       "description",
       "model_reasoning_effort",
       "sandbox_mode",
@@ -604,9 +610,11 @@ test("codex agents are valid TOML", () => {
     assert.deepEqual(new Set(Object.keys(parsed)), expectedKeys);
     // agent_type charset forbids ':', so codex roles carry the namespace as a prefix.
     assert.equal(parsed.name, `ultracode_${name.replace(/-/g, "_")}`);
-    // No hook routes a codex spawn, and a role without a model INHERITS the
-    // spawner's — so the tier default is baked into the role config layer.
-    assert.equal(parsed.model, MODEL_MAPPING.tiers[definition.config.model_tier].codex);
+    // No model here, on purpose: a role-file model unconditionally overrides
+    // the spawn-time model argument, which is where the model-router injects
+    // the repo-profile route. Baking one would freeze the role's model and
+    // disable dynamic routing.
+    assert.equal(parsed.model, undefined);
     assert.equal(parsed.description, adaptForCodex(definition.description));
     assert.ok(
       parsed.developer_instructions.endsWith(
@@ -1078,6 +1086,14 @@ function runHook(hookPath, input, env) {
   );
 }
 
+// Grok refits a >256-char deny reason to its clip_reason cap (head + final
+// sentence; hooks/lib/grok-hooks.js), so a pattern that lives mid-message must
+// assert a fragment that actually survives there — those are literally the
+// only bytes the model ever sees on grok.
+function pickPattern(target, full, grokVisible) {
+  return target === "grok" ? grokVisible : full;
+}
+
 function denyReason(payload) {
   if (!payload || typeof payload !== "object") return "";
   if (typeof payload.reason === "string" && payload.reason) return payload.reason;
@@ -1126,16 +1142,25 @@ function routeProfileTest(target) {
     runHook(hookPath, input, { PLUGIN_ROOT: pluginRoot });
 
   const routed = JSON.parse(run());
-  let output = routed.hookSpecificOutput;
-  if (target === "grok") {
-    assert.equal(routed.decision, "allow");
-    assert.equal(routed.overwrite.model, expected);
-  }
+  const output = routed.hookSpecificOutput;
   assert.equal(output.updatedInput.model, expected);
-  if (target === "codex") assert.equal(output.permissionDecision, "allow");
+  // Grok schema-validates a rewrite and BLOCKS the call on any unusable one,
+  // so nothing may ride outside hookSpecificOutput (a stray top-level
+  // `overwrite` was only ever warned-and-ignored there).
+  assert.equal(routed.overwrite, undefined);
+  if (target === "codex" || target === "grok") {
+    assert.equal(output.permissionDecision, "allow");
+  }
+  if (target === "codex") {
+    // Codex defaults an absent fork_turns to "all"; the router pins "none".
+    assert.equal(output.updatedInput.fork_turns, "none");
+  }
+  if (target === "grok") {
+    // No fork_turns concept on grok — the rewrite must stay schema-clean.
+    assert.equal(output.updatedInput.fork_turns, undefined);
+  }
   if (target === "claude") {
     assert.equal(routed.decision, undefined);
-    assert.equal(routed.overwrite, undefined);
   }
 
   const matched = JSON.parse(
@@ -1179,7 +1204,15 @@ function routeProfileTest(target) {
     ...hookInput,
     tool_input: { ...hookInput.tool_input, model: "wrong-model" },
   });
-  assert.equal(inherited, "");
+  if (target === "codex") {
+    // "inherit" leaves the model alone, but the fork_turns pin (absent
+    // defaults to "all" on codex) applies regardless of the route.
+    const untouched = JSON.parse(inherited).hookSpecificOutput.updatedInput;
+    assert.equal(untouched.model, "wrong-model");
+    assert.equal(untouched.fork_turns, "none");
+  } else {
+    assert.equal(inherited, "");
+  }
 
   profile.models.byAgent["code-reviewer"] = "default";
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
@@ -1359,12 +1392,8 @@ function routeInitializerTest(target) {
   };
 
   const first = route();
-  if (target === "grok") {
-    assert.equal(first.decision, "allow");
-    assert.equal(first.overwrite.model, "chosen-by-init-kit");
-  } else {
-    assert.notEqual(first.hookSpecificOutput.permissionDecision, "deny");
-  }
+  assert.equal(first.overwrite, undefined, "rewrites live in hookSpecificOutput only");
+  assert.notEqual(first.hookSpecificOutput.permissionDecision, "deny");
   assert.equal(first.hookSpecificOutput.updatedInput.model, "chosen-by-init-kit");
 
   profile.models.byAgent.initializer = "fast";
@@ -1389,12 +1418,8 @@ function routeInitializerTest(target) {
   hookInput.tool_input = { ...hookInput.tool_input };
   delete hookInput.tool_input.model;
   const rewritten = route();
-  if (target === "grok") {
-    assert.equal(rewritten.decision, "allow");
-    assert.equal(rewritten.overwrite.model, explicitTierModel);
-  } else {
-    assert.notEqual(rewritten.hookSpecificOutput.permissionDecision, "deny");
-  }
+  assert.equal(rewritten.overwrite, undefined, "rewrites live in hookSpecificOutput only");
+  assert.notEqual(rewritten.hookSpecificOutput.permissionDecision, "deny");
   assert.equal(rewritten.hookSpecificOutput.updatedInput.model, explicitTierModel);
 }
 
@@ -1471,9 +1496,9 @@ test("model router denies a malformed profile", () => {
 });
 
 // The cap is a budget, not a safety rule, so the capped spawn is handed to the
-// user rather than refused: an ask wherever the harness has one, a denial only
-// on Grok, which has none (its PreToolUse decisions are allow/deny and an
-// unknown value fails open, which would drop the gate entirely).
+// user rather than refused: an ask wherever the harness has one. Grok's is
+// source-verified (xai-grok-hooks runner/mod.rs accepts "ask"); its reason is
+// refit to the 256-char clip_reason cap by lib/grok-hooks.js first.
 function assertCapAsked(payload, pattern, target) {
   const label = `${target}: capped review spawn goes to the user`;
   if (target === "antigravity") {
@@ -1484,15 +1509,15 @@ function assertCapAsked(payload, pattern, target) {
     assert.match(payload.reason, pattern, label);
     return;
   }
-  if (target === "grok") {
-    assert.equal(payload.decision, "deny", label);
-    assert.match(payload.reason, pattern, label);
-    assert.match(payload.reason, /Do not start another automatic pass/, label);
-    return;
-  }
   assert.equal(payload.hookSpecificOutput.permissionDecision, "ask", label);
   assert.match(payload.hookSpecificOutput.permissionDecisionReason, pattern, label);
   assert.notEqual(payload.hookSpecificOutput.permissionDecision, "deny", label);
+  if (target === "grok") {
+    assert.ok(
+      payload.hookSpecificOutput.permissionDecisionReason.length <= 256,
+      `${label} (reason must fit grok's 256-char clip)`,
+    );
+  }
 }
 
 function reviewCapTest(target) {
@@ -1620,7 +1645,13 @@ function sessionGuardTest(target) {
           "\nRepo key: backend.\nTask: inspect repository.",
       ),
     ),
-    new RegExp(expectedDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    // The "Use <expected dir>" guidance is mid-message and does not survive
+    // grok's 256-char refit; the claim itself does.
+    pickPattern(
+      target,
+      new RegExp(expectedDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      /not under the primary repository session/,
+    ),
   );
 
   // The repo key is half the address of every recorded fact-check verdict, so a
@@ -1675,7 +1706,7 @@ function sessionGuardTest(target) {
           "\nRepo key: backend.\nTask: inspect work repo.",
       ),
     ),
-    /primary repository session root/,
+    pickPattern(target, /primary repository session root/, /is not under the primary repository/),
   );
 }
 
@@ -1882,7 +1913,14 @@ function pluginGuardTest(target) {
     `chmod -x ${pluginRoot}/hooks/bash-scope-guard.js`,
     `echo '{}' > ${pluginRoot}/hooks/model-routing.json`,
   ]) {
-    assert.match(reasonOf(command(text), text), /ultracode's own plugin code|plugin tree/);
+    assert.match(
+      reasonOf(command(text), text),
+      pickPattern(
+        target,
+        /ultracode's own plugin code|plugin tree/,
+        /ultracode's own plugin code|plugin tree|writes, moves, or deletes/,
+      ),
+    );
   }
 
   // Reading the plugin stays allowed: a denial is only useful if the caller can
@@ -1900,11 +1938,11 @@ function pluginGuardTest(target) {
   // sees `> file`, never `fs.writeFileSync` inside a JS string.
   assert.match(
     reasonOf(command(`node -e "require('fs').writeFileSync('${session}/factcheck.json','{}')"`), "eval ledger write"),
-    /forge a pipeline decision/,
+    pickPattern(target, /forge a pipeline decision/, /forge a pipeline decision|one legitimate author/),
   );
   assert.match(
     reasonOf(command(`python3 -c "open('${session}/gates.json','w').write('{}')"`), "python ledger write"),
-    /forge a pipeline decision/,
+    pickPattern(target, /forge a pipeline decision/, /forge a pipeline decision|one legitimate author/),
   );
   assert.match(
     reasonOf(command(`python3 - <<'PY'\nopen('out.json','w').write('{}')\nPY`), "heredoc write"),
@@ -1931,7 +1969,7 @@ function pluginGuardTest(target) {
   // The write-tool half of the same rule.
   assert.match(
     reasonOf(write(path.join(pluginRoot, "hooks", "pipeline-gate.js")), "plugin write"),
-    /read-only/,
+    pickPattern(target, /read-only/, /read-only|inside ultracode's inst/),
   );
   assert.equal(write(path.join(repo, "src", "App.ts")), "");
   assert.equal(write(path.join(session, "ultracode-implement-phase-1.md")), "");
@@ -3038,13 +3076,14 @@ function handWrittenReportTest(target) {
 
   // A name the agent invented is not, whichever mechanism writes it.
   const invented = path.join(sessionDir, "ultracode-implement-credentials-uri.md");
-  assert.match(write(invented), /declared for this spawn/, `${target}: invented name refused (write)`);
-  assert.match(bash(`echo x > ${invented}`), /declared for this spawn/, `${target}: invented name refused (shell)`);
+  const declaredPat = pickPattern(target, /declared for this spawn/, /declared report path/);
+  assert.match(write(invented), declaredPat, `${target}: invented name refused (write)`);
+  assert.match(bash(`echo x > ${invented}`), declaredPat, `${target}: invented name refused (shell)`);
   // Nor is the right basename in the wrong repo-key subdirectory: the next stage
   // reads the declared path, directory included.
   assert.match(
     write(path.join(sessionDir, "frontend", "ultracode-implement-phase-3.md")),
-    /declared for this spawn/,
+    declaredPat,
     `${target}: the declared directory is part of the path`,
   );
 
@@ -3055,7 +3094,7 @@ function handWrittenReportTest(target) {
   // Another agent's ledger is still ledger-policy's call, not this one's.
   assert.match(
     bash(`echo x > ${path.join(sessionDir, "ultracode-security-block.json")}`),
-    /owned by ultracode:code-reviewer/,
+    pickPattern(target, /owned by ultracode:code-reviewer/, /Re-spawn the owning agent/),
     `${target}: ledger ownership still outranks the report path`,
   );
 
@@ -3268,7 +3307,7 @@ function phaseScopeTest(target) {
   // And Constraint 6 still outranks all of it.
   assert.match(
     write(path.join(repo, "core/src/test/java/com/example/order/OrderServiceTest.java")),
-    /test file/,
+    pickPattern(target, /test file/, /refusing to let ultracode:implement write/),
     `${target}: implement still cannot write tests`,
   );
 }
@@ -3494,7 +3533,11 @@ function scopeGuardTest(target) {
     "generate-spec",
   ]) {
     allow(path.join(sessionDir, "report.md"), `ultracode:${agent}`);
-    deny(path.join(repo, "src", "App.ts"), `ultracode:${agent}`, /never modifies project source/);
+    deny(
+      path.join(repo, "src", "App.ts"),
+      `ultracode:${agent}`,
+      pickPattern(target, /never modifies project source/, /outside its session directory/),
+    );
   }
 
   // initializer: session dir, skills dir, runtime dir — nothing else.
@@ -3504,12 +3547,20 @@ function scopeGuardTest(target) {
 
   // module-documentation: session dir plus module-hub/references only — not the rest of skills_dir.
   allow(path.join(repo, skillsDir, "module-hub", "references", "auth.md"), "ultracode:module-documentation");
-  deny(path.join(repo, skillsDir, "convention", "SKILL.md"), "ultracode:module-documentation", /allowed scope/);
+  deny(
+    path.join(repo, skillsDir, "convention", "SKILL.md"),
+    "ultracode:module-documentation",
+    pickPattern(target, /allowed scope/, /outside its allowed/),
+  );
   deny(path.join(repo, "src", "App.ts"), "ultracode:module-documentation", /allowed scope/);
 
   // implement: anywhere in the repo root, except a path that looks like a test (Constraint 6).
   allow(path.join(repo, "src", "App.ts"), "ultracode:implement");
-  deny(path.join(repo, "src", "App.test.ts"), "ultracode:implement", /Constraint 6/);
+  deny(
+    path.join(repo, "src", "App.test.ts"),
+    "ultracode:implement",
+    pickPattern(target, /Constraint 6/, /a test file\/directory path/),
+  );
 
   // write-test and prompt-generation keep full repo-root scope, test-shaped paths included.
   allow(path.join(repo, "src", "App.test.ts"), "ultracode:write-test");
@@ -3995,10 +4046,39 @@ function progressTrackerTest(target) {
     "utf-8",
   );
 
-  const resumeOutput = runHook(path.join(pluginRoot, "hooks", "session-resume.js"), {
-    cwd: repo,
-    session_id: "testsess",
-  });
+  // Grok has no Observe stdout channel, so its checkpoint is delivered as
+  // PreToolUse additionalContext after a PreCompact marker (lib/grok-hooks.js
+  // fact 3); everywhere else it is the hook's plain stdout.
+  let resumeOutput;
+  if (target === "grok") {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-progress-home-"));
+    const env = { PLUGIN_ROOT: pluginRoot, ULTRACODE_HUB_HOME: home };
+    runHook(
+      path.join(pluginRoot, "hooks", "session-resume.js"),
+      { cwd: repo, session_id: "testsess", hook_event_name: "pre_compact", source: "auto" },
+      env,
+    );
+    const injected = JSON.parse(
+      runHook(
+        path.join(pluginRoot, "hooks", "session-resume.js"),
+        {
+          cwd: repo,
+          session_id: "testsess",
+          hook_event_name: "pre_tool_use",
+          toolName: "read_file",
+          toolInput: { file_path: "README.md" },
+        },
+        env,
+      ),
+    );
+    assert.equal(injected.hookSpecificOutput.permissionDecision, "allow");
+    resumeOutput = injected.hookSpecificOutput.additionalContext;
+  } else {
+    resumeOutput = runHook(path.join(pluginRoot, "hooks", "session-resume.js"), {
+      cwd: repo,
+      session_id: "testsess",
+    });
+  }
   assert.match(resumeOutput, /code-reviewer phase-2-tests \[ok\]/);
   assert.match(resumeOutput, /phase 2 review iterations so far: 2\/3/);
   assert.match(resumeOutput, /phase 2-tests review iterations so far: 1\/3/);
@@ -4196,6 +4276,9 @@ test("every plugin distribution includes target hooks", () => {
       "subagent-parameters.json",
     ]);
     for (const lib of [
+      "codex-spawn.js",
+      "grok-hooks.js",
+      "spawn-ticket.js",
       "common.js",
       "harness.js",
       "hook-context.js",
@@ -4222,6 +4305,29 @@ test("every plugin distribution includes target hooks", () => {
       assert.ok(config.ultracode.PreInvocation);
       const compactCommand = config.ultracode.PreInvocation[0].command;
       assert.match(compactCommand, /session-resume\.js/);
+    } else if (target === "grok") {
+      assert.ok(config.hooks.PreToolUse);
+      assert.ok(config.hooks.PostToolUse);
+      // No SessionStart registration on grok: its SessionStart source is only
+      // ever "new"/"load", never "compact", and Observe hooks have no model
+      // channel anyway. The post-compaction checkpoint rides PreCompact
+      // (marker) + PreToolUse "*" (inject) instead — lib/grok-hooks.js fact 3.
+      assert.equal(config.hooks.SessionStart, undefined);
+      assert.match(config.hooks.PreCompact[0].hooks[0].command, /session-resume\.js/);
+      assert.equal(config.hooks.PreToolUse[0].matcher, "*");
+      assert.match(config.hooks.PreToolUse[0].hooks[0].command, /session-resume\.js/);
+      const spawnGroup = config.hooks.PostToolUse.find((group) =>
+        /spawn_subagent/.test(group.matcher),
+      );
+      assert.ok(spawnGroup, "grok PostToolUse spawn group present");
+      const commands = spawnGroup.hooks.map((hook) => hook.command).join("\n");
+      assert.match(commands, /spawn-log\.js/);
+      // DELIBERATELY absent (see hooks/factcheck-record.js header): grok's
+      // spawn result is usually a background-launch ack, so the verdict is
+      // recorded by the fact-check role itself via ultracode_factcheck. If
+      // this assertion surprises you, read that header before "fixing" the
+      // registration.
+      assert.ok(!commands.includes("factcheck-record.js"));
     } else {
       assert.ok(config.hooks.PreToolUse);
       assert.ok(config.hooks.PostToolUse);
@@ -4467,9 +4573,12 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.match(initKit, /\$\{GROK_SESSION_ID:-\$\{CLAUDE_CODE_SESSION_ID:-no-session-id\}\}/);
 
   const hooks = JSON.parse(fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "hooks", "hooks.json"), "utf-8"));
-  assert.match(hooks.hooks.SessionStart[0].hooks[0].command, /GROK_PLUGIN_ROOT/);
-  assert.match(hooks.hooks.PreToolUse[0].matcher, /spawn_subagent/);
-  assert.ok(hooks.hooks.PreCompact);
+  // No SessionStart on grok — its source is never "compact" (lib/grok-hooks.js
+  // fact 3); the checkpoint rides PreCompact + the PreToolUse "*" group.
+  assert.equal(hooks.hooks.SessionStart, undefined);
+  assert.match(hooks.hooks.PreCompact[0].hooks[0].command, /GROK_PLUGIN_ROOT/);
+  assert.equal(hooks.hooks.PreToolUse[0].matcher, "*");
+  assert.ok(hooks.hooks.PreToolUse.some((group) => /spawn_subagent/.test(group.matcher)));
 });
 
 test("grok hooks accept camelCase payloads", () => {

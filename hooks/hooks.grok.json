@@ -1,16 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${GROK_PLUGIN_ROOT}/hooks/session-resume.js\""
-          }
-        ]
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "",
@@ -23,6 +12,15 @@
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/hooks/session-resume.js\""
+          }
+        ]
+      },
       {
         "matcher": "Task|Agent|spawn_subagent",
         "hooks": [
@@ -111,10 +109,6 @@
           {
             "type": "command",
             "command": "node \"${GROK_PLUGIN_ROOT}/hooks/spawn-log.js\""
-          },
-          {
-            "type": "command",
-            "command": "node \"${GROK_PLUGIN_ROOT}/hooks/factcheck-record.js\""
           }
         ]
       },

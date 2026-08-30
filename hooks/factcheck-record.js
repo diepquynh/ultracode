@@ -1,6 +1,24 @@
 #!/usr/bin/env node
 // Capture fact-check verdicts under the primary session root and the spawn's
 // explicit repo key. The work repository may be elsewhere.
+//
+// DELIBERATELY NOT REGISTERED in hooks/hooks.codex.json (removed 2026-08-30,
+// not an omission): on codex the verdict can never reach this hook — the v2
+// spawn result is an async launch ack, wait_agent returns no child content,
+// and an incoming FINAL_ANSWER is a TurnInput::InterAgentCommunication for
+// which codex's hook runtime dispatches nothing (source citations in
+// docs/harness-limitations.md). The codex fact-check role records its own
+// verdict through the ultracode_factcheck MCP tool instead.
+//
+// DELIBERATELY NOT REGISTERED in hooks/hooks.grok.json either (removed
+// 2026-08-30, same reasoning, different mechanics): grok's spawn tool
+// defaults to run_in_background: true and even foreground spawns
+// auto-background when the wait budget expires, so PostToolUse usually
+// carries only a launch ack; grok's SubagentStop payload has the final
+// message but no spawn prompt and no child transcript path, so `Session
+// dir:` / `Repo key:` are unrecoverable there (hooks/lib/grok-hooks.js,
+// fact 4). The grok fact-check role also records its own verdict through
+// ultracode_factcheck.
 
 "use strict";
 

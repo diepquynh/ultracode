@@ -91,10 +91,6 @@
           {
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/hooks/spawn-log.js\""
-          },
-          {
-            "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/hooks/factcheck-record.js\""
           }
         ]
       },
