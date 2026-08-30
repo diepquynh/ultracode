@@ -1,18 +1,26 @@
 "use strict";
 
-// Codex push adapter: `codex queue` (Codex CLI ≥0.149.0) delivers a message
-// to a running named session — idle sessions wake into a new turn, mid-turn
-// sessions see it as the next user turn. The session name is the
-// native_address the worker registered.
+// Codex push adapter: `codex queue` delivers a message to a running session —
+// idle sessions wake into a new turn, mid-turn sessions see it as the next
+// user turn.
 //
-// VERIFICATION (V3, docs/hub.md): the exact invocation below was written from
-// the v0.149.0 release notes, not measured on a live CLI. Before relying on
-// codex push in production, verify `codex queue --help` and pin the flags
-// here with a measured-on date. Any mismatch merely degrades to pull.
+// VERIFIED 2026-08-30 on codex-cli 0.151.0 (V3 in docs/hub.md):
+//   codex queue --thread <SESSION-UUID-or-exact-name> --message <TEXT>
+// `--thread` takes the session UUID, which is exactly the harness session id
+// every hub registration already carries — so codex push needs no explicit
+// native_address; one is used only when the worker registered a named session.
+//
+// ON BY DEFAULT; ULTRACODE_HUB_CODEX_PUSH=0 opts a daemon out. A machine
+// whose codex CLI predates `queue` (<0.149.0) feature-detects as unavailable
+// and degrades to pull, as does any invocation failure.
 
 const { execFile } = require("node:child_process");
 
 let availability = null;
+
+function enabled() {
+  return process.env.ULTRACODE_HUB_CODEX_PUSH !== "0";
+}
 
 function execFileAsync(command, args) {
   return new Promise((resolve, reject) => {
@@ -37,15 +45,19 @@ async function available() {
 }
 
 async function push(session, notice) {
+  if (!enabled()) return false;
+  const target = session.native_address || session.harness_session_id;
+  if (!target) return false;
   if (!(await available())) return false;
-  // Never shell interpolation: the notice and session name are argv entries.
-  await execFileAsync("codex", ["queue", "--session", session.native_address, notice]);
+  // Never shell interpolation: the target and notice are argv entries.
+  await execFileAsync("codex", ["queue", "--thread", target, "--message", notice]);
   return true;
 }
 
 module.exports = {
   push,
   available,
+  enabled,
   // test seam
   _resetAvailability: () => {
     availability = null;

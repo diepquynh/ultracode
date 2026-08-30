@@ -41,12 +41,18 @@ class HubClient {
     return info.url || hubUrl(info.port);
   }
 
-  async request(method, route, body, { timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  async request(method, route, body, { timeoutMs = REQUEST_TIMEOUT_MS, signal } = {}) {
     const info = readHubInfo();
     const base = this.baseUrl();
     if (!base || !info || !info.token) {
       throw new Error("ultracode hub endpoint unknown: no ~/.ultracode/hub.json (run hub-ctl.js ensure).");
     }
+    // timeoutMs 0 = no client-side deadline (an infinite msg_wait park); the
+    // caller's cancellation signal — the harness aborting the tool call when
+    // the user hits ESC — is then the only way this fetch ends early.
+    const signals = [];
+    if (timeoutMs > 0) signals.push(AbortSignal.timeout(timeoutMs));
+    if (signal) signals.push(signal);
     const response = await fetch(`${base}${route}`, {
       method,
       headers: {
@@ -54,7 +60,7 @@ class HubClient {
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signals.length ? AbortSignal.any(signals) : undefined,
     });
     const text = await response.text();
     let parsed = null;
@@ -105,10 +111,13 @@ class HubClient {
     return this.request("POST", "/api/v1/messages", args);
   }
 
-  waitMessages(args) {
-    // The HTTP timeout must outlive the server-side long-poll window.
-    const wait = Number.isInteger(args && args.timeout_ms) ? Math.min(args.timeout_ms, MAX_WAIT_MS) : 25000;
-    return this.request("POST", "/api/v1/messages/wait", args, { timeoutMs: wait + REQUEST_TIMEOUT_MS });
+  waitMessages(args, { signal } = {}) {
+    // The HTTP timeout must outlive the server-side long-poll window;
+    // timeout_ms 0 (infinite park) disables the client deadline entirely and
+    // relies on the cancellation signal / connection lifetime instead.
+    const requested = Number.isInteger(args && args.timeout_ms) ? args.timeout_ms : 25000;
+    const timeoutMs = requested === 0 ? 0 : Math.min(requested, MAX_WAIT_MS) + REQUEST_TIMEOUT_MS;
+    return this.request("POST", "/api/v1/messages/wait", args, { timeoutMs, signal });
   }
 
   publishTask(args) {

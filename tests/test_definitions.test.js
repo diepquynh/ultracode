@@ -143,7 +143,7 @@ function adaptForTarget(text, targetName) {
 function adaptForCodex(text) {
   let adapted = adaptForTarget(text, "codex");
   for (const name of Object.keys(BASELINE.agents)) {
-    adapted = adapted.split(`ultracode:${name}`).join(name.replace(/-/g, "_"));
+    adapted = adapted.split(`ultracode:${name}`).join(`ultracode_${name.replace(/-/g, "_")}`);
   }
   return adapted;
 }
@@ -601,7 +601,8 @@ test("codex agents are valid TOML", () => {
       "developer_instructions",
     ]);
     assert.deepEqual(new Set(Object.keys(parsed)), expectedKeys);
-    assert.equal(parsed.name, name.replace(/-/g, "_"));
+    // agent_type charset forbids ':', so codex roles carry the namespace as a prefix.
+    assert.equal(parsed.name, `ultracode_${name.replace(/-/g, "_")}`);
     assert.equal(parsed.description, adaptForCodex(definition.description));
     assert.ok(
       parsed.developer_instructions.endsWith(
@@ -833,12 +834,16 @@ test("installer ensures the machine-level hub after dependencies, before registr
   // Codex does not expand ${PLUGIN_ROOT} in plugin-manifest mcpServers (0.151.0),
   // so the installer must register the shim explicitly there too.
   assert.match(script, /codex mcp add ultracode-gate -- node "\$PLUGIN_ROOT\/mcp\/hub-shim\.js"/);
+  // Codex reads agent_types only from config.toml [agents.*]; the installer
+  // registers the plugin's roles and the uninstaller removes them.
+  assert.match(script, /register_codex_agents\.js" --plugin-root "\$PLUGIN_ROOT"/);
   // Uninstall stops the daemon but keeps ~/.ultracode (token survives reinstalls).
   const uninstall = fs.readFileSync(UNINSTALLER, "utf-8");
   assert.match(uninstall, /hub-ctl\.js/);
   assert.match(uninstall, /Left ~\/\.ultracode/);
-  // ...and the uninstaller removes codex's external registration.
+  // ...and the uninstaller removes codex's external registrations.
   assert.match(uninstall, /codex mcp remove ultracode-gate/);
+  assert.match(uninstall, /register_codex_agents\.js" --remove/);
 });
 
 test("real npm ci against the generated plugin root installs a working ultracode_gate MCP server", () => {
@@ -4321,9 +4326,9 @@ test("codex output uses codex runtime layout", () => {
   assert.match(initKitCommand, /# \$init-kit/);
   assert.ok(!initKitCommand.includes("$ARGUMENTS"));
   assert.ok(!initKitCommand.includes("subagent_type"));
-  assert.match(initKitCommand, /agent_type: initializer/);
+  assert.match(initKitCommand, /agent_type: ultracode_initializer/);
   assert.doesNotMatch(initKitCommand, /ultracode:initializer/);
-  assert.match(orchestrate, /fact_check/);
+  assert.match(orchestrate, /ultracode_fact_check/);
   assert.doesNotMatch(orchestrate, /ultracode:fact-check/);
   const hooks = JSON.parse(fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "hooks", "hooks.json"), "utf-8"));
   assert.match(hooks.hooks.PreToolUse[0].matcher, /spawn_agent/);

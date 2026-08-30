@@ -68,12 +68,12 @@ so stdio and HTTP can never drift:
 | Tool | What it does |
 |---|---|
 | `ultracode_session_register` | Join the registry: harness, explicit session id, repo roots, own session dir, capabilities, optional native wake channel. Returns `session_key` + `session_secret` + starting `cursor`. Re-registering rotates the secret; anonymous ids (`no-session-id`) are refused. |
-| `ultracode_session_heartbeat` | Refresh liveness (stale after 10 min, gone after 24 h); reports pending messages / open tasks. |
+| `ultracode_session_heartbeat` | Reports pending messages / open tasks. Rarely needed for liveness: every authenticated call refreshes the registration, a parked `msg_wait` pins it alive, and an idle registration survives 7 days — long tasks never re-register. |
 | `ultracode_session_list` | Which live sessions are reachable, filterable by harness/repo root. Secrets never leave the hub. |
 | `ultracode_session_query` | The shared ultracode sessions known for a repo — id, dir, inferred stage, participants, last activity — for the hub-listen picker and for resume. |
 | `ultracode_session_adopt` | Authorize this session to work inside a shared ultracode session it did not create (by dir, or by id+repo for resume). Returns the shared `session_dir` to use as `Session dir:` thereafter. |
 | `ultracode_msg_send` | Direct (`to_session_key`) or harness broadcast (`to_harness`). Returns immediately; body ≤ 64 KiB and carries addresses, not content. `dedupe_key` makes retries idempotent. |
-| `ultracode_msg_wait` | ONE cursor-based long-poll (default 25 s, cap 120 s). Reads destroy nothing; passing the advanced cursor next call is the ack, so timeouts and crashes lose nothing. |
+| `ultracode_msg_wait` | ONE cursor-based long-poll. `timeout_ms: 0` parks **indefinitely** — the listening state for pull-only harnesses, ended only by a message, a hub restart, or the user's ESC (the harness's MCP cancellation aborts the request and the hub reaps the waiter; a dropped connection reaps it too). Finite waits default 25 s, cap 120 s. Reads destroy nothing; passing the advanced cursor next call is the ack, so every ending is lossless. |
 | `ultracode_task_publish` | Queue a task addressed by `target_harness`/`capability`, payload validated against the same required-inputs contract as subagent spawns (≤ 32 KiB, all paths confined to the publisher's session dir). Candidates are woken automatically. |
 | `ultracode_task_claim` | Exclusive claim under a lease (default 15 min, cap 60). Expired leases reopen (attempts+1); the third expiry fails the task and notifies the publisher. |
 | `ultracode_task_complete` | `done`/`failed` + summary + `report_file` **inside the worker's own session dir**. Inserts the completion message and wakes the publisher. |
@@ -85,17 +85,24 @@ calls polling. Delivery order for each committed message:
 
 1. **A parked long-poll** on the recipient resolves immediately (`channel: "long-poll"`).
 2. **A native push** wakes an idle recipient as a new turn — a *notice* only ("call `ultracode_msg_wait`"),
-   never the body, so a spoofed native channel can at worst trigger an empty authenticated fetch:
-   - `codex-queue` (`mcp/lib/push/codex.js`): shells `codex queue` to the registered session name.
+   never the body, so a spoofed native channel can at worst trigger an empty authenticated fetch. Both
+   channels are **on by default and need no per-session setup**: when a registration carries no explicit
+   `native_channel`, the channel is inferred from the harness and addressed by the harness session id every
+   registration already has; an explicit `native_address` (a `/rename`d name) still wins. Opt a daemon out
+   with `ULTRACODE_HUB_CLAUDE_PUSH=0` / `ULTRACODE_HUB_CODEX_PUSH=0`.
+   - `codex-queue` (`mcp/lib/push/codex.js`): `codex queue --thread <session-UUID-or-name> --message <notice>`
+     (syntax verified on codex-cli 0.151.0, V3). Feature-detected: a CLI without `queue` (<0.149.0) reports
+     unavailable and the harness stays pull-only.
    - `claude-uds` (`mcp/lib/push/claude.js`): writes a newline-delimited `{type:"auth"}` + `{type:"user"}`
-     frame pair to the target session's Unix socket (`~/.claude/sessions/<pid>.json` → `messagingSocketPath`;
-     peer token from the sibling `<pid>.<sha256(socketPath)>.key`) — the substrate of Claude Code's own
-     cross-session messaging. Transport verified live on 2.1.251 (V2). **Still off by default**
-     (`ULTRACODE_HUB_CLAUDE_PUSH=1`): the frame shape is reverse-engineered, so it is version-specific and
-     will break on Claude updates, at which point it degrades to pull. It deliberately does not defeat
-     Claude's inbound gate — a session in `bypassPermissions` mode *holds* a peer message for the user's
-     approval (a peer message is not the user's own consent); since the payload is only a wake notice, a held
-     or missed push costs nothing.
+     frame pair to the target session's Unix socket (`~/.claude/sessions/<pid>.json`, matched by name or
+     `sessionId`; peer token from the sibling `<pid>.<sha256(socketPath)>.key`) — the substrate of Claude
+     Code's own cross-session messaging. Verified end-to-end on 2.1.251 (V2), including waking a live
+     interactive session. The frame shape is reverse-engineered and version-coupled, so any Claude update
+     that changes it degrades delivery to pull rather than erroring. It deliberately does not defeat Claude's
+     inbound gate — a session in `bypassPermissions` mode *holds* a peer message for the user's approval;
+     since the payload is only a wake notice, a held or missed push costs nothing. To skip the hold and
+     deliver hub notices immediately, set `"crossSessionInbound": "accept"` in `~/.claude/settings.json` —
+     a per-user trust decision Claude Code owns, which ultracode documents but never sets for you.
 3. **Nothing worked** → the message stays queued; the row was committed before any push was attempted, so
    adapter failure can never lose it. Grok and Antigravity are always in this mode (no push channel).
 
@@ -193,10 +200,10 @@ Mirrors docs/harness-limitations.md: a dated, measured entry gates each feature 
 | # | Claim to verify | Gates | Status |
 |---|---|---|---|
 | V1 | SDK ≥1.30.0 ships server+client streamable HTTP | `/mcp` endpoint | **Verified 2026-08-30** (both import paths resolve; exercised by tests) |
-| V2 | Claude Code UDS frame shape (auth + user frames) | `claude-uds` default-on | **Transport verified 2026-08-30 on 2.1.251** (message delivered, sender pid verified by recipient). Stays behind `ULTRACODE_HUB_CLAUDE_PUSH` because the frame is reverse-engineered and version-fragile; bypass-mode recipients hold peer messages by design |
-| V3 | `codex queue` flags + idle/mid-turn/gone behavior (≥0.149.0) | pinning `push/codex.js` argv | Open — measured CLI here is 0.147.0 (no `queue`); feature-detect keeps it pull-only |
+| V2 | Claude Code UDS frame shape (auth + user frames) | `claude-uds` default-on | **Verified end-to-end 2026-08-30 on 2.1.251** (live interactive session woken; sender pid verified by recipient) → **default-on**, `ULTRACODE_HUB_CLAUDE_PUSH=0` to opt out; degrades to pull if a Claude update changes the frames |
+| V3 | `codex queue` flags + behavior (≥0.149.0) | pinning `push/codex.js` argv | **Verified 2026-08-30 on 0.151.0**: `codex queue --thread <UUID\|name> --message <text>` → pinned, default-on, `ULTRACODE_HUB_CODEX_PUSH=0` to opt out; feature-detect keeps pre-0.149 CLIs pull-only |
 | V4 | Direct HTTP MCP registration per harness (Codex `url`+`bearer_token_env_var`, Grok config.toml `url`, Claude plugin `type:"http"`, AGY `agy mcp add --url`) | a `--mcp-transport http` generator mode | Open — shim registration is v1 for all four |
-| V5 | Per-harness MCP tool-call timeout ceilings for `msg_wait` guidance | documented `timeout_ms` per harness | Open — 25 s default chosen to sit under every known default |
+| V5 | Per-harness MCP tool-call timeout ceilings for `msg_wait` guidance | documented `timeout_ms` per harness | Largely moot since `timeout_ms: 0` (infinite park) became the listening mode — the remaining question is which harnesses cap a tool call's duration and cut the park early (harmless: the registration and cursor survive; re-run hub-listen) |
 
 ## Operations
 

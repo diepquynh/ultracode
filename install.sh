@@ -195,6 +195,12 @@ JSON
     # entry, which outranks the plugin manifest's).
     codex mcp add ultracode-gate -- node "$PLUGIN_ROOT/mcp/hub-shim.js" >/dev/null 2>&1 \
       || echo "Warning: could not register the ultracode-gate MCP server with codex; run: codex mcp add ultracode-gate -- node \"$PLUGIN_ROOT/mcp/hub-shim.js\"" >&2
+    # Codex also does not read agent roles from a plugin: spawn_agent's valid
+    # agent_type values come only from [agents.<name>] tables in
+    # ~/.codex/config.toml. Without this, every ultracode spawn fails with
+    # "unknown agent_type" and sessions improvise untracked generic forks.
+    node "$INSTALL_DIR/scripts/register_codex_agents.js" --plugin-root "$PLUGIN_ROOT" \
+      || echo "Warning: could not register ultracode agent_types with codex; run: node \"$INSTALL_DIR/scripts/register_codex_agents.js\" --plugin-root \"$PLUGIN_ROOT\"" >&2
     echo "Installed Ultracode. Start Codex, trust its hooks in /hooks, restart, then run \$init-kit."
   fi
 done

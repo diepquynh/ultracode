@@ -36,10 +36,14 @@ function jsonResult(value) {
 }
 
 function registerHubTools(server, hub) {
-  const call = (method) => async (args) => {
+  // `extra.signal` is the MCP cancellation signal — the user's ESC. Forwarded
+  // so an infinite ultracode_msg_wait park aborts its hub request (and the hub
+  // reaps the waiter) the moment the harness cancels the tool call. The other
+  // hub methods ignore the options argument.
+  const call = (method) => async (args, extra) => {
     if (!hub) return unavailable();
     try {
-      return jsonResult(await hub[method](args));
+      return jsonResult(await hub[method](args, { signal: extra && extra.signal }));
     } catch (error) {
       return { isError: true, content: [{ type: "text", text: error.message }] };
     }
@@ -92,8 +96,9 @@ function registerHubTools(server, hub) {
     "ultracode_session_heartbeat",
     {
       description:
-        "Refresh this session's hub registration (sessions go stale after 10 minutes without one) and " +
-        "learn whether messages or claimable tasks are pending. Call it when resuming work — not on a timer.",
+        "Learn whether messages or claimable tasks are pending for this session. Rarely needed for liveness: " +
+        "EVERY authenticated hub call refreshes the registration, a parked ultracode_msg_wait keeps it alive, " +
+        "and an idle registration survives 7 days — so never call this on a timer or between pipeline stages.",
       inputSchema: {
         session_key: z.string(),
         session_secret: z.string(),
@@ -181,10 +186,13 @@ function registerHubTools(server, hub) {
     "ultracode_msg_wait",
     {
       description:
-        "Fetch messages addressed to this session, blocking until one arrives or the timeout passes. This " +
-        "is ONE long-poll call, and the only blocking wait permitted — never call it in a loop. If it times " +
-        "out, finish your turn; a native push or the user will wake you, and the cursor means nothing is " +
-        "lost. Pass the cursor from your registration or from the previous result; passing it back is the ack.",
+        "Fetch messages addressed to this session, blocking until one arrives. This is ONE call, and the " +
+        "only blocking wait permitted — never call it in a loop. When the user asked this session to LISTEN " +
+        "(hub-listen), pass timeout_ms 0: the call parks indefinitely until a message arrives, the hub " +
+        "restarts, or the user cancels it themselves (ESC) — that park IS the listening state, and it keeps " +
+        "this session's registration alive. Otherwise use a finite timeout (default 25000, max 120000) and " +
+        "finish your turn on timed_out. Pass the cursor from your registration or the previous result; " +
+        "passing it back is the ack, so no ending of this call ever loses a message.",
       inputSchema: {
         session_key: z.string(),
         session_secret: z.string(),
@@ -192,8 +200,12 @@ function registerHubTools(server, hub) {
         timeout_ms: z
           .number()
           .int()
+          .min(0)
           .optional()
-          .describe("How long to block (default 25000, max 120000 — stay under your harness's MCP tool timeout)."),
+          .describe(
+            "0 = park indefinitely (listening mode; ended by a message or the user's ESC). " +
+              "Otherwise how long to block (default 25000, max 120000).",
+          ),
       },
     },
     call("waitMessages"),

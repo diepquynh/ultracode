@@ -41,21 +41,26 @@ rather than refused. `askPreToolUse` in `hooks/lib/common.js` picks the shape pe
 ## Hub wake channels (checked 2026-08-30, not yet re-measured on qualifying versions)
 
 The cross-harness hub (docs/hub.md) can wake an idle interactive session only where the harness has a
-steering channel; everywhere else delivery is pull-only (`ultracode_msg_wait`). Feature flags stay off until
-a live run on a qualifying CLI version is recorded here.
+steering channel; everywhere else delivery is pull-only (`ultracode_msg_wait`). Channels turn on by default
+only once a live run on a qualifying CLI version is recorded here — claude and codex are (see below);
+grok and antigravity have no channel to gate.
 
 - **Claude Code**: cross-session messaging (named sessions, per-session Unix sockets under `/tmp/cc-socks`,
-  session records under `~/.claude/sessions/`) ships in ≥2.1.224. Verified live on 2.1.251 (2026-08-30): the
-  `mcp/lib/push/claude.js` frame pair (`{type:"auth",token}` from `<pid>.<sha256(socketPath)>.key`, then
-  `{type:"user",message}`) reached a background session, whose recipient verified the sender pid. Two measured
-  facts shape the adapter: (1) the wire protocol is undocumented and version-specific, so it stays behind
-  `ULTRACODE_HUB_CLAUDE_PUSH=1` and degrades to pull on any mismatch; (2) a recipient in `bypassPermissions`
-  mode HOLDS an unattested peer message for user approval ("The sender did not attest its permission mode and
-  this session bypasses prompts... set crossSessionInbound to accept") — the adapter respects that gate rather
-  than bypassing it, which is safe because the pushed payload is only a wake notice.
-- **Codex**: `codex queue` (deliver-to-named-session) ships in ≥0.149.0. Measured CLI is 0.147.0, where
-  `codex queue --help` fails — the adapter's feature-detect correctly reports unavailable and Codex sessions
-  are pull-only until an upgrade.
+  session records under `~/.claude/sessions/`) ships in ≥2.1.224. Verified END-TO-END on 2.1.251
+  (2026-08-30): the `mcp/lib/push/claude.js` frame pair (`{type:"auth",token}` from
+  `<pid>.<sha256(socketPath)>.key`, then `{type:"user",message}`) woke a live interactive session, whose
+  recipient verified the sender pid — so the adapter is **on by default** (`ULTRACODE_HUB_CLAUDE_PUSH=0` opts
+  out), matching records by name or `sessionId` so no per-session `native_address` is needed. Two measured
+  facts still shape it: (1) the wire protocol is undocumented and version-specific, so any mismatch degrades
+  to pull rather than erroring; (2) a recipient in `bypassPermissions` mode HOLDS an unattested peer message
+  for user approval ("The sender did not attest its permission mode and this session bypasses prompts... set
+  crossSessionInbound to accept") — the adapter respects that gate rather than bypassing it, which is safe
+  because the pushed payload is only a wake notice.
+- **Codex**: `codex queue` ships in ≥0.149.0; syntax verified on 0.151.0 (2026-08-30):
+  `codex queue --thread <session-UUID-or-exact-name> --message <text>`, pinned in `mcp/lib/push/codex.js`
+  and **on by default** (`ULTRACODE_HUB_CODEX_PUSH=0` opts out; `--thread` takes the thread UUID, so no
+  per-session naming is needed). A CLI without `queue` (0.147.0 was measured failing `codex queue --help`)
+  feature-detects as unavailable and stays pull-only.
 - **Grok Build 1.0.13 / Antigravity 1.1.22**: no external steering channel found in either (AGY's
   `send_message` is intra-conversation only). Pull-only by design, not by flag.
 
@@ -71,6 +76,14 @@ Two hub-relevant behaviors measured live on 2026-08-30 while verifying the shim 
   "this runtime has not exposed any of the required hub calls". Same class as AGY's inert `mcp_config.json`;
   install.sh works around both with an explicit absolute-path registration (`codex mcp add ultracode-gate --
   node <dist>/mcp/hub-shim.js`), which lands in `~/.codex/config.toml` and outranks the plugin manifest.
+- **Codex 0.151.0 does not read agent roles from a plugin** (measured 2026-08-30, session 01a051cc…): valid
+  `spawn_agent` `agent_type` values come only from `[agents.<name>]` tables in `~/.codex/config.toml`
+  (`config_file` pointing at a role TOML). A spawn naming a plugin role fails with `unknown agent_type`, and
+  a session left without registered roles improvises — it reads the role TOML as a document and pastes it
+  into a generic `fork_turns` agent, which has no role binding (tools/model/prompt contract all lost) and
+  which it then tracks poorly (repeated bare 50 s `wait_agent` timeouts; `wait_agent` wants specific ids).
+  install.sh registers every generated role via `scripts/register_codex_agents.js` (a managed block in
+  config.toml); codex agent_type names are `ultracode_<name>` because the charset forbids `:`.
 - **Grok 1.0.13 `-p` does not expose user-config stdio MCP servers in untrusted directories.** `grok mcp
   doctor` reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
   plugin-bundled servers and reported the same tools "not found". Run from a trusted project (or trust the

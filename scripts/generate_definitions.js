@@ -716,8 +716,14 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
   return text;
 }
 
+// Codex agent_type charset is lowercase letters, digits, and underscores —
+// no colon — so the `ultracode:` namespace becomes an `ultracode_` prefix.
+// The prefix is not cosmetic: valid agent_type values come from config.toml
+// `[agents.<name>]` tables (install.sh registers ours via
+// scripts/register_codex_agents.js), and unprefixed names like `explore`
+// collide with harness built-ins.
 function codexAgentName(name) {
-  return name.replace(/-/g, "_");
+  return `ultracode_${name.replace(/-/g, "_")}`;
 }
 
 function withCodexSpawnNames(text, definitions) {

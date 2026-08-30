@@ -28,7 +28,15 @@ const BUSY_TIMEOUT_MS = 5000;
 const HARNESSES = ["claude", "codex", "grok", "antigravity"];
 const NATIVE_CHANNELS = ["codex-queue", "claude-uds", "none"];
 const HEARTBEAT_STALE_MS = 10 * 60 * 1000;
-const SESSION_GONE_MS = 24 * 60 * 60 * 1000;
+// A registration survives a week of silence: long-running work must never
+// burn tool calls re-registering mid-task. Liveness is activity-based — every
+// authenticated call refreshes the heartbeat (verifySession), so only a
+// session that is truly idle for 7 days loses its secret; 'stale' (10 min) is
+// a display hint, not a validity state.
+const SESSION_GONE_MS = 7 * 24 * 60 * 60 * 1000;
+// Throttle the heartbeat write so chatty sessions don't rewrite the row on
+// every single call.
+const HEARTBEAT_TOUCH_MS = 60 * 1000;
 const MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGE_BODY_BYTES = 64 * 1024;
 const DEFAULT_LEASE_SECONDS = 900;
@@ -292,6 +300,18 @@ class HubState {
     }
     if (row.status === "gone") {
       throw new HubError(410, "This session registration has expired; register again.");
+    }
+    // Every authenticated call IS the heartbeat: a session busy claiming,
+    // completing, or waiting never expires mid-task and never has to spend a
+    // tool call on ultracode_session_heartbeat. Throttled to one write per
+    // minute per session.
+    if (Date.parse(row.last_heartbeat_at) < Date.now() - HEARTBEAT_TOUCH_MS || row.status !== "active") {
+      const now = nowIso();
+      this.db
+        .prepare("UPDATE sessions SET last_heartbeat_at = ?, status = 'active' WHERE session_key = ?")
+        .run(now, row.session_key);
+      row.last_heartbeat_at = now;
+      row.status = "active";
     }
     return row;
   }
@@ -743,7 +763,11 @@ class HubState {
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.reopenExpiredLeases();
+      // The sweep may fail somebody ELSE's task (third expired lease) and
+      // insert their failure message — those hints must travel up to the
+      // facade with this claim's result, or that publisher is never woken
+      // (see the notifyPublisher invariant).
+      const notifications = this.reopenExpiredLeases();
       const candidates = Number.isInteger(task_id)
         ? this.db.prepare("SELECT * FROM tasks WHERE id = ? AND status = 'open'").all(task_id)
         : this.db.prepare("SELECT * FROM tasks WHERE status = 'open' ORDER BY id ASC").all();
@@ -755,7 +779,7 @@ class HubState {
       });
       if (!match) {
         this.db.exec("COMMIT");
-        return { task: null };
+        return { task: null, notifications };
       }
       this.db
         .prepare(
@@ -764,7 +788,10 @@ class HubState {
         )
         .run(worker.session_key, nowIso(lease * 1000), nowIso(), match.id);
       this.db.exec("COMMIT");
-      return { task: publicTask(this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(match.id)) };
+      return {
+        task: publicTask(this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(match.id)),
+        notifications,
+      };
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
@@ -810,8 +837,17 @@ class HubState {
     return { ok: true, notifications };
   }
 
-  // Inserts the completion/failure message that wakes the publisher. Returns
-  // push hints ({ message_id, recipient }) for the HTTP layer.
+  // Inserts the completion/failure message and returns push hints
+  // ({ message_id, recipient }) — this module is synchronous and
+  // transport-independent, so it NEVER pushes; HubFacade.deliver() (waiter
+  // wake, then the per-adapter native push) is the only delivery layer.
+  //
+  // INVARIANT: every code path that reaches this method must carry the
+  // returned hints all the way up to the facade. A dropped hint does not lose
+  // the message (the row is already committed and cursor-fetchable), but it
+  // silently downgrades the recipient to pull — a publisher parked in
+  // msg_wait sleeps until its timeout instead of being woken. claimTask's
+  // lease sweep dropped these once; don't add a second caller that does.
   notifyPublisher(task, status, summary, reportPath = null) {
     const publisher = this.sessionRow(task.publisher_session);
     if (!publisher) return [];
@@ -857,16 +893,22 @@ class HubState {
 
   // ---- maintenance ---------------------------------------------------------
 
-  expireStale() {
+  // `exemptKeys`: sessions with a currently-parked msg_wait (the facade knows
+  // its waiters) — a listener sitting in an infinite park is alive by
+  // definition, however long ago its last authenticated call was.
+  expireStale(exemptKeys = []) {
     const staleBefore = nowIso(-HEARTBEAT_STALE_MS);
     const goneBefore = nowIso(-SESSION_GONE_MS);
     const pruneBefore = nowIso(-MESSAGE_RETENTION_MS);
+    const exempt = new Set(exemptKeys);
+    const placeholders = [...exempt].map(() => "?").join(", ");
+    const notParked = exempt.size ? ` AND session_key NOT IN (${placeholders})` : "";
     this.db
-      .prepare("UPDATE sessions SET status = 'stale' WHERE status = 'active' AND last_heartbeat_at < ?")
-      .run(staleBefore);
+      .prepare(`UPDATE sessions SET status = 'stale' WHERE status = 'active' AND last_heartbeat_at < ?${notParked}`)
+      .run(staleBefore, ...exempt);
     this.db
-      .prepare("UPDATE sessions SET status = 'gone' WHERE status = 'stale' AND last_heartbeat_at < ?")
-      .run(goneBefore);
+      .prepare(`UPDATE sessions SET status = 'gone' WHERE status = 'stale' AND last_heartbeat_at < ?${notParked}`)
+      .run(goneBefore, ...exempt);
     this.db.prepare("DELETE FROM messages WHERE created_at < ?").run(pruneBefore);
     return this.reopenExpiredLeases();
   }

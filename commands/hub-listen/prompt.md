@@ -76,7 +76,18 @@ Call `ultracode_task_claim` (it filters to this harness and your capabilities au
 have not already, then execute the task through the **normal ultracode pipeline** — read
 `{repo_root}/{{runtime_dir}}/INVENTORY.md` and `repo-profile.json` first, then route the work exactly as the
 orchestrator procedure routes it (an `agent_hint` of `implement` means spawn `ultracode:implement`, and the
-review loop that follows it still applies). Two rules are absolute:
+review loop that follows it still applies).
+
+**Spawn pipeline agents by name, exactly as the orchestrator procedure's Subagent inventory specifies** —
+the named role carries its own prompt, tool policy, and model routing. Never read a role's definition file
+and paste its contents into a generic forked agent: that spawn has no role binding, so none of the role's
+contract applies and the pipeline cannot account for it. If the spawn tool reports the name as unknown, the
+plugin's roles are not registered on this harness — report that to the user instead of improvising. On a
+harness whose spawn tool is asynchronous (it returns an agent id or task name), wait on **that specific id**
+with a single generous timeout sized to the stage — research and implementation legitimately run many
+minutes — never repeated short waits in a loop.
+
+Two rules are absolute:
 
 1. **Work in the adopted session dir.** Once you have adopted the shared session, that dir is your
    `Session dir:` — reports, ledgers, and the task's report_file all go under it (with the task's `repo_key`
@@ -94,19 +105,23 @@ about the same task. Then claim again: drain the queue before waiting.
 
 **No task (`task: null`).** Go to Step 4.
 
-## Step 4 — Wait once, then hand back to the user
+## Step 4 — Park and listen
 
-Call `ultracode_msg_wait` **once**, with your `cursor` and the default timeout. It is a single blocking call,
-not a license to loop — Hard rule 19's no-polling rule applies here exactly as it does to spawns.
+Call `ultracode_msg_wait` **once**, with your `cursor` and **`timeout_ms: 0`**. The call parks until a
+message arrives — that park IS the listening state, it keeps your registration alive indefinitely, and it is
+still one single blocking call, not a loop (Hard rule 19's no-polling rule applies here exactly as it does
+to spawns). Tell the user before parking: "listening — press ESC to stop." Only they end the park.
 
 - **Messages arrived:** a task notice (`task_id` with `status: "open"`) means claim it — back to Step 3. A
   direct message means read it, act on the addresses it carries, and reply with `ultracode_msg_send`
-  (`reply_to` set) only when the sender asked a question.
-- **`timed_out: true`:** finish the turn. Tell the user this session stays registered, and that a new task
-  will either wake it (on push-capable harnesses) or be picked up when they re-run `/ultracode:hub-listen`.
-  Update the advanced `cursor` in what you tell them so a resumed session can pass it back.
+  (`reply_to` set) only when the sender asked a question. After handling everything, park again — handling a
+  message and returning to the park is the listening loop's ONLY legitimate repetition.
 - **`shutdown: true`:** the hub is restarting; finish the turn and tell the user to re-run
   `/ultracode:hub-listen` in a moment.
+- **The user cancelled (ESC), or the harness cut the call** (some harnesses cap tool-call duration; the
+  result may show `timed_out: true` or the call may simply end): finish the turn. The registration survives
+  for days and the cursor loses nothing — re-running `/ultracode:hub-listen` resumes exactly where the park
+  ended.
 
 ## Hard rules
 
@@ -126,5 +141,6 @@ not a license to loop — Hard rule 19's no-polling rule applies here exactly as
    orchestrator procedure's Hard rule 23 applies verbatim). Adopt a session only through
    `ultracode_session_adopt` — never by hand-picking a session dir whose id is not yours, which the guards
    reject precisely because no adoption authorized it.
-5. **One wait, then stop.** A session that keeps calling `ultracode_msg_wait` in a loop is polling; the wake
-   channels exist so it never has to.
+5. **One park, never a poll.** The `timeout_ms: 0` wait blocks until there is something to do; calling
+   `ultracode_msg_wait` repeatedly with short timeouts is polling and stays forbidden. Ending the park is
+   the user's move (ESC), not yours.

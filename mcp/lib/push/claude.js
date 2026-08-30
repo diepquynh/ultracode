@@ -10,9 +10,12 @@
 // ~/.claude/sessions/<pid>.json, the peer auth token in the sibling
 // <pid>.<sha256(socketPath)>.key, and frames are newline-delimited JSON — an
 // {type:"auth",token} frame followed by a {type:"user",message:{...}} frame.
-// Because it can break on any Claude update, the adapter stays behind
-// ULTRACODE_HUB_CLAUDE_PUSH=1 and every failure returns false, degrading that
-// message to pull (ultracode_msg_wait) rather than erroring.
+//
+// VERIFIED 2026-08-30 on 2.1.251 (V2 in docs/hub.md), including an end-to-end
+// wake of a live interactive session, so it is ON BY DEFAULT;
+// ULTRACODE_HUB_CLAUDE_PUSH=0 opts a daemon out. Because the frames can break
+// on any Claude update, every deviation returns false, degrading that message
+// to pull (ultracode_msg_wait) rather than erroring.
 //
 // It intentionally does NOT try to bypass Claude's inbound-safety gate: a
 // session in bypassPermissions mode HOLDS a peer message for the user's
@@ -33,17 +36,18 @@ const crypto = require("node:crypto");
 const WRITE_TIMEOUT_MS = 2000;
 
 function enabled() {
-  return process.env.ULTRACODE_HUB_CLAUDE_PUSH === "1";
+  return process.env.ULTRACODE_HUB_CLAUDE_PUSH !== "0";
 }
 
 function sessionsDir() {
   return process.env.ULTRACODE_CLAUDE_SESSIONS_DIR || path.join(os.homedir(), ".claude", "sessions");
 }
 
-// A session record is <pid>.json carrying at least
-// { pid, sessionId, name, messagingSocketPath }. Match the caller's
-// native_address against the session name (set by /rename or --name).
-function findSession(sessionName) {
+// A session record is <pid>.json carrying at least { pid, sessionId, name,
+// messagingSocketPath }. Match by explicit name (a /rename'd native_address)
+// when one was registered, else by the harness session UUID — which every hub
+// registration carries, so claude push needs no per-session setup.
+function findSession(sessionName, sessionId) {
   let entries;
   try {
     entries = fs.readdirSync(sessionsDir());
@@ -54,9 +58,12 @@ function findSession(sessionName) {
     if (!/^\d+\.json$/.test(entry)) continue;
     try {
       const record = JSON.parse(fs.readFileSync(path.join(sessionsDir(), entry), "utf-8"));
-      if (
+      const matches =
         record &&
-        record.name === sessionName &&
+        ((sessionName && record.name === sessionName) ||
+          (!sessionName && sessionId && record.sessionId === sessionId));
+      if (
+        matches &&
         typeof record.messagingSocketPath === "string" &&
         record.messagingSocketPath &&
         Number.isInteger(record.pid)
@@ -110,7 +117,7 @@ function deliverFrames(socketPath, frames) {
 
 async function push(session, notice) {
   if (!enabled()) return false;
-  const record = findSession(session.native_address);
+  const record = findSession(session.native_address, session.harness_session_id);
   if (!record) return false;
   const peerToken = readPeerToken(record);
   if (!peerToken) return false;

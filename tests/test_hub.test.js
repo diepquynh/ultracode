@@ -540,6 +540,195 @@ test("hub: expired lease reopens the task, then fails it after max attempts", (t
   assert.equal(JSON.parse(inbox.messages[0].body).status, "failed");
 });
 
+test("hub: a claim's lease sweep wakes the publisher whose task it failed", async (t) => {
+  const fixture = makeFixture(t);
+  const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const facade = new HubFacade(state);
+
+  const publisher = registerDefault(state, fixture);
+  const workerDir = path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-sweeper");
+  fs.mkdirSync(workerDir, { recursive: true });
+  const worker = registerDefault(state, fixture, {
+    harness: "codex",
+    session_id: "sweeper",
+    session_dir: workerDir,
+  });
+
+  // A task already at the attempt cap with an expired lease: the next claim's
+  // sweep marks it failed and must WAKE the publisher, not just persist the row.
+  const published = state.publishTask({
+    from_session_key: publisher.session_key,
+    from_secret: publisher.session_secret,
+    title: "Doomed task",
+    target_harness: "codex",
+    payload: validPayload(fixture),
+  });
+  state.db
+    .prepare("UPDATE tasks SET status = 'claimed', claimed_by = ?, attempts = 3, lease_expires_at = ? WHERE id = ?")
+    .run(worker.session_key, new Date(Date.now() - 1000).toISOString(), published.task_id);
+
+  const waitPromise = facade.waitMessages({
+    session_key: publisher.session_key,
+    session_secret: publisher.session_secret,
+    cursor: 0,
+    timeout_ms: 30000,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const started = Date.now();
+  const claim = await facade.claimTask({
+    session_key: worker.session_key,
+    session_secret: worker.session_secret,
+  });
+  assert.equal(claim.task, null);
+  assert.equal("notifications" in claim, false, "sweep hints must not leak into the worker's result");
+
+  const woken = await waitPromise;
+  assert.ok(Date.now() - started < 5000, "publisher must be woken by the sweep, not by its timeout");
+  assert.equal(woken.timed_out, false);
+  assert.equal(woken.messages.length, 1);
+  assert.equal(JSON.parse(woken.messages[0].body).status, "failed");
+});
+
+test("hub: infinite msg_wait parks until a send arrives, and cancellation reaps the waiter", async (t) => {
+  const fixture = makeFixture(t);
+  const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const facade = new HubFacade(state);
+
+  const alice = registerDefault(state, fixture);
+  const bobDir = path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-bob-inf");
+  fs.mkdirSync(bobDir, { recursive: true });
+  const bob = registerDefault(state, fixture, { harness: "grok", session_id: "bob-inf", session_dir: bobDir });
+
+  // timeout_ms 0: no timer, resolved only by the send.
+  const parked = facade.waitMessages({
+    session_key: bob.session_key,
+    session_secret: bob.session_secret,
+    cursor: bob.cursor,
+    timeout_ms: 0,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(facade.waiters.size, 1);
+  await facade.sendMessage({
+    from_session_key: alice.session_key,
+    from_secret: alice.session_secret,
+    to_session_key: bob.session_key,
+    body: "wake the infinite park",
+  });
+  const woken = await parked;
+  assert.equal(woken.timed_out, false);
+  assert.equal(woken.messages.length, 1);
+  assert.equal(facade.waiters.size, 0);
+
+  // Cancellation (the user's ESC arriving as an abort) reaps the waiter.
+  const cancel = new AbortController();
+  const cancelled = facade.waitMessages(
+    { session_key: bob.session_key, session_secret: bob.session_secret, cursor: woken.cursor, timeout_ms: 0 },
+    { signal: cancel.signal },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(facade.waiters.size, 1);
+  cancel.abort();
+  const result = await cancelled;
+  assert.equal(result.cancelled, true);
+  assert.equal(result.messages.length, 0);
+  assert.equal(facade.waiters.size, 0, "aborted park must not leak its waiter");
+});
+
+test("hub daemon: dropping the connection of a parked infinite wait reaps the waiter", async (t) => {
+  const fixture = makeFixture(t);
+  const { createHubHttpServer } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const config = require(path.join(ROOT, "mcp", "lib", "hub", "config.js"));
+  config.provision();
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const { server, facade } = createHubHttpServer({
+    state,
+    getToken: () => config.readHubInfo().token,
+    version: "test",
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const token = config.readHubInfo().token;
+
+  const reg = registerDefault(state, fixture);
+  const controller = new AbortController();
+  const request = fetch(`${url}/api/v1/messages/wait`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      session_key: reg.session_key,
+      session_secret: reg.session_secret,
+      cursor: reg.cursor,
+      timeout_ms: 0,
+    }),
+    signal: controller.signal,
+  }).catch(() => null);
+  const deadline = Date.now() + 3000;
+  while (facade.waiters.size === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(facade.waiters.size, 1, "park established");
+  controller.abort(); // the shim's fetch dying is exactly what a user ESC produces
+  await request;
+  const reapDeadline = Date.now() + 3000;
+  while (facade.waiters.size > 0 && Date.now() < reapDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(facade.waiters.size, 0, "dropped connection must reap the parked waiter");
+});
+
+test("hub: authenticated calls refresh liveness; parked sessions never expire", async (t) => {
+  const fixture = makeFixture(t);
+  const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const facade = new HubFacade(state);
+
+  // Any authenticated call is a heartbeat: a session backdated past stale
+  // comes back active from a plain fetchMessages, no explicit heartbeat call.
+  const reg = registerDefault(state, fixture);
+  const backdate = (key, ms) =>
+    state.db
+      .prepare("UPDATE sessions SET last_heartbeat_at = ?, status = 'stale' WHERE session_key = ?")
+      .run(new Date(Date.now() - ms).toISOString(), key);
+  backdate(reg.session_key, 11 * 60 * 1000);
+  state.fetchMessages({ session_key: reg.session_key, session_secret: reg.session_secret, cursor: 0 });
+  assert.equal(state.sessionRow(reg.session_key).status, "active");
+
+  // Registrations survive silence for days: 2 days idle is stale, not gone.
+  backdate(reg.session_key, 2 * 24 * 60 * 60 * 1000);
+  state.expireStale();
+  assert.equal(state.sessionRow(reg.session_key).status, "stale");
+  assert.equal(
+    state.fetchMessages({ session_key: reg.session_key, session_secret: reg.session_secret, cursor: 0 }).messages
+      .length >= 0,
+    true,
+    "stale sessions still authenticate",
+  );
+
+  // A parked waiter exempts its session from expiry entirely, even past 7 days.
+  const parked = facade.waitMessages(
+    { session_key: reg.session_key, session_secret: reg.session_secret, cursor: 0, timeout_ms: 0 },
+    {},
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  backdate(reg.session_key, 8 * 24 * 60 * 60 * 1000);
+  facade.expireStale();
+  assert.notEqual(state.sessionRow(reg.session_key).status, "gone", "parked session must survive the sweep");
+  // Un-parked and 8 days idle → gone.
+  facade.close();
+  await parked;
+  const fresh = new HubFacade(state);
+  backdate(reg.session_key, 8 * 24 * 60 * 60 * 1000);
+  fresh.expireStale();
+  assert.equal(state.sessionRow(reg.session_key).status, "gone");
+});
+
 test("hub: expireStale marks sessions stale and prunes old messages", (t) => {
   const fixture = makeFixture(t);
   const state = freshHubState(fixture);
@@ -1276,9 +1465,23 @@ test("hub push: unavailable codex CLI degrades to pull without losing the messag
     cursor: codexSession.cursor,
   });
   assert.equal(fetched.messages.length, 1, "undelivered push must remain fetchable");
+
+  // Push channels are inferred from the harness by default: a codex session
+  // registered with no native_channel still consults the codex adapter
+  // (addressed by its harness session UUID), and grok/agy infer none.
+  const { attemptPush, channelFor } = require(path.join(ROOT, "mcp", "lib", "push", "index.js"));
+  assert.equal(channelFor({ harness: "codex", native_channel: "none" }), "codex-queue");
+  assert.equal(channelFor({ harness: "claude", native_channel: "none" }), "claude-uds");
+  assert.equal(channelFor({ harness: "grok", native_channel: "none" }), null);
+  assert.equal(channelFor({ harness: "antigravity", native_channel: "none" }), null);
+  const inferred = await attemptPush(
+    { session_key: "codex:cx-2", harness: "codex", native_channel: "none", harness_session_id: "cx-2" },
+    "notice",
+  );
+  assert.deepEqual(inferred, { pushed: false, channel: "codex-queue" }, "adapter consulted, degrades on missing CLI");
 });
 
-test("hub push: claude adapter speaks the real UDS protocol when flag-enabled", async (t) => {
+test("hub push: claude adapter speaks the real UDS protocol, on by default", async (t) => {
   const fixture = makeFixture(t);
   const crypto = require("node:crypto");
   const claudeAdapter = require(path.join(ROOT, "mcp", "lib", "push", "claude.js"));
@@ -1287,9 +1490,7 @@ test("hub push: claude adapter speaks the real UDS protocol when flag-enabled", 
     native_channel: "claude-uds",
     native_address: "my-session",
   };
-
   delete process.env.ULTRACODE_HUB_CLAUDE_PUSH;
-  assert.equal(await claudeAdapter.push(session, "notice"), false, "disabled by default");
 
   // Stand up a fixture matching Claude Code's real ~/.claude/sessions layout:
   // a <pid>.json record + a <pid>.<sha256(socketPath)>.key with a peerToken,
@@ -1323,13 +1524,13 @@ test("hub push: claude adapter speaks the real UDS protocol when flag-enabled", 
   await new Promise((resolve) => server.listen(socketPath, resolve));
   t.after(() => server.close());
 
-  process.env.ULTRACODE_HUB_CLAUDE_PUSH = "1";
   process.env.ULTRACODE_CLAUDE_SESSIONS_DIR = sessDir;
   t.after(() => {
     delete process.env.ULTRACODE_HUB_CLAUDE_PUSH;
     delete process.env.ULTRACODE_CLAUDE_SESSIONS_DIR;
   });
 
+  // On by default — no flag set.
   assert.equal(await claudeAdapter.push(session, "hub wake notice"), true);
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.equal(frames.length, 2, "an auth frame then a user frame");
@@ -1338,6 +1539,21 @@ test("hub push: claude adapter speaks the real UDS protocol when flag-enabled", 
   assert.equal(frames[1].session_id, sessionId);
   assert.equal(frames[1].message.role, "user");
   assert.match(frames[1].message.content, /hub wake notice/);
+
+  // No native_address registered → matched by harness session UUID instead,
+  // so claude push needs zero per-session setup.
+  assert.equal(
+    await claudeAdapter.push(
+      { session_key: "claude:y", native_channel: "none", harness_session_id: sessionId },
+      "uuid-matched notice",
+    ),
+    true,
+  );
+
+  // ULTRACODE_HUB_CLAUDE_PUSH=0 opts the daemon out entirely.
+  process.env.ULTRACODE_HUB_CLAUDE_PUSH = "0";
+  assert.equal(await claudeAdapter.push(session, "notice"), false, "opt-out disables push");
+  delete process.env.ULTRACODE_HUB_CLAUDE_PUSH;
 
   assert.equal(
     await claudeAdapter.push({ ...session, native_address: "unknown" }, "notice"),
@@ -1354,6 +1570,41 @@ test("hub push: claude adapter speaks the real UDS protocol when flag-enabled", 
     false,
     "missing peer token degrades to pull",
   );
+});
+
+test("codex agent registration block is idempotent and removable", (t) => {
+  const fixture = makeFixture(t);
+  const { execFileSync } = require("node:child_process");
+  const script = path.join(ROOT, "scripts", "register_codex_agents.js");
+
+  // Fake plugin root with two role files, fake CODEX_HOME with existing config.
+  const pluginRoot = path.join(fixture.dir, "plugin");
+  fs.mkdirSync(path.join(pluginRoot, "agents"), { recursive: true });
+  fs.writeFileSync(path.join(pluginRoot, "agents", "explore.toml"), 'name = "ultracode_explore"\n');
+  fs.writeFileSync(path.join(pluginRoot, "agents", "code-reviewer.toml"), 'name = "ultracode_code_reviewer"\n');
+  const codexHome = path.join(fixture.dir, "codex-home");
+  fs.mkdirSync(codexHome, { recursive: true });
+  const configPath = path.join(codexHome, "config.toml");
+  fs.writeFileSync(configPath, 'model = "gpt-x"\n\n[mcp_servers.other]\ncommand = "node"\n');
+  const env = { ...process.env, CODEX_HOME: codexHome };
+
+  execFileSync("node", [script, "--plugin-root", pluginRoot], { env });
+  let config = fs.readFileSync(configPath, "utf-8");
+  assert.match(config, /\[agents\.ultracode_explore\]/);
+  assert.match(config, /\[agents\.ultracode_code_reviewer\]/);
+  assert.match(config, /config_file = ".*agents\/explore\.toml"/);
+  assert.match(config, /^model = "gpt-x"/m, "pre-existing config preserved");
+
+  // Rerun replaces the block instead of duplicating it.
+  execFileSync("node", [script, "--plugin-root", pluginRoot], { env });
+  config = fs.readFileSync(configPath, "utf-8");
+  assert.equal(config.split("[agents.ultracode_explore]").length, 2, "exactly one block");
+
+  // Remove strips only the managed block.
+  execFileSync("node", [script, "--remove"], { env });
+  config = fs.readFileSync(configPath, "utf-8");
+  assert.doesNotMatch(config, /ultracode_explore/);
+  assert.match(config, /\[mcp_servers\.other\]/);
 });
 
 test("hub: lock is exclusive, stale locks are reclaimed", (t) => {

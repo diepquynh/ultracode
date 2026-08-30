@@ -24,7 +24,13 @@ const DEFAULT_WAIT_MS = 25 * 1000;
 const MAX_WAIT_MS = 120 * 1000;
 const RATE_LIMIT_PER_MINUTE = 120;
 
+// timeout_ms 0 = wait forever: the park for a listening worker on a pull-only
+// harness, ended only by a message, a daemon shutdown, or the user cancelling
+// the tool call (ESC — the harness's MCP cancellation aborts the shim's fetch,
+// the connection closes, and the close handler reaps the waiter). Finite
+// values stay capped so a plain fetch can never look like a hung tool.
 function clampWait(timeoutMs) {
+  if (timeoutMs === 0) return 0;
   const value = Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_WAIT_MS;
   return Math.min(value, MAX_WAIT_MS);
 }
@@ -112,25 +118,56 @@ class HubFacade {
   }
 
   // One blocking call, not a poll loop: fetch, and only when the inbox is
-  // empty park until a matching insert (or the timeout / daemon shutdown)
-  // resolves us, then fetch again. Cursor semantics make a timeout lossless.
-  async waitMessages({ session_key, session_secret, cursor, timeout_ms }) {
+  // empty park until a matching insert (or the timeout / cancellation /
+  // daemon shutdown) resolves us, then fetch again. Cursor semantics make
+  // every ending lossless. `signal` carries the caller's cancellation (the
+  // request's close event, which is also how a user's ESC arrives) — without
+  // reaping on it, an infinite waiter whose client vanished would sit in the
+  // set forever and swallow a future wake.
+  async waitMessages({ session_key, session_secret, cursor, timeout_ms }, { signal } = {}) {
     const first = this.state.fetchMessages({ session_key, session_secret, cursor });
     if (first.messages.length) return { ...first, timed_out: false, shutdown: false };
     if (this.closed) return { ...first, timed_out: false, shutdown: true };
+    if (signal && signal.aborted) return { ...first, timed_out: false, shutdown: false, cancelled: true };
 
+    const waitMs = clampWait(timeout_ms);
     const row = this.state.sessionRow(session_key);
+    let timedOutLocally = false;
     await new Promise((resolve) => {
-      const waiter = { session_key, harness: row.harness, resolve };
-      this.waiters.add(waiter);
-      const timer = setTimeout(() => {
-        this.waiters.delete(waiter);
+      const waiter = { session_key, harness: row.harness, resolve: finish };
+      let timer = null;
+      const onAbort = () => finish();
+      function cleanup() {
+        if (timer) clearTimeout(timer);
+        if (signal) signal.removeEventListener("abort", onAbort);
+      }
+      const waiters = this.waiters;
+      function finish() {
+        waiters.delete(waiter);
+        cleanup();
         resolve();
-      }, clampWait(timeout_ms));
-      timer.unref();
+      }
+      this.waiters.add(waiter);
+      if (waitMs > 0) {
+        timer = setTimeout(() => {
+          timedOutLocally = true;
+          finish();
+        }, waitMs);
+        timer.unref();
+      }
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
     });
+    if (signal && signal.aborted) {
+      // The client is gone (user ESC or dropped connection); nothing to send,
+      // nothing lost — the cursor lets the next wait re-read everything.
+      return { messages: [], cursor, timed_out: false, shutdown: this.closed, cancelled: true };
+    }
     const again = this.state.fetchMessages({ session_key, session_secret, cursor });
-    return { ...again, timed_out: again.messages.length === 0 && !this.closed, shutdown: this.closed };
+    return {
+      ...again,
+      timed_out: timedOutLocally && again.messages.length === 0 && !this.closed,
+      shutdown: this.closed,
+    };
   }
 
   async publishTask(args) {
@@ -147,7 +184,14 @@ class HubFacade {
   }
 
   async claimTask(args) {
-    return this.state.claimTask(args);
+    const { task, notifications } = this.state.claimTask(args);
+    // The claim's lease sweep may have failed another publisher's task; wake
+    // them now (their failure row is already committed). Their hints never
+    // reach the claiming worker's tool result — they are not its business.
+    for (const notice of notifications || []) {
+      await this.deliver(notice.recipient, null, notice.message_id);
+    }
+    return { task };
   }
 
   async completeTask(args) {
@@ -161,7 +205,9 @@ class HubFacade {
   }
 
   expireStale() {
-    const notifications = this.state.expireStale();
+    // Parked waiters mark their sessions alive regardless of heartbeat age.
+    const parked = [...this.waiters].map((waiter) => waiter.session_key);
+    const notifications = this.state.expireStale(parked);
     return Promise.all(
       notifications.map((notice) => this.deliver(notice.recipient, null, notice.message_id)),
     );
@@ -237,13 +283,13 @@ function createHubHttpServer({ state, getToken, version, log = () => {} }) {
   const restRoutes = {
     "POST /api/v1/sessions": (body) => facade.registerSession(body),
     "POST /api/v1/sessions/heartbeat": (body) => facade.heartbeat(body),
-    "GET /api/v1/sessions": (body, query) =>
+    "GET /api/v1/sessions": (_body, query) =>
       facade.listSessions({ harness: query.get("harness") || undefined, repo_root: query.get("repo_root") || undefined }),
-    "GET /api/v1/ultracode-sessions": (body, query) =>
+    "GET /api/v1/ultracode-sessions": (_body, query) =>
       facade.queryUltracodeSessions({ repo_root: query.get("repo_root") || undefined }),
     "POST /api/v1/sessions/adopt": (body) => facade.adoptSession(body),
     "POST /api/v1/messages": (body) => facade.sendMessage(body),
-    "POST /api/v1/messages/wait": (body) => facade.waitMessages(body),
+    "POST /api/v1/messages/wait": (body, _query, ctx) => facade.waitMessages(body, { signal: ctx.signal }),
     "POST /api/v1/tasks": (body) => facade.publishTask(body),
     "POST /api/v1/tasks/claim": (body) => facade.claimTask(body),
     "POST /api/v1/tasks/complete": (body) => facade.completeTask(body),
@@ -293,7 +339,11 @@ function createHubHttpServer({ state, getToken, version, log = () => {} }) {
           }
         }
       }
-      const result = await handler(body, url.searchParams);
+      // A dropped connection (user ESC aborting the shim's fetch, a dying
+      // shim, a network hiccup) must reap any waiter this request parked.
+      const cancel = new AbortController();
+      res.once("close", () => cancel.abort());
+      const result = await handler(body, url.searchParams, { signal: cancel.signal });
       sendJson(res, 200, result);
       log(`${routeKey} ok`);
     } catch (error) {
@@ -306,9 +356,12 @@ function createHubHttpServer({ state, getToken, version, log = () => {} }) {
     }
   });
 
-  // Long-polls legitimately hold connections open; never kill them mid-wait.
-  server.headersTimeout = MAX_WAIT_MS + 30 * 1000;
-  server.requestTimeout = MAX_WAIT_MS + 60 * 1000;
+  // Long-polls legitimately hold connections open — including forever, for a
+  // timeout_ms 0 park — so the per-request deadline is disabled entirely;
+  // dead connections are reaped by the close-signal path above, and headers
+  // still have to arrive promptly.
+  server.headersTimeout = 60 * 1000;
+  server.requestTimeout = 0;
 
   return { server, facade };
 }
