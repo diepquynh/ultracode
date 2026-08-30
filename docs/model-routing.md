@@ -137,9 +137,21 @@ adding spawn-time behaviour, it goes in `model-router.js` too, however unrelated
 ## Cross-harness translation
 
 Codex's `spawn_agent` schema accepts only lowercase letters, digits, and underscores. Generated Codex roles and
-spawn instructions therefore use names such as `fact_check` and `code_reviewer`; the harness adapter normalizes
-those aliases back to canonical `fact-check` and `code-reviewer` before routing and policy lookup. Claude/Grok
+spawn instructions therefore use names prefixed `ultracode_` such as `ultracode_fact_check`; the harness
+adapter normalizes those aliases back to canonical `fact-check` before routing and policy lookup. Claude/Grok
 keep `ultracode:{agent}`, while Antigravity uses `ultracode-{agent}`.
+
+**Codex gets static tier defaults only — the dynamic layer of this document does not reach it.** Confirmed
+in the open-source tree (2026-08-30, docs/harness-limitations.md for file citations): a child with no role
+model INHERITS the spawner's model (measured — a sol orchestrator ran every leaf on sol), so each generated
+Codex role TOML bakes its tier default in; the spawn handler applies the role layer AFTER any per-call
+`model` argument and the role's model unconditionally overwrites it, so per-spawn overrides cannot re-route
+a baked role — codex itself advertises the role's model as "cannot be changed" in the spawn tool spec. The
+model-router hook does not currently interpose either: spawn hooks reach v2 collaboration tools under a
+namespaced flat name that ultracode's matcher only now targets (re-trust in `/hooks` required; live denial
+verification still open). Consequence: editing a repo profile's `models` block retunes Claude/Antigravity
+spawns immediately, but a Codex session's spawns follow the tiers baked at generation time — re-run the
+installer (or regenerate the dist) to change them.
 
 The generated routing table carries the tier→model map for the harness it was built for, plus aliases from
 every *other* harness's model names to the local equivalent. Write `"opus"` in a profile and run it on Codex,

@@ -22,6 +22,13 @@ harness's built-in `Explore` and `Plan` agents, which are not ultracode agents a
 pipeline. If a prefixed name does not resolve, the ultracode plugin is not loaded; say so rather than falling
 back to a built-in.
 
+**Pass the selector and the self-contained prompt — nothing that shares this conversation.** Every ultracode
+agent runs forked OFF: its prompt carries everything it may see, and it never reads the parent conversation.
+Never pass a conversation-fork or context-sharing option on a spawn (Codex's `fork_turns` is the sharp case —
+it copies every parent turn into the child, leaking orchestration context into a leaf and duplicating the
+whole session per spawn). On a harness whose finished agents linger as separate threads, close each one after
+collecting its result.
+
 ## Step 0 — Build the repo registry (MANDATORY, before anything else)
 
 A session targets one or more **repos** (repositories). Establish the set of in-scope repos, then load each

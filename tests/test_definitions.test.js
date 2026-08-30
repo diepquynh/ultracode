@@ -595,6 +595,7 @@ test("codex agents are valid TOML", () => {
     const parsed = parseToml(fs.readFileSync(generated, "utf-8"));
     const expectedKeys = new Set([
       "name",
+      "model",
       "description",
       "model_reasoning_effort",
       "sandbox_mode",
@@ -603,6 +604,9 @@ test("codex agents are valid TOML", () => {
     assert.deepEqual(new Set(Object.keys(parsed)), expectedKeys);
     // agent_type charset forbids ':', so codex roles carry the namespace as a prefix.
     assert.equal(parsed.name, `ultracode_${name.replace(/-/g, "_")}`);
+    // No hook routes a codex spawn, and a role without a model INHERITS the
+    // spawner's — so the tier default is baked into the role config layer.
+    assert.equal(parsed.model, MODEL_MAPPING.tiers[definition.config.model_tier].codex);
     assert.equal(parsed.description, adaptForCodex(definition.description));
     assert.ok(
       parsed.developer_instructions.endsWith(
@@ -837,6 +841,10 @@ test("installer ensures the machine-level hub after dependencies, before registr
   // Codex reads agent_types only from config.toml [agents.*]; the installer
   // registers the plugin's roles and the uninstaller removes them.
   assert.match(script, /register_codex_agents\.js" --plugin-root "\$PLUGIN_ROOT"/);
+  // Codex plugin-cache refreshes have been measured dropping directories
+  // silently (zero hooks fire); the installer must verify the cache after add.
+  assert.match(script, /CODEX_CACHE_ROOT.*Installed plugin root/);
+  assert.match(script, /\$CODEX_CACHE_ROOT\/hooks\/hooks\.json/);
   // Uninstall stops the daemon but keeps ~/.ultracode (token survives reinstalls).
   const uninstall = fs.readFileSync(UNINSTALLER, "utf-8");
   assert.match(uninstall, /hub-ctl\.js/);

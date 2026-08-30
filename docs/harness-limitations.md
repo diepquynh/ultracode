@@ -20,9 +20,34 @@ Dates are when the behavior was last measured; re-check an entry before relying 
   handlers into its runtime registry (`total_hooks=0`), so parent Bash/Write denials never fire either —
   this is broader than the earlier spawn-only bypass. Separately, Grok honors top-level `{decision:"deny"}`
   and fail-opens on Claude-style `hookSpecificOutput.permissionDecision`; Ultracode emits the Grok shape.
-- Codex CLI 0.147.0 still does not dispatch plugin handlers for native `spawn_agent` (parent Bash/Write
-  hooks can still fire once trusted). Generated leaf prompts therefore repeat the parameter contract and
-  fail before their first tool call when a required line is missing.
+- Codex spawn hooks: REINTERPRETED against the open-source tree (2026-08-30, openai/codex@main). Every
+  function tool — the v2 collaboration `spawn_agent` included — produces a PreToolUse payload
+  (`core/src/tools/registry.rs` default `pre_tool_use_payload`), BUT the hook-facing tool name for a
+  namespaced v2 tool is the namespace-prefixed flat name (`core/src/tools/mod.rs` `flat_tool_name`), and
+  codex hook matchers made only of `[A-Za-z0-9_|]` are EXACT-equality matchers
+  (`hooks/src/events/common.rs` `is_exact_matcher`). Ultracode's old `Agent|spawn_agent` matcher therefore
+  could never match a v2 spawn — the measured "spawn sailed past session-guard" on 0.147/0.151 is explained
+  by the matcher, not (necessarily) by missing dispatch. The generated matcher is now the regex
+  `(Agent|spawn_agent)$`, which matches the canonical name, the Claude-style `Agent` alias
+  (`core/src/tools/hook_names.rs`), and the namespaced flat name, while excluding
+  wait/close/resume/interrupt_agent. Changing the matcher changes the hook trust hash: codex users must
+  re-trust in `/hooks` after updating, and live verification that a denial actually blocks a v2 spawn on a
+  shipped CLI is still OPEN. Bash-matcher PreToolUse hooks are confirmed firing in `codex exec` (unified and
+  legacy exec) with `[hooks.state]` trust persisting across plugin updates whose hook commands are unchanged.
+  Generated leaf prompts continue to repeat the parameter contract as the fallback.
+- **Codex plugin-cache refreshes can silently drop whole directories** (measured 2026-08-30, root cause of
+  session 01a05219… running with ZERO hooks): re-adding the plugin at the SAME version left the cache copy
+  with no `hooks/` directory at all — no error, no warning, hooks simply never fire. A fresh add after a
+  version bump restored it. install.sh now verifies `hooks/hooks.json` and `mcp/hub-shim.js` exist in the
+  reported cache root after `codex plugin add` and repairs once with remove + re-add. When shipping plugin
+  changes, always bump the plugin version rather than re-adding the same one. Related and harsher
+  (measured 2026-08-30): codex's reconciler runs at every session startup and, if it reads the local
+  marketplace while the staged plugin directory is mid-refresh (an rm-then-copy window), it DELISTS the
+  plugin — uninstalling it, removing the marketplace registration, and deleting the `ultracode-gate` entry
+  from config.toml (the `[agents.*]` block and `[hooks.state]` trust survive). install.sh now swaps the
+  staged copy atomically (build beside, then `mv`); anyone refreshing the staged copy by hand must do the
+  same, and recovery is: marketplace add → plugin add → `codex mcp add ultracode-gate` with the absolute
+  shim path.
 
 ## The ask channel (live, 2026-08-23)
 
@@ -64,6 +89,27 @@ grok and antigravity have no channel to gate.
 - **Grok Build 1.0.13 / Antigravity 1.1.22**: no external steering channel found in either (AGY's
   `send_message` is intra-conversation only). Pull-only by design, not by flag.
 
+## Tool-call duration caps (live, 2026-08-30)
+
+Every harness bounds how long one tool call may run, which is what actually ends an "infinite"
+`ultracode_msg_wait` park (`timeout_ms: 0`) when the user does not. The park is designed to survive this:
+whatever cuts the call, the registration stays alive (7-day idle expiry, parked waiters exempt from sweeps)
+and the cursor re-reads everything on the next wait — so a cap costs a re-run of `/ultracode:hub-listen`,
+never a message.
+
+- **Codex 0.151.0** (session 01a05219…): long tool calls are moved to background cells that the model polls
+  with its `wait` tool (~60 s yields); after several yields the harness cut the listening park — the session
+  reported "listening stopped because the harness capped the long-running tool call". In practice the cap is
+  irrelevant on Codex: the hub's `codex-queue` push woke the same session as a fresh user turn moments later,
+  which is the intended wake path anyway.
+- **Claude Code 2.1.251**: a 110 s `msg_wait` completed with `MCP_TOOL_TIMEOUT=180000` set; the default cap
+  was not measured. The env var is the lever when a Claude session should hold a long park — though Claude
+  sessions, like Codex, normally get woken by push rather than by holding the park.
+- **Antigravity 1.1.22**: a 110 s wait completed headless under `--print-timeout 5m` (that flag bounds the
+  whole print run); the interactive-session cap is unmeasured. AGY is pull-only, so a generous park is its
+  main delivery path — expect to re-run hub-listen when the harness cuts it.
+- **Grok 1.0.13**: only short (≤25 s) waits measured so far; also pull-only, same re-run story.
+
 Two hub-relevant behaviors measured live on 2026-08-30 while verifying the shim end to end:
 
 - **Codex 0.147.0 `exec` cancels MCP tool calls under its default approval policy.** A plain `codex exec`
@@ -84,6 +130,31 @@ Two hub-relevant behaviors measured live on 2026-08-30 while verifying the shim 
   which it then tracks poorly (repeated bare 50 s `wait_agent` timeouts; `wait_agent` wants specific ids).
   install.sh registers every generated role via `scripts/register_codex_agents.js` (a managed block in
   config.toml); codex agent_type names are `ultracode_<name>` because the charset forbids `:`.
+- **Codex subagents inherit the spawner's model unless the role config pins one** (measured 2026-08-30): with
+  no `model` in the role TOML and no `agents.default_subagent_model`, every spawned child ran on the parent's
+  model — a `gpt-5.6-sol` orchestrator ran even `implement` leaves on sol (paying advanced price for balanced
+  work), and a luna parent ran them on luna. The `[agents.<name>].config_file` layer's `model` key IS honored
+  (the child starts on the inherited model, then `thread_settings_applied` switches it before the first turn),
+  so generated codex role TOMLs now bake each role's tier default in. Consequence: model routing on codex is
+  **static tier defaults only** — the model-router hook never runs there, so `repo-profile.json` `models`
+  routes (byAgent/byPhaseComplexity overrides) do not apply to codex spawns. The per-call `model` argument is
+  no escape hatch either — confirmed in source (openai/codex@main): the spawn handler applies the requested
+  model FIRST and the role layer AFTER (`core/src/tools/handlers/multi_agents_v2/spawn.rs`), and a role
+  `config_file` model unconditionally overwrites (`core/src/agent/role.rs` `build_next_config`); codex even
+  advertises a role's model in the spawn tool spec as "cannot be changed". The gate for the argument is
+  `[features.multi_agent_v2].expose_spawn_agent_model_overrides` (an earlier note called it unreachable —
+  wrong: it nests under `features`), but it only adds the schema field; the role model still wins. Roles
+  WITHOUT a baked model fall back to the argument, then `[agents].default_subagent_model`, then inheritance —
+  ultracode bakes the model precisely so the routed tier is the locked outcome. init-kit's per-mode model
+  choices are therefore inert on codex; its initializer runs on the tier default baked into its role TOML.
+- **Codex `spawn_agent`'s `fork_turns` inverts ultracode's `context: fork`** (measured 2026-08-30, session
+  01a05219…): ultracode's "fork" means the agent runs forked OFF — self-contained prompt, never seeing the
+  parent conversation — while Codex's `fork_turns: "all"` copies every parent turn INTO the child. A session
+  that mapped one onto the other spawned each pipeline role with the entire orchestrator conversation
+  embedded (a 2.3 MB child rollout for one fact-check), leaking orchestration context into leaves and
+  leaving children as lingering separate threads (`close_agent` never called). The generated role TOML
+  header and the orchestrate/hub-listen skills now state the spawn contract explicitly: `agent_type` + the
+  self-contained prompt, never `fork_turns`, and close finished agents.
 - **Grok 1.0.13 `-p` does not expose user-config stdio MCP servers in untrusted directories.** `grok mcp
   doctor` reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
   plugin-bundled servers and reported the same tools "not found". Run from a trusted project (or trust the

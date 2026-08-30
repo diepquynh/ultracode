@@ -162,9 +162,18 @@ for HARNESS in $TARGETS; do
   else
     MARKETPLACE_ROOT="${INSTALL_DIR}-marketplace/codex"
     STAGED_PLUGIN="$MARKETPLACE_ROOT/plugins/ultracode"
-    rm -rf "$STAGED_PLUGIN"
     mkdir -p "$MARKETPLACE_ROOT/.agents/plugins" "$MARKETPLACE_ROOT/plugins"
-    cp -R "$PLUGIN_ROOT" "$STAGED_PLUGIN"
+    # Refresh the staged copy ATOMICALLY (build beside, then swap). Codex's
+    # plugin reconciler runs at every session startup; if it reads this
+    # marketplace during an rm-then-copy window, the plugin looks delisted and
+    # codex uninstalls it AND removes the marketplace and the ultracode-gate
+    # mcp entry from config.toml — measured 2026-08-30.
+    rm -rf "$STAGED_PLUGIN.new"
+    cp -R "$PLUGIN_ROOT" "$STAGED_PLUGIN.new"
+    rm -rf "$STAGED_PLUGIN.old"
+    [ -e "$STAGED_PLUGIN" ] && mv "$STAGED_PLUGIN" "$STAGED_PLUGIN.old"
+    mv "$STAGED_PLUGIN.new" "$STAGED_PLUGIN"
+    rm -rf "$STAGED_PLUGIN.old"
     cat >"$MARKETPLACE_ROOT/.agents/plugins/marketplace.json" <<'JSON'
 {
   "name": "ultracode-local",
@@ -186,7 +195,22 @@ JSON
     else
       codex plugin marketplace add "$MARKETPLACE_ROOT"
     fi
-    codex plugin add ultracode@ultracode-local
+    ADD_OUT="$(codex plugin add ultracode@ultracode-local 2>&1)" \
+      || { printf '%s\n' "$ADD_OUT" >&2; echo "Failed to add the Codex plugin ultracode@ultracode-local." >&2; exit 1; }
+    printf '%s\n' "$ADD_OUT"
+    # A same-version cache refresh has been measured dropping whole directories
+    # from the plugin cache (hooks/ vanished silently, so ZERO hooks fired with
+    # no warning — docs/harness-limitations.md). Verify the cache is complete
+    # and repair once with a clean remove + add.
+    CODEX_CACHE_ROOT="$(printf '%s' "$ADD_OUT" | sed -n 's/^Installed plugin root: //p')"
+    if [ -n "$CODEX_CACHE_ROOT" ] && { [ ! -f "$CODEX_CACHE_ROOT/hooks/hooks.json" ] || [ ! -f "$CODEX_CACHE_ROOT/mcp/hub-shim.js" ]; }; then
+      codex plugin remove ultracode@ultracode-local >/dev/null 2>&1 || true
+      codex plugin add ultracode@ultracode-local >/dev/null 2>&1 || true
+    fi
+    if [ -n "$CODEX_CACHE_ROOT" ] && { [ ! -f "$CODEX_CACHE_ROOT/hooks/hooks.json" ] || [ ! -f "$CODEX_CACHE_ROOT/mcp/hub-shim.js" ]; }; then
+      echo "Warning: the Codex plugin cache at $CODEX_CACHE_ROOT is still incomplete (hooks/ or mcp/ missing);" >&2
+      echo "no hooks will fire. Bump the plugin version and re-run install, or remove and re-add the plugin." >&2
+    fi
     # Codex (measured on 0.151.0) does not expand ${PLUGIN_ROOT} in a plugin
     # manifest's mcpServers args: it launches `node '${PLUGIN_ROOT}/mcp/hub-shim.js'`
     # literally, the process dies on MODULE_NOT_FOUND, and the session gets no

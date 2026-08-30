@@ -203,7 +203,7 @@ Mirrors docs/harness-limitations.md: a dated, measured entry gates each feature 
 | V2 | Claude Code UDS frame shape (auth + user frames) | `claude-uds` default-on | **Verified end-to-end 2026-08-30 on 2.1.251** (live interactive session woken; sender pid verified by recipient) → **default-on**, `ULTRACODE_HUB_CLAUDE_PUSH=0` to opt out; degrades to pull if a Claude update changes the frames |
 | V3 | `codex queue` flags + behavior (≥0.149.0) | pinning `push/codex.js` argv | **Verified 2026-08-30 on 0.151.0**: `codex queue --thread <UUID\|name> --message <text>` → pinned, default-on, `ULTRACODE_HUB_CODEX_PUSH=0` to opt out; feature-detect keeps pre-0.149 CLIs pull-only |
 | V4 | Direct HTTP MCP registration per harness (Codex `url`+`bearer_token_env_var`, Grok config.toml `url`, Claude plugin `type:"http"`, AGY `agy mcp add --url`) | a `--mcp-transport http` generator mode | Open — shim registration is v1 for all four |
-| V5 | Per-harness MCP tool-call timeout ceilings for `msg_wait` guidance | documented `timeout_ms` per harness | Largely moot since `timeout_ms: 0` (infinite park) became the listening mode — the remaining question is which harnesses cap a tool call's duration and cut the park early (harmless: the registration and cursor survive; re-run hub-listen) |
+| V5 | Per-harness tool-call duration caps that cut a `msg_wait` park | documented behavior per harness | **Measured 2026-08-30** — see "Tool-call duration caps" in docs/harness-limitations.md (codex backgrounds-then-caps but push wakes it anyway; claude honors `MCP_TOOL_TIMEOUT`; agy/grok cut-and-rerun). Always harmless: registration and cursor survive |
 
 ## Operations
 

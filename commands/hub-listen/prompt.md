@@ -82,10 +82,13 @@ review loop that follows it still applies).
 the named role carries its own prompt, tool policy, and model routing. Never read a role's definition file
 and paste its contents into a generic forked agent: that spawn has no role binding, so none of the role's
 contract applies and the pipeline cannot account for it. If the spawn tool reports the name as unknown, the
-plugin's roles are not registered on this harness — report that to the user instead of improvising. On a
-harness whose spawn tool is asynchronous (it returns an agent id or task name), wait on **that specific id**
-with a single generous timeout sized to the stage — research and implementation legitimately run many
-minutes — never repeated short waits in a loop.
+plugin's roles are not registered on this harness — report that to the user instead of improvising. Pass the
+role name and the self-contained prompt and **nothing that shares this conversation** — never a
+conversation-fork option like Codex's `fork_turns`, which copies every parent turn into the child; ultracode
+agents run forked OFF, seeing only their prompt. On a harness whose spawn tool is asynchronous (it returns
+an agent id or task name), wait on **that specific id** with a single generous timeout sized to the stage —
+research and implementation legitimately run many minutes — never repeated short waits in a loop, and close
+the finished agent afterwards on harnesses where children linger as separate threads.
 
 Two rules are absolute:
 
