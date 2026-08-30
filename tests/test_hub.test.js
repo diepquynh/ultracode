@@ -109,10 +109,18 @@ test("hub: registration rejects bad harness, anonymous ids, foreign session dirs
   const outside = path.join(fixture.dir, "other-repo", ".ultracode", "session", "ultracode-session-x");
   fs.mkdirSync(outside, { recursive: true });
   assert.throws(() => registerDefault(state, fixture, { session_dir: outside }), /declared repo_roots/);
-  assert.throws(
-    () => registerDefault(state, fixture, { native_channel: "codex-queue" }),
-    /native_address is required/,
-  );
+  // A channel without an explicit address is VALID: both verified channels
+  // address the session by its harness session id, and demanding an address
+  // here is what taught sessions to register their UUID as a "name".
+  const channelOnly = registerDefault(state, fixture, {
+    session_id: "channel-only-1",
+    native_channel: "codex-queue",
+  });
+  const row = state
+    .listSessions({})
+    .sessions.find((s) => s.session_key === channelOnly.session_key);
+  assert.equal(row.native_channel, "codex-queue");
+  assert.equal(row.native_address, null, "no address registered → stored as null, not required");
 });
 
 // ---------------------------------------------------------------------------
@@ -1550,6 +1558,24 @@ test("hub push: claude adapter speaks the real UDS protocol, on by default", asy
       "uuid-matched notice",
     ),
     true,
+  );
+
+  // REGRESSION (2026-08-30, message 53): a session that registered its UUID as
+  // native_address (the schema used to demand an address whenever a channel
+  // was set) matches no record NAME — the miss must fall back to the harness
+  // session UUID instead of leaving a live session silently unreachable.
+  assert.equal(
+    await claudeAdapter.push(
+      {
+        session_key: "claude:z",
+        native_channel: "claude-uds",
+        native_address: sessionId,
+        harness_session_id: sessionId,
+      },
+      "uuid-as-address notice",
+    ),
+    true,
+    "UUID registered as native_address must fall back to sessionId matching",
   );
 
   // ULTRACODE_HUB_CLAUDE_PUSH=0 opts the daemon out entirely.

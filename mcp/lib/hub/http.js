@@ -101,6 +101,14 @@ class HubFacade {
         this.state.markDelivered(messageId, result.channel);
         return result;
       }
+      // Adapters degrade by RETURNING false (session record not found, opt-out,
+      // dead socket) far more often than by throwing — without this line a
+      // failed wake is indistinguishable from a successful one in the log.
+      if (result.channel) {
+        this.log(
+          `push via ${result.channel} to ${target.session_key} did not deliver message ${messageId}; queued for pull`,
+        );
+      }
     }
     return { pushed: false, channel: null };
   }

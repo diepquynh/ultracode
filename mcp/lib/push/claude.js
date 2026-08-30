@@ -44,9 +44,13 @@ function sessionsDir() {
 }
 
 // A session record is <pid>.json carrying at least { pid, sessionId, name,
-// messagingSocketPath }. Match by explicit name (a /rename'd native_address)
-// when one was registered, else by the harness session UUID — which every hub
-// registration carries, so claude push needs no per-session setup.
+// messagingSocketPath }. An explicit name match (a /rename'd native_address)
+// wins, but a registered address that matches no record name falls back to
+// the harness session UUID — which every hub registration carries, so claude
+// push needs no per-session setup. The fallback is load-bearing: sessions
+// have registered their UUID as native_address (the schema used to demand an
+// address whenever a channel was set), and a name-only match left them
+// silently unreachable while their socket sat live.
 function findSession(sessionName, sessionId) {
   let entries;
   try {
@@ -54,27 +58,24 @@ function findSession(sessionName, sessionId) {
   } catch {
     return null;
   }
+  let idMatch = null;
   for (const entry of entries) {
     if (!/^\d+\.json$/.test(entry)) continue;
     try {
       const record = JSON.parse(fs.readFileSync(path.join(sessionsDir(), entry), "utf-8"));
-      const matches =
+      const usable =
         record &&
-        ((sessionName && record.name === sessionName) ||
-          (!sessionName && sessionId && record.sessionId === sessionId));
-      if (
-        matches &&
         typeof record.messagingSocketPath === "string" &&
         record.messagingSocketPath &&
-        Number.isInteger(record.pid)
-      ) {
-        return record;
-      }
+        Number.isInteger(record.pid);
+      if (!usable) continue;
+      if (sessionName && record.name === sessionName) return record;
+      if (sessionId && record.sessionId === sessionId && !idMatch) idMatch = record;
     } catch {
       // unreadable/torn record — keep scanning
     }
   }
-  return null;
+  return idMatch;
 }
 
 // The peer auth token: <pid>.<sha256(socketPath)>.key, JSON { peerToken }.

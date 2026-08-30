@@ -365,9 +365,15 @@ class HubState {
     if (!NATIVE_CHANNELS.includes(channel)) {
       throw new HubError(400, `native_channel must be one of: ${NATIVE_CHANNELS.join(", ")}.`);
     }
-    if (channel !== "none" && !(typeof native_address === "string" && native_address.trim())) {
-      throw new HubError(400, "native_address is required when native_channel is not 'none'.");
-    }
+    // Both verified channels (codex-queue, claude-uds) address a session by
+    // its harness session id, so an explicit native_address is an override
+    // (a /rename'd or named session), never a requirement. Requiring one here
+    // pushed callers into registering their UUID as the "name", which broke
+    // claude push's name matching.
+    const address =
+      channel !== "none" && typeof native_address === "string" && native_address.trim()
+        ? native_address.trim()
+        : null;
     const caps = Array.isArray(capabilities)
       ? capabilities.map((c) => requireString(c, "capabilities[]"))
       : [];
@@ -402,7 +408,7 @@ class HubState {
         primaryRepoRoot,
         JSON.stringify(caps),
         channel,
-        channel === "none" ? null : native_address.trim(),
+        address,
         now,
         now,
       );

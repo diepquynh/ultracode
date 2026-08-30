@@ -55,9 +55,11 @@ function registerHubTools(server, hub) {
       description:
         "Register this interactive session with the machine-level ultracode hub so other harnesses can " +
         "message it and route tasks to it. Call once per session (re-calling is safe and rotates the " +
-        "secret). Pass your real harness session id explicitly — never a placeholder. Set native_channel/" +
-        "native_address when this session can be woken natively (a named Codex session → codex-queue; a " +
-        "named Claude Code session → claude-uds); otherwise omit them and rely on ultracode_msg_wait. " +
+        "secret). Pass your real harness session id explicitly — never a placeholder. Set native_channel " +
+        "when this session can be woken natively (Codex → codex-queue; Claude Code → claude-uds); the " +
+        "channel addresses this session by its session id, so pass native_address ONLY if the user gave " +
+        "this session a name (/rename on Claude, a named Codex session) — never repeat the session id " +
+        "there. Sessions without a native channel omit both and rely on ultracode_msg_wait. " +
         "Returns the session_key + session_secret every later hub call needs, and the message cursor to " +
         "start waiting from.",
       inputSchema: {
@@ -86,7 +88,10 @@ function registerHubTools(server, hub) {
         native_address: z
           .string()
           .optional()
-          .describe("The session's native name for that channel (Codex/Claude session name)."),
+          .describe(
+            "The session's user-given name on that channel (/rename'd Claude session, named Codex session). " +
+              "Omit unless the user named the session — the channel already addresses it by session id.",
+          ),
       },
     },
     call("registerSession"),
