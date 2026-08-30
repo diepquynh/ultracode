@@ -99,6 +99,19 @@ the work repo owns only the source files the agent reads or changes.
 
 ## Generate
 
+One neutral source tree feeds all four distributions; validate what you generated before publishing:
+
+```mermaid
+flowchart LR
+    SRC["neutral sources<br/>agents/skills/commands/&lt;name&gt;/<br/>definition.json + prompt.md"] --> GEN["scripts/generate_definitions.js<br/>--target &lt;harness&gt;"]
+    MAPS["definitions/*.json<br/>model-mapping · tool-mapping ·<br/>harness-layout · plugin-metadata"] --> GEN
+    GEN --> DC["dist/claude/ultracode"]
+    GEN --> DG["dist/grok/ultracode"]
+    GEN --> DX["dist/codex/ultracode"]
+    GEN --> DA["dist/antigravity/ultracode"]
+    DC & DG & DX & DA --> CHK["--check per target<br/>+ node --test tests/test_definitions.test.js"]
+```
+
 Generate the Claude Code plugin distribution with:
 
 ```bash

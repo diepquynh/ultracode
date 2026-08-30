@@ -68,6 +68,18 @@ your conventions instead of a framework's defaults:
 | `module-documentation` | A brief write-up of how each method works, refreshed as the final step. |
 | `prompt-generation` | CoT-following prompt authoring — for when the thing you're building is itself an agent. |
 
+How they run, end to end — approval gates on the spec and the plan, a review loop per phase, tests and docs
+only on request (the full picture, with what enforces each gate, is in [Architecture](docs/architecture.md)):
+
+```mermaid
+flowchart LR
+    E["explore"] --> S["generate-spec"] --> F1["fact-check"] --> A1{"spec<br/>approval"} --> P["plan"] --> F2["fact-check"] --> A2{"plan<br/>approval"} --> I["implement<br/>(per phase)"]
+    I <-- "loops until clean" --> R["code-reviewer"]
+    R --> C{"closing gate<br/>(opt-in)"}
+    C -- tests --> X["execution-path-analyzer"] --> W["write-test"] <--> R2["code-reviewer"]
+    C -- docs --> D["module-documentation"]
+```
+
 **Model router** - driving your subagents at the most efficient model. See [Model routing](docs/model-routing.md)
 
 **A cross-harness hub** — one loopback HTTP MCP daemon per machine that lets your interactive sessions on
@@ -137,41 +149,68 @@ to worry about handover or moving to a new machine.
 
 ## Use multiple harnesses in one Ultracode session
 
-Ultracode derives its session directory from the harness's native session ID. Start two harnesses from the same
-repository with the same ID and both resolve the same `.ultracode/session/ultracode-session-<id>` directory,
-including its specs, plans, reports, and pipeline gates. That lets a frontier-model harness handle exploration,
-planning, and spec generation, then hand implementation to a cheaper harness that is still effective at coding —
-without copying artifacts or starting a second Ultracode run.
+An Ultracode session is its **artifact directory** — `.ultracode/session/ultracode-session-<id>`, holding the
+specs, plans, reports, and pipeline gates — not any harness's chat history. Any harness that resolves that
+directory can carry the pipeline forward. That lets a frontier-model harness handle exploration, planning, and
+spec generation, then hand implementation to a cheaper harness that is still effective at coding — without
+copying artifacts or starting a second Ultracode run.
 
-Claude Code and Grok Build both accept a custom UUID for a new conversation. Open them in separate terminals and
-reuse one UUID:
+There are two ways to get a second harness into a session: the [cross-harness hub](docs/hub.md) — the primary
+path — or launching both harnesses with the same native session ID, the manual fallback for when you'd rather
+not run the hub daemon.
 
-```bash
-# Terminal 1: frontier model for exploration, specs, and planning
-claude --session-id 550e8400-e29b-41d4-a716-446655440000
+### With the hub (recommended): delegate and adopt
 
-# Terminal 2: cheaper coding model for implementation
-# Run from the same repository root and reuse the exact UUID.
-grok --session-id 550e8400-e29b-41d4-a716-446655440000
+Open a session on the harness you want doing the work and run `/ultracode:hub-listen`; the orchestrating
+session publishes tasks to it and gets woken when they complete. No session IDs are copied anywhere: the
+worker discovers the shared session through the hub and **adopts** it (`ultracode_session_adopt`), which
+authorizes the worker's own native session to work inside a session directory it did not create.
+
+```mermaid
+flowchart TD
+    ORCH["Orchestrating session — /ultracode:orchestrate<br/>registers with the hub at session start"] -- "task_publish: addresses into<br/>its session dir, never content" --> HUB["cross-harness hub<br/>one loopback daemon per machine"]
+    WORK["Worker session on any harness —<br/>/ultracode:hub-listen: register,<br/>drain the queue, park msg_wait, end turn"] --- HUB
+    HUB -- "wake notice<br/>(push or long-poll)" --> WORK
+    WORK --> ADOPT["ultracode_session_query → pick the shared session →<br/>ultracode_session_adopt authorizes it<br/>for this native session"]
+    ADOPT --> RUN["worker runs the delegated stage IN the shared dir —<br/>recorded spec/plan approvals hold, so a plan-gated<br/>stage spawns without re-approval"]
+    RUN -- "task_complete<br/>(report path)" --> HUB
+    HUB -- "wake notice —<br/>no polling in between" --> ORCH
 ```
 
-Codex and Antigravity CLI (`agy`) cannot choose the session ID for a new conversation, so either of those
-harnesses must initialize the shared session first. Start Codex or `agy`, initialize Ultracode, and copy the ID from
-the resulting `.ultracode/session/ultracode-session-<id>` path. Then start Claude Code or Grok Build from the same
-repository with that value passed to `--session-id`, allowing it to inherit and continue the existing Ultracode
-session. Claude Code and Grok Build require the supplied value to be a valid UUID; when reopening a conversation
+Because adoption is hub-authorized rather than ID-inherited, it also covers what the shared-ID trick never
+could: Codex and Antigravity joining a session they didn't start, and **resume** — a session whose original
+harness broke is still listed by `ultracode_session_query`, so another harness adopts it by ID and continues
+from its recorded stage. Add a `harnesses` block to `repo-profile.json` and the orchestrator decides "spawn
+here" vs "publish a hub task" per stage automatically — see the Harness routing section of
+[the hub docs](docs/hub.md).
+
+### Without the hub: share the native session ID
+
+Ultracode derives the session directory from the harness's native session ID, so two harnesses launched from
+the same repository with the same ID resolve the same directory. The setup path depends on whether the
+harness that starts the session can choose its own ID:
+
+```mermaid
+flowchart TD
+    PICK{"Which harness starts<br/>the shared session?"}
+    PICK -- "Claude Code / Grok Build:<br/>accept a custom UUID" --> MINT["Terminal 1 — launch with a chosen UUID:<br/>claude --session-id 550e8400-e29b-41d4-a716-446655440000"]
+    MINT --> JOINA["Terminal 2 — same repository root, exact same UUID:<br/>grok --session-id 550e8400-e29b-41d4-a716-446655440000"]
+    PICK -- "Codex / Antigravity (agy):<br/>cannot choose a new session's ID" --> INIT["Start codex or agy first<br/>and initialize Ultracode"]
+    INIT --> COPY["Copy the ID from the resulting<br/>.ultracode/session/ultracode-session-&lt;id&gt; path"]
+    COPY --> JOINB["Start Claude Code or Grok Build from the same repository<br/>with --session-id &lt;that id&gt; — it inherits and continues<br/>the existing Ultracode session"]
+    JOINA --> SHARED["Both harnesses resolve the same session dir:<br/>specs, plans, reports, and pipeline gates shared"]
+    JOINB --> SHARED
+```
+
+Claude Code and Grok Build require the supplied value to be a valid UUID; when reopening a conversation
 that already exists in that harness, use its `--resume <id>` option instead of `--session-id`.
 
-The shared ID joins the **Ultracode artifact session**, not the harnesses' native chat histories. Keep both
-terminals open if useful, but hand ownership over at clear phase boundaries and tell the receiving harness to
-continue from the existing approved spec or plan. Do not run the same phase against the same repo from two
-harnesses at once: they share both the working tree and session state. See
-[How the agents communicate](docs/architecture.md#how-the-agents-communicate) for the session layout.
+### Either way
 
-For live handoffs — instead of copying session IDs by hand — the [cross-harness hub](docs/hub.md) connects the
-open sessions themselves: run `/ultracode:hub-listen` in the receiving harness's session, and the
-orchestrating session publishes tasks to it and gets woken when they complete, each session working in its own
-session dir and reading the other's artifacts from disk.
+Hand ownership over at clear phase boundaries and tell the receiving harness to continue from the existing
+approved spec or plan. Do not run the same phase against the same repo from two harnesses at once: they share
+both the working tree and session state. See
+[How the agents communicate](docs/architecture.md#how-the-agents-communicate) for the session layout.
 
 ## How much does it actually cost in a real-world task?
 

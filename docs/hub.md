@@ -83,28 +83,37 @@ so stdio and HTTP can never drift:
 The design goal is that a sender **ends its turn** after `msg_send`/`task_publish` instead of burning tool
 calls polling. Delivery order for each committed message:
 
-1. **A parked long-poll** on the recipient resolves immediately (`channel: "long-poll"`).
-2. **A native push** wakes an idle recipient as a new turn — a *notice* only ("call `ultracode_msg_wait`"),
-   never the body, so a spoofed native channel can at worst trigger an empty authenticated fetch. Both
-   channels are **on by default and need no per-session setup**: when a registration carries no explicit
-   `native_channel`, the channel is inferred from the harness and addressed by the harness session id every
-   registration already has; an explicit `native_address` (a `/rename`d name) still wins. Opt a daemon out
-   with `ULTRACODE_HUB_CLAUDE_PUSH=0` / `ULTRACODE_HUB_CODEX_PUSH=0`.
-   - `codex-queue` (`mcp/lib/push/codex.js`): `codex queue --thread <session-UUID-or-name> --message <notice>`
-     (syntax verified on codex-cli 0.151.0, V3). Feature-detected: a CLI without `queue` (<0.149.0) reports
-     unavailable and the harness stays pull-only.
-   - `claude-uds` (`mcp/lib/push/claude.js`): writes a newline-delimited `{type:"auth"}` + `{type:"user"}`
-     frame pair to the target session's Unix socket (`~/.claude/sessions/<pid>.json`, matched by name or
-     `sessionId`; peer token from the sibling `<pid>.<sha256(socketPath)>.key`) — the substrate of Claude
-     Code's own cross-session messaging. Verified end-to-end on 2.1.251 (V2), including waking a live
-     interactive session. The frame shape is reverse-engineered and version-coupled, so any Claude update
-     that changes it degrades delivery to pull rather than erroring. It deliberately does not defeat Claude's
-     inbound gate — a session in `bypassPermissions` mode *holds* a peer message for the user's approval;
-     since the payload is only a wake notice, a held or missed push costs nothing. To skip the hold and
-     deliver hub notices immediately, set `"crossSessionInbound": "accept"` in `~/.claude/settings.json` —
-     a per-user trust decision Claude Code owns, which ultracode documents but never sets for you.
-3. **Nothing worked** → the message stays queued; the row was committed before any push was attempted, so
-   adapter failure can never lose it. Grok and Antigravity are always in this mode (no push channel).
+```mermaid
+flowchart TD
+    COMMIT["message row committed to hub.sqlite3<br/>(before any push is attempted —<br/>adapter failure can never lose a message)"] --> PARKED{"recipient has a<br/>parked long-poll?"}
+    PARKED -- yes --> LP["resolves immediately<br/>(channel: long-poll)"]
+    PARKED -- no --> NATIVE{"native push channel<br/>for the recipient?"}
+    NATIVE -- codex-queue --> CQ["codex queue --thread &lt;session-UUID-or-name&gt;<br/>--message &lt;notice&gt;"]
+    NATIVE -- claude-uds --> CU["auth + user frame pair written to the<br/>target session's Unix socket"]
+    CQ --> WOKE
+    CU --> WOKE["idle recipient wakes as a new turn —<br/>a NOTICE only ('call ultracode_msg_wait'),<br/>never the body"]
+    NATIVE -- "none — Grok and Antigravity,<br/>or the push failed" --> QUEUED["message stays queued,<br/>read by the recipient's next msg_wait"]
+```
+
+Because the push carries a notice and never the body, a spoofed native channel can at worst trigger an empty
+authenticated fetch. Both channels are **on by default and need no per-session setup**: when a registration
+carries no explicit `native_channel`, the channel is inferred from the harness and addressed by the harness
+session id every registration already has; an explicit `native_address` (a `/rename`d name) still wins. Opt a
+daemon out with `ULTRACODE_HUB_CLAUDE_PUSH=0` / `ULTRACODE_HUB_CODEX_PUSH=0`.
+
+- `codex-queue` (`mcp/lib/push/codex.js`): `codex queue --thread <session-UUID-or-name> --message <notice>`
+  (syntax verified on codex-cli 0.151.0, V3). Feature-detected: a CLI without `queue` (<0.149.0) reports
+  unavailable and the harness stays pull-only.
+- `claude-uds` (`mcp/lib/push/claude.js`): writes a newline-delimited `{type:"auth"}` + `{type:"user"}`
+  frame pair to the target session's Unix socket (`~/.claude/sessions/<pid>.json`, matched by name or
+  `sessionId`; peer token from the sibling `<pid>.<sha256(socketPath)>.key`) — the substrate of Claude
+  Code's own cross-session messaging. Verified end-to-end on 2.1.251 (V2), including waking a live
+  interactive session. The frame shape is reverse-engineered and version-coupled, so any Claude update
+  that changes it degrades delivery to pull rather than erroring. It deliberately does not defeat Claude's
+  inbound gate — a session in `bypassPermissions` mode *holds* a peer message for the user's approval;
+  since the payload is only a wake notice, a held or missed push costs nothing. To skip the hold and
+  deliver hub notices immediately, set `"crossSessionInbound": "accept"` in `~/.claude/settings.json` —
+  a per-user trust decision Claude Code owns, which ultracode documents but never sets for you.
 
 Operator flow on the receiving side: the user opens a session on the harness they want doing the work and
 runs `/ultracode:hub-listen` — register, drain the task queue, one `msg_wait`, end turn. The publisher's

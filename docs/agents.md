@@ -27,14 +27,29 @@ The prefix comes from the plugin loader, which registers each agent as `{plugin}
 files therefore keep a **bare** `name:` in their front matter — writing `name: ultracode:explore` would register
 it as `ultracode:ultracode:explore`. The same holds for `repo-profile.json`'s `models` keys, which stay bare.
 
+## How `/init-kit` drives the initializer
+
+`/init-kit` (the main loop) spawns `ultracode:initializer` in six modes. Every stage writes a session-dir file
+and returns its path; the user approval gate sits between scouting and generation:
+
+```mermaid
+flowchart TD
+    CMD["/init-kit"] --> DETECT["detect — read-only:<br/>complete bootstrap from another harness? stack + reference?<br/>scout plan · skills already under the harness skill dir"]
+    DETECT -- "cross-harness candidate found,<br/>user picks it" --> ADOPT["adopt — copy skills + INVENTORY.md + repo-profile.json<br/>into this harness's dirs, translate harness-specific paths,<br/>reset the models block to the seeded defaults"]
+    DETECT -- otherwise --> SCOUT["scout ×N in parallel — read-only, one repo slice each:<br/>recurring patterns + one exemplar + invariants per component type"]
+    SCOUT --> PROPOSE["propose — merge findings, rank component types by ubiquity,<br/>reconcile against existing skills → ultracode-proposal.json"]
+    PROPOSE --> GATE{"user approval gate<br/>per skill: re-use as-is,<br/>generate, or regenerate"}
+    GATE --> GEN["generate-skill — one parallel spawn per approved skill,<br/>grounded in its captured exemplar"]
+    GEN --> INV["generate-inventory — INVENTORY.md + repo-profile.json<br/>over the generated plus the re-used skills"]
+```
+
 ## Re-using existing skills
 
 Re-running `/init-kit` — or running it the first time in a repo that already ships hand-authored skills — does
-**not** clobber what's there. During **detect** the initializer discovers every skill already under the active
-harness's project skill directory (`.claude/skills/` for Claude Code, `.grok/skills/` for Grok Build,
-`.agents/skills/` for Codex). In
-**propose** each is marked `status: existing` and, by default, **re-used as-is**: kept on disk and registered
-in `INVENTORY.md`, never regenerated.
+**not** clobber what's there. Skills **detect** finds under the active harness's project skill directory
+(`.claude/skills/` for Claude Code, `.grok/skills/` for Grok Build, `.agents/skills/` for Codex) are marked
+`status: existing` in **propose** and, by default, **re-used as-is**: kept on disk and registered in
+`INVENTORY.md`, never regenerated.
 
 At the approval gate you can override per skill and force a **regenerate** to refresh a stale one from the
 current code. Bespoke skills the team wrote — ones that map to no scouted component type (say a `deploy` or

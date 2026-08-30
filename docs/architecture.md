@@ -4,23 +4,20 @@
 
 The plugin is split into two layers:
 
-```
-┌─ PLUGIN  (install once, everywhere) ─────────────────┐
-│  agents/    neutral definition + prompt sources        │
-│  skills/    neutral definition + prompt sources        │
-│  refs/      java-spring · typescript-node · python ·  │ ← the initializer's case-by-case library
-│             go · _generic · archetypes · contracts    │
-│  commands/  neutral definition + prompt sources        │
-│  hooks/     PreToolUse guards  +  SessionStart(compact) resume │
-└────────────────────────┬──────────────────────────────┘
-                         │  run /init-kit in a repo
-                         ▼
-┌─ TARGET REPO  (GENERATED, commit these) ──────────────┐
-│  harness skill dir: component skills + module hub      │
-│  .ultracode/  (shared runtime dir, any harness)        │
-│    INVENTORY.md          the master routing table      │
-│    repo-profile.json     build/test/fmt · map          │
-└───────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph PLUGIN["PLUGIN — install once, everywhere"]
+        direction TB
+        DEFS["agents/ · skills/ · commands/<br/>neutral definition + prompt sources"]
+        REFS["refs/ — the initializer's case-by-case library:<br/>java-spring · typescript-node · python · go<br/>· _generic · archetypes · contracts"]
+        HOOKS["hooks/ — PreToolUse guards<br/>+ SessionStart(compact) resume"]
+    end
+    PLUGIN -- "run /init-kit in a repo" --> TARGET
+    subgraph TARGET["TARGET REPO — generated, commit these"]
+        direction TB
+        SKILLS["harness skill dir:<br/>component skills + module hub"]
+        RUNTIME[".ultracode/ — shared runtime dir, any harness<br/>INVENTORY.md — the master routing table<br/>repo-profile.json — build/test/fmt · map"]
+    end
 ```
 
 Harness-ready plugins (`dist/claude/ultracode/`, `dist/grok/ultracode/`, `dist/codex/ultracode/`, `dist/antigravity/ultracode/`) are build
@@ -179,33 +176,38 @@ re-approval. `~/.ultracode` itself — hub queues and the adoption links — is 
 location (`isMachineStatePath` in `hooks/lib/common.js`, enforced by `artifact-guard.js`/`bash-scope-guard.js`),
 the same ownership rule `hooks/lib/ledger-policy.js` applies to the per-repo ledgers.
 
-```
- ORCHESTRATOR — the only router: derives the session dir, hands each agent a
- self-contained prompt, reads the report it returns, decides the next step.
-   │
-   │  no agent calls another; every hop is a report file in the SESSION DIR
-   │  (.ultracode/session/ultracode-session-<session-id>) — written by one, read by the next
-   ▼
-   explore                 ─▶ research doc + criteria doc      (one agent per repo)
-   generate-spec           ─▶ ONE spec file, deliverables D1…Dn inside it
-   fact-check (spec)       ─▶ verdict JSON — PASS required before the spec gate opens
-   plan                    ─▶ master plan + one self-contained file per phase  (reads only the spec file)
-   fact-check (plan)       ─▶ verdict JSON — PASS required before the plan gate opens
-   ── per phase (one review loop; the loop ends here) ──
-   implement               ─▶ change report    (its Changed Files list = what to trace & cover)
-   code-reviewer (impl)    ⇄  implement        (⇄ review ledger, loops until clean)
-   ── after all phases: format, then the CLOSING GATE — both stages below are optional ──
-   tests?  ─▶ execution-path-analyzer ─▶ EPA report  (one path per test: P1, P2 … NEW/EXISTING)
-                                         all covered phases at once — read-only, so they cannot collide
-             ── then one covered phase at a time: they share the test suite ──
-             write-test               ─▶ test report
-             code-reviewer (tests)    ⇄  write-test  (⇄ review ledger, loops until clean)
-   docs?   ─▶ module-documentation    ─▶ area references  (reads every prior report)
-```
+## The pipeline
 
-**Tests and docs are opt-in and never run between phases** — only after every phase passes review and `format`
-runs. The orchestrator then asks once; whatever's declined is named in the completion report along with how to
-request it later.
+No agent calls another; every hop is a report file in the session dir
+(`.ultracode/session/ultracode-session-<session-id>`) — written by one agent, read by the next.
+
+```mermaid
+flowchart TD
+    ORCH["ORCHESTRATOR — the only router:<br/>derives the session dir, hands each agent a self-contained prompt,<br/>reads the report it returns, decides the next step"]
+    ORCH --> EXPLORE["explore — one agent per repo<br/>→ research doc + criteria doc"]
+    EXPLORE --> SPEC["generate-spec<br/>→ ONE spec file, deliverables D1…Dn inside it"]
+    SPEC --> FC1["fact-check (spec) → verdict JSON"]
+    FC1 --> G1{"spec approval gate<br/>opens only on PASS"}
+    G1 -- "user changes → spec rewritten" --> SPEC
+    G1 -- approved --> PLAN["plan — reads only the spec file<br/>→ master plan + one self-contained file per phase"]
+    PLAN --> FC2["fact-check (plan) → verdict JSON"]
+    FC2 --> G2{"plan approval gate<br/>opens only on PASS"}
+    G2 -- approved --> IMPL
+    subgraph PHASELOOP["per phase — one review loop; the loop ends here"]
+        IMPL["implement → change report<br/>(its Changed Files list = what to trace & cover)"]
+        IMPL <-- "review ledger,<br/>loops until clean" --> CR1["code-reviewer (impl)"]
+    end
+    PHASELOOP --> FORMAT["after all phases: format"]
+    FORMAT --> CLOSING{"CLOSING GATE — asked once;<br/>tests and docs are both optional"}
+    CLOSING -- "tests?" --> EPA["execution-path-analyzer → EPA report<br/>one path per test (P1, P2 … NEW/EXISTING)<br/>all covered phases at once — read-only, so they cannot collide"]
+    EPA --> WT
+    subgraph TESTLOOP["one covered phase at a time — they share the test suite"]
+        WT["write-test → test report"]
+        WT <-- "review ledger,<br/>loops until clean" --> CR2["code-reviewer (tests)"]
+    end
+    CLOSING -- "docs?" --> MDOC["module-documentation → area references<br/>(reads every prior report)"]
+    CLOSING -- declined --> DONE["completion report names what was declined<br/>and how to request it later"]
+```
 
 **Test coverage is scoped per phase.** `plan` tags each phase `Required` or `Skip`. `Skip` means every step
 produces a file with no execution path of its own — a DTO, an interface/enum, a config/DI/registration file, a

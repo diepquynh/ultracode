@@ -115,19 +115,22 @@ someone re-ran `/init-kit`. Note that this affects *which model* runs it, never 
 
 ## What happens on a spawn
 
-1. The hook fires on every agent spawn — `PreToolUse`, matcher `Task|Agent`.
-2. `HookContext` uses the active harness adapter to decode the call into a list of canonical spawn entries. A
-   flat Claude/Codex/Grok call is a one-entry list; Antigravity's `Subagents[]` remains a complete list.
-3. For **each** Ultracode entry, it resolves the work repo from that entry's `Repo root:`. Non-Ultracode
-   subagents remain untouched.
-4. It reads the work repo's `.ultracode/repo-profile.json` and looks up that agent/phase route.
-5. It resolves the route to a concrete model for the active harness.
-6. If the caller passed a model for that entry, it is canonicalized and compared. Any mismatch denies the
-   whole spawn call.
-7. It accumulates every model/prompt patch and emits one harness-native rewrite. Every entry receives its own
-   repo brief; Antigravity entries also receive the identity and primary-repo stamps their nested hooks recover.
+```mermaid
+flowchart TD
+    FIRE["hook fires on every agent spawn<br/>(PreToolUse, matcher Task|Agent)"] --> DECODE["HookContext decodes the call into a list of canonical spawn entries<br/>flat Claude/Codex/Grok call = one-entry list ·<br/>Antigravity's Subagents[] stays a complete list"]
+    DECODE --> UC{"for each entry:<br/>an Ultracode agent?"}
+    UC -- no --> UNTOUCHED["left untouched"]
+    UC -- yes --> PROFILE["resolve the work repo from the entry's Repo root: line,<br/>read its .ultracode/repo-profile.json"]
+    PROFILE --> LOOKUP{"agent/phase route<br/>found and resolvable?"}
+    LOOKUP -- "no — and the agent is not exempt" --> DENY1["DENY:<br/>refusing an unenforced spawn"]
+    LOOKUP -- yes --> CONC["resolve the route to a concrete model<br/>for the active harness"]
+    CONC --> OVERRIDE{"caller passed a model<br/>for this entry?"}
+    OVERRIDE -- "yes — canonicalized,<br/>and it mismatches" --> DENY2["DENY the whole spawn call"]
+    OVERRIDE -- "no, or it matches" --> ACC["accumulate the entry's model/prompt patch"]
+    ACC --> EMIT["emit ONE harness-native rewrite:<br/>every entry receives its own repo brief;<br/>Antigravity entries also receive the identity and<br/>primary-repo stamps their nested hooks recover"]
+```
 
-Step 7 is the surprise: the model router also writes part of the prompt. That's not scope creep, it's a
+The final rewrite step is the surprise: the model router also writes part of the prompt. That's not scope creep, it's a
 constraint. `PreToolUse` hooks don't compose — with two hooks on the same matcher, both see the *original* tool
 input and exactly one hook's `updatedInput` survives; the other is discarded whole. So a second hook editing an
 agent spawn would silently drop the routed model, and routing is deny-on-missing precisely because unenforced
