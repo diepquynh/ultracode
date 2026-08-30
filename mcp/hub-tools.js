@@ -67,7 +67,10 @@ function registerHubTools(server, hub) {
           .describe("Absolute roots of every repo this session works in; the first owns its session dir."),
         session_dir: z
           .string()
-          .describe("This session's own ultracode session dir (the exact Session dir: value it uses for spawns)."),
+          .describe(
+            "The ultracode session dir this session works in — its own derived dir, or the shared session " +
+              "dir it is joining (hub-listen registers with the picked session's dir instead of minting a new one).",
+          ),
         capabilities: z
           .array(z.string())
           .optional()

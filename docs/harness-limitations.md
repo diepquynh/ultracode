@@ -65,6 +65,12 @@ Two hub-relevant behaviors measured live on 2026-08-30 while verifying the shim 
   reports `approval: never` yet every MCP call fails with "user cancelled MCP tool call"; the same run with
   `--dangerously-bypass-approvals-and-sandbox` completes them. Headless Codex use of the hub tools needs that
   flag (or an approvals config that actually covers MCP) until a newer CLI fixes the default.
+- **Codex 0.151.0 does not expand `${PLUGIN_ROOT}` in plugin-manifest `mcpServers` args** (measured
+  2026-08-30, session 01a051bb…): `codex mcp list` shows the literal `${PLUGIN_ROOT}/mcp/hub-shim.js`, the
+  spawned node dies on MODULE_NOT_FOUND, and the session exposes zero ultracode tools — hub-listen reports
+  "this runtime has not exposed any of the required hub calls". Same class as AGY's inert `mcp_config.json`;
+  install.sh works around both with an explicit absolute-path registration (`codex mcp add ultracode-gate --
+  node <dist>/mcp/hub-shim.js`), which lands in `~/.codex/config.toml` and outranks the plugin manifest.
 - **Grok 1.0.13 `-p` does not expose user-config stdio MCP servers in untrusted directories.** `grok mcp
   doctor` reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
   plugin-bundled servers and reported the same tools "not found". Run from a trusted project (or trust the

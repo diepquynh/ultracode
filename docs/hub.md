@@ -152,6 +152,11 @@ flowchart LR
 
 - The worker registers its own native session, then adopts the shared one; from then on the shared
   `session_dir` is its `Session dir:` for every spawn and hub call.
+- **Registration is a standing orchestrate step, and the query is the only discovery channel.** Every
+  `/ultracode:orchestrate` session registers at session start — an unregistered session is invisible to
+  `ultracode_session_query`, which once led a worker to go hunting for `ultracode-session-*` directories on
+  disk and pick a stale one. Workers never do filesystem discovery; the hub refuses to adopt a target whose
+  session dir does not exist, so a guessed id fails loudly instead of minting a link to an empty dir.
 - `session-guard` allows that dir because the daemon-written link authorizes this native session for it — a
   file under `~/.ultracode` that models cannot write (`isMachineStatePath`), so it cannot be forged to smuggle
   a spawn into an arbitrary dir. The lookup is a local read: no network on the spawn path, and it survives a

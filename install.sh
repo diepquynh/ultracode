@@ -187,6 +187,14 @@ JSON
       codex plugin marketplace add "$MARKETPLACE_ROOT"
     fi
     codex plugin add ultracode@ultracode-local
+    # Codex (measured on 0.151.0) does not expand ${PLUGIN_ROOT} in a plugin
+    # manifest's mcpServers args: it launches `node '${PLUGIN_ROOT}/mcp/hub-shim.js'`
+    # literally, the process dies on MODULE_NOT_FOUND, and the session gets no
+    # ultracode tools at all. Same failure class as AGY's inert mcp_config.json,
+    # same fix: register the server explicitly with an absolute path (a config.toml
+    # entry, which outranks the plugin manifest's).
+    codex mcp add ultracode-gate -- node "$PLUGIN_ROOT/mcp/hub-shim.js" >/dev/null 2>&1 \
+      || echo "Warning: could not register the ultracode-gate MCP server with codex; run: codex mcp add ultracode-gate -- node \"$PLUGIN_ROOT/mcp/hub-shim.js\"" >&2
     echo "Installed Ultracode. Start Codex, trust its hooks in /hooks, restart, then run \$init-kit."
   fi
 done

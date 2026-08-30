@@ -109,6 +109,9 @@ for HARNESS in $TARGETS; do
         || { echo "Failed to remove the Codex marketplace 'ultracode-local'." >&2; exit 1; }
     fi
 
+    # install.sh registers this separately from the plugin (Codex does not expand
+    # ${PLUGIN_ROOT} in plugin-manifest mcpServers), so remove it explicitly too.
+    codex mcp remove ultracode-gate >/dev/null 2>&1 || true
     # install.sh stages the Codex plugin under ${INSTALL_DIR}-marketplace/codex.
     rm -rf "$MARKETPLACE_ROOT"
     rmdir "${INSTALL_DIR}-marketplace" 2>/dev/null || true

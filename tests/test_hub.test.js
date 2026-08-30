@@ -706,6 +706,39 @@ test("hub: adopt links a native session to a shared session and writes the hook 
     });
 });
 
+test("hub: adopting a fabricated session id is refused (target dir must exist)", (t) => {
+  const fixture = makeFixture(t);
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+
+  const worker = registerDefault(state, fixture, {
+    harness: "codex",
+    session_id: "guessy",
+    session_dir: fixture.sessionDir,
+  });
+  // By id: the constructed dir does not exist on disk.
+  assert.throws(
+    () =>
+      state.adoptSession({
+        session_key: worker.session_key,
+        session_secret: worker.session_secret,
+        ultracode_session_id: "made-up-out-of-nowhere",
+        repo_root: fixture.repoRoot,
+      }),
+    /Adoption target does not exist/,
+  );
+  // By dir: same rule.
+  assert.throws(
+    () =>
+      state.adoptSession({
+        session_key: worker.session_key,
+        session_secret: worker.session_secret,
+        session_dir: path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-phantom"),
+      }),
+    /Adoption target does not exist/,
+  );
+});
+
 test("hub: a worker may complete a task with a report inside its adopted session dir", (t) => {
   const fixture = makeFixture(t);
   const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));

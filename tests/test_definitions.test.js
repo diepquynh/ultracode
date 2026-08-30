@@ -830,10 +830,15 @@ test("installer ensures the machine-level hub after dependencies, before registr
   assert.ok(claudeRegisterIndex > hubEnsureIndex);
   // AGY's external MCP registration must point at the shim, not the bare stdio server.
   assert.match(script, /agy mcp add ultracode-gate node "\$PLUGIN_ROOT\/mcp\/hub-shim\.js"/);
+  // Codex does not expand ${PLUGIN_ROOT} in plugin-manifest mcpServers (0.151.0),
+  // so the installer must register the shim explicitly there too.
+  assert.match(script, /codex mcp add ultracode-gate -- node "\$PLUGIN_ROOT\/mcp\/hub-shim\.js"/);
   // Uninstall stops the daemon but keeps ~/.ultracode (token survives reinstalls).
   const uninstall = fs.readFileSync(UNINSTALLER, "utf-8");
   assert.match(uninstall, /hub-ctl\.js/);
   assert.match(uninstall, /Left ~\/\.ultracode/);
+  // ...and the uninstaller removes codex's external registration.
+  assert.match(uninstall, /codex mcp remove ultracode-gate/);
 });
 
 test("real npm ci against the generated plugin root installs a working ultracode_gate MCP server", () => {

@@ -85,6 +85,16 @@ Give **each repo its own subdirectory** so parallel repos never collide on repor
 mkdir -p "$SESSION_DIR/{repo-key}"
 ```
 
+**Register this session with the hub — a standing step, not a delegation-time one.** Right after deriving
+`$SESSION_DIR`, call `ultracode_session_register` (harness `{{harness_name}}`, this session's real id from
+the formula above, the repo roots in scope, `$SESSION_DIR`, display_name "orchestrator"). Do this on every
+orchestrate session, whether or not any cross-harness work is planned: the registration is what makes this
+session **exist** for the rest of the machine — `/ultracode:hub-listen` on another harness lists sessions
+from the hub's registry only, so an unregistered orchestrate session is invisible to its own workers (they
+see an empty list and cannot know your session id), and it cannot be found for resume if this harness dies
+mid-run. Keep the returned `session_key`, `session_secret`, and `cursor`. If the tool answers "hub is not
+reachable", mention it once and continue single-harness — registration is best-effort, never a gate.
+
 Every subagent prompt carries four lines that separate session ownership from work scope:
 
 - `Primary repo root: {absolute root at $PWD when this session started}` — owns `$SESSION_DIR` and every
@@ -649,10 +659,10 @@ when both name the agent). Then:
   user so they can fix the profile. Routes are always concrete harness names — never write or honor a
   relative value like "local"; another harness reading the same profile would resolve it to itself.
 
-1. **Register once**, right after deriving `$SESSION_DIR`: call `ultracode_session_register` with your
-   harness, this session's real session id ({{session_id_expr}} — never the `no-session-id` fallback), the
-   absolute repo roots in scope, and `$SESSION_DIR`. Keep the returned `session_key`, `session_secret`, and
-   `cursor` for every later hub call; they are this session's identity, not something to share or invent.
+1. **You are already registered** — the Session isolation section registers every orchestrate session with
+   the hub as a standing step. Use the `session_key`/`session_secret`/`cursor` from that registration for
+   every hub call here; they are this session's identity, not something to share or invent. (If registration
+   failed at session start because the hub was unreachable, retry it once now before delegating.)
 2. **Delegate by address, never by content.** Call `ultracode_task_publish` with a payload that carries
    exactly what a spawn prompt would: `task`, `repo_root`, `repo_key`, `agent_hint`, and `source` addresses
    (`session_dir`, plus the spec/phase/report paths under it). The worker reads those artifacts from disk

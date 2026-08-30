@@ -493,6 +493,18 @@ class HubState {
         "Adoption target is not under a repo root this session registered for; register that repo root first.",
       );
     }
+    // The target must be a session that actually exists on disk. Adoption
+    // by a guessed/fabricated id would otherwise mint a link to an empty dir
+    // and the worker would silently "share" a session nobody else has —
+    // adoptable ids come from ultracode_session_query or a task's
+    // source.session_dir, both of which name real directories.
+    if (!isDirectory(targetDir)) {
+      throw new HubError(
+        404,
+        `Adoption target does not exist: ${targetDir}. Adopt only a session named by ` +
+          "ultracode_session_query or by a claimed task's source.session_dir — never a guessed id.",
+      );
+    }
     const id = ultracodeSessionIdFromDir(targetDir);
     const now = nowIso();
     this.db
