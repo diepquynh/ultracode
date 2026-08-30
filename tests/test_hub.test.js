@@ -564,6 +564,66 @@ test("hub: expireStale marks sessions stale and prunes old messages", (t) => {
 });
 
 // ---------------------------------------------------------------------------
+// state.js — schema migration
+// ---------------------------------------------------------------------------
+
+test("hub: opening a v1 database migrates the sessions schema in place and backfills", (t) => {
+  const fixture = makeFixture(t);
+  const { DatabaseSync } = require("node:sqlite");
+  const { hubDatabasePath } = require(path.join(ROOT, "mcp", "lib", "hub", "config.js"));
+  const dbPath = hubDatabasePath();
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+  // The exact v1 sessions shape (no ultracode_session_id / primary_repo_root),
+  // with one registered row — what a hub created before the adoption feature
+  // holds on disk.
+  const v1 = new DatabaseSync(dbPath);
+  v1.exec(`
+    CREATE TABLE sessions (
+      session_key TEXT PRIMARY KEY, secret TEXT NOT NULL, harness TEXT NOT NULL,
+      harness_session_id TEXT NOT NULL, display_name TEXT, repo_roots TEXT NOT NULL,
+      session_dir TEXT NOT NULL, capabilities TEXT NOT NULL DEFAULT '[]',
+      native_channel TEXT NOT NULL DEFAULT 'none', native_address TEXT,
+      registered_at TEXT NOT NULL, last_heartbeat_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active'
+    );
+    CREATE TABLE hub_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO hub_meta (key, value) VALUES ('schema_version', '1');
+  `);
+  v1.prepare(
+    `INSERT INTO sessions (session_key, secret, harness, harness_session_id, repo_roots, session_dir,
+       registered_at, last_heartbeat_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "claude:old-one",
+    "s".repeat(32),
+    "claude",
+    "old-one",
+    JSON.stringify([fixture.repoRoot]),
+    path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-old-one"),
+    "2026-08-01T00:00:00.000Z",
+    "2026-08-01T00:00:00.000Z",
+  );
+  v1.close();
+
+  // Opening the new HubState against that file must migrate, not crash.
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+
+  const version = state.db.prepare("SELECT value FROM hub_meta WHERE key = 'schema_version'").get().value;
+  assert.equal(version, "2");
+  const old = state.db.prepare("SELECT * FROM sessions WHERE session_key = 'claude:old-one'").get();
+  assert.equal(old.ultracode_session_id, "old-one", "v1 row backfilled from its session_dir");
+  assert.equal(old.primary_repo_root, fixture.repoRoot);
+
+  // The exact call that failed in the wild now works against the migrated file.
+  const reg = registerDefault(state, fixture);
+  assert.equal(reg.session_key, "claude:test-abc123");
+  const { sessions } = state.queryUltracodeSessions({ repo_root: fixture.repoRoot });
+  assert.ok(sessions.some((s) => s.ultracode_session_id === "old-one"));
+  assert.ok(sessions.some((s) => s.ultracode_session_id === "test-abc123"));
+});
+
+// ---------------------------------------------------------------------------
 // state.js — ultracode-session adoption and query
 // ---------------------------------------------------------------------------
 

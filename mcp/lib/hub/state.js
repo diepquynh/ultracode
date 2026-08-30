@@ -230,8 +230,41 @@ class HubState {
     this.db = new DatabaseSync(dbPath, { timeout: BUSY_TIMEOUT_MS });
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  // The hub database OUTLIVES every plugin version (one machine-level file,
+  // upgraded in place), and CREATE TABLE IF NOT EXISTS does nothing to a table
+  // that already exists — a column added to SCHEMA reaches new machines only.
+  // So migrations are presence-driven and idempotent: inspect the live table,
+  // ALTER in whatever is missing, backfill, and record the version. Skipping
+  // this is not hypothetical: the adoption columns shipped without it and
+  // every ultracode_session_register on an existing hub failed with
+  // "table sessions has no column named ultracode_session_id".
+  migrate() {
+    const columns = new Set(this.db.prepare("PRAGMA table_info(sessions)").all().map((c) => c.name));
+    if (!columns.has("ultracode_session_id")) {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN ultracode_session_id TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.has("primary_repo_root")) {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN primary_repo_root TEXT NOT NULL DEFAULT ''");
+    }
+    // Backfill v1 rows: both values are pure functions of columns v1 already had.
+    const stale = this.db
+      .prepare("SELECT session_key, session_dir, repo_roots FROM sessions WHERE ultracode_session_id = ''")
+      .all();
+    for (const row of stale) {
+      const base = sessionBaseDir(row.session_dir);
+      const roots = parseJsonColumn(row.repo_roots, []).map((root) => path.resolve(root));
+      this.db
+        .prepare("UPDATE sessions SET ultracode_session_id = ?, primary_repo_root = ? WHERE session_key = ?")
+        .run(ultracodeSessionIdFromDir(base), owningRepoRoot(roots, base) || "", row.session_key);
+    }
     this.db
-      .prepare("INSERT INTO hub_meta (key, value) VALUES ('schema_version', '1') ON CONFLICT(key) DO NOTHING")
+      .prepare(
+        "INSERT INTO hub_meta (key, value) VALUES ('schema_version', '2') " +
+          "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
       .run();
   }
 
