@@ -203,14 +203,20 @@ function registerHubTools(server, hub) {
         "Publish a task for another harness's interactive session to claim and execute. The payload carries " +
         "explicit addresses (repo_root, repo_key, source.session_dir plus spec/phase/report paths) exactly " +
         "like a subagent spawn prompt — the worker reads those artifacts itself, so publish addresses, never " +
-        "content. Ask the user which harness should take the work before targeting it. Active sessions that " +
-        "could claim it are woken automatically. After publishing, FINISH YOUR TURN and say you are waiting " +
-        "to be woken by the task's completion — do not poll.",
+        "content. The HUB resolves the target harness itself from the repo's CURRENT repo-profile.json " +
+        "`harnesses` section (re-read on every publish, so a mid-session profile edit wins) using " +
+        "payload.agent_hint and the phase file's complexity: OMIT target_harness whenever the profile routes " +
+        "this stage. Pass target_harness only for a user-directed delegation with no profile route; a value " +
+        "contradicting the current profile is refused with the routed harness named. Active sessions that " +
+        "could claim the task are woken automatically. After publishing, FINISH YOUR TURN and say you are " +
+        "waiting to be woken by the task's completion — do not poll.",
       inputSchema: {
         from_session_key: z.string(),
         from_secret: z.string(),
         title: z.string().describe("Short human-readable task title."),
-        target_harness: HARNESS_ENUM.optional().describe("Restrict claiming to this harness (user's choice)."),
+        target_harness: HARNESS_ENUM.optional().describe(
+          "Only for a user-directed delegation with no profile route; omit when repo-profile.json routes this stage — the hub resolves that itself, fresh, and refuses a contradicting value.",
+        ),
         capability: z.string().optional().describe('Required worker capability, e.g. "implement".'),
         payload: z
           .object({

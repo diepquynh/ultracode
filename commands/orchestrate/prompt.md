@@ -624,22 +624,47 @@ that is the answer: stop the loop and report the findings as they stand.
 
 ## Cross-harness delegation via the hub (OPTIONAL)
 
-The machine-level ultracode hub connects interactive sessions across harnesses. Use it only when work should
-run on a **different harness** than this session's (the user asked for it, or a stage clearly fits another
-harness better); everything else stays with the normal spawn pipeline above. If the hub tools answer
-"hub is not reachable", relay that message to the user and continue single-harness — never start, repair, or
-reconfigure the hub yourself (Hard rule 23 covers its code and its state).
+The machine-level ultracode hub connects interactive sessions across harnesses. Work leaves this session
+only when routed away: by the repo profile's `harnesses` section, or by the user asking. Everything else
+stays with the normal spawn pipeline above. If the hub tools answer "hub is not reachable", relay that
+message to the user and continue single-harness — never start, repair, or reconfigure the hub yourself
+(Hard rule 23 covers its code and its state).
+
+**Harness routing (`repo-profile.json` → `harnesses`).** This session's harness is `{{harness_name}}`.
+Before spawning a stage, resolve its route the same way the model router resolves tiers: the agent's bare
+name in `harnesses.byAgent`, or for `implement`/`write-test` the phase's complexity tier in
+`harnesses.byPhaseComplexity` (inline no-plan work counts as `low`; `byPhaseComplexity` wins over `byAgent`
+when both name the agent). Then:
+
+- **No `harnesses` object, no map, no key, or the route is `{{harness_name}}`** → spawn normally in this
+  session. Absence is never an error: an unconfigured profile behaves exactly as if this feature did not
+  exist.
+- **The route names another harness** → check `ultracode_session_list` for an active session of that harness
+  registered for this repo. Found one → follow the delegation steps below, telling the user where the stage
+  is routing (the profile is their standing choice). You resolve the route only to DECIDE to delegate — the
+  publish itself omits `target_harness`, because the hub re-reads the profile and resolves the route again at
+  publish time. Found none → say so and spawn normally in this session; a routed harness that is not
+  listening is a fallback, not a failure.
+- **The route is not one of `claude`, `codex`, `grok`, `antigravity`** → treat it as absent and tell the
+  user so they can fix the profile. Routes are always concrete harness names — never write or honor a
+  relative value like "local"; another harness reading the same profile would resolve it to itself.
 
 1. **Register once**, right after deriving `$SESSION_DIR`: call `ultracode_session_register` with your
    harness, this session's real session id ({{session_id_expr}} — never the `no-session-id` fallback), the
    absolute repo roots in scope, and `$SESSION_DIR`. Keep the returned `session_key`, `session_secret`, and
    `cursor` for every later hub call; they are this session's identity, not something to share or invent.
-2. **Delegate by address, never by content.** Call `ultracode_session_list`, put the choice of target
-   session/harness to the user with {{tool_ask_user}}, then `ultracode_task_publish` with a payload that
-   carries exactly what a spawn prompt would: `task`, `repo_root`, `repo_key`, and `source` addresses
+2. **Delegate by address, never by content.** Call `ultracode_task_publish` with a payload that carries
+   exactly what a spawn prompt would: `task`, `repo_root`, `repo_key`, `agent_hint`, and `source` addresses
    (`session_dir`, plus the spec/phase/report paths under it). The worker reads those artifacts from disk
    itself — inlining their contents into the payload wastes the tokens the hub exists to save, and the
-   publish is refused past 32 KiB for that reason.
+   publish is refused past 32 KiB for that reason. **Do not pass `target_harness` when the profile routes
+   the stage**: the hub re-reads `repo-profile.json` at publish time and resolves the route itself, so a
+   profile the user edited a minute ago wins over whatever you read at session start — and a
+   `target_harness` that contradicts the current profile is refused with the routed harness named (re-publish
+   without it). Pass `target_harness` only for a user-directed delegation of a stage the profile does not
+   route; when neither the profile nor the user named a harness, put the choice to the user with
+   {{tool_ask_user}} first. The publish result's `target_harness`/`routed_by` tell you where it actually
+   went; surface any `route_warning` to the user.
 3. **End your turn after publishing.** Say which task id you are waiting on and stop. The completion wakes
    you — as a pushed message on push-capable harnesses, or on your next single `ultracode_msg_wait` call
    (pass your cursor; one call, never a loop — Hard rule 19's no-polling applies to hub waits exactly as it

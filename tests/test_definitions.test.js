@@ -129,6 +129,7 @@ function adaptForTarget(text, targetName) {
             : "starting a new Codex session",
     "{{balanced_model}}": MODEL_MAPPING.tiers.balanced[targetName],
     "{{advanced_model}}": MODEL_MAPPING.tiers.advanced[targetName],
+    "{{harness_name}}": targetName,
   };
   for (const [id, entry] of Object.entries(TOOL_MAPPING.capabilities)) {
     replacements[`{{tool_${id}}}`] = entry[targetName];
@@ -796,6 +797,27 @@ test("installer installs the bundled MCP server's dependencies into each plugin 
   const claudeRegisterIndex = script.indexOf('if [ "$HARNESS" = claude ]');
   assert.ok(generateIndex > 0 && npmCiIndex > generateIndex);
   assert.ok(claudeRegisterIndex > 0 && claudeRegisterIndex > npmCiIndex);
+});
+
+test("orchestrate resolves {{harness_name}} to each target's own concrete name", () => {
+  // Harness routes in repo-profile.json are compared against "this session's
+  // harness"; the generated prompt must carry the concrete name (never a
+  // relative term) so every harness reading the same profile resolves a route
+  // identically.
+  const artifacts = {
+    claude: path.join(CLAUDE_PLUGIN_ROOT, "commands", "orchestrate.md"),
+    codex: path.join(CODEX_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+    grok: path.join(GROK_PLUGIN_ROOT, "commands", "orchestrate.md"),
+    antigravity: path.join(ANTIGRAVITY_PLUGIN_ROOT, "skills", "orchestrate", "SKILL.md"),
+  };
+  for (const [target, artifact] of Object.entries(artifacts)) {
+    const text = fs.readFileSync(artifact, "utf-8");
+    assert.ok(
+      text.includes(`This session's harness is \`${target}\``),
+      `${target}: orchestrate must state its own harness name`,
+    );
+    assert.ok(!text.includes("{{harness_name}}"), `${target}: token must be resolved`);
+  }
 });
 
 test("installer ensures the machine-level hub after dependencies, before registration", () => {

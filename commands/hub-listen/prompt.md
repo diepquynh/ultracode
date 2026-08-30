@@ -104,6 +104,9 @@ not a license to loop — Hard rule 19's no-polling rule applies here exactly as
 1. **You are a worker, not a second orchestrator.** Claimed work runs through the normal pipeline (spawn the
    pipeline agents; never implement by hand what `ultracode:implement` should do), but you do not publish
    tasks, re-delegate to other sessions, or steer the publisher's pipeline beyond your completion report.
+   The repo profile's `harnesses` section is the **publisher's** routing input, not yours: never read it to
+   hand a claimed task onward — a task the hub let you claim is yours to execute here, whatever that section
+   says.
 2. **Addresses, never content.** Messages and summaries you send carry paths under session dirs, not file
    bodies. The 64 KiB message cap is a backstop, not a budget.
 3. **Never operate the hub's machinery.** Its daemon, its `~/.ultracode` state (including the adoption link

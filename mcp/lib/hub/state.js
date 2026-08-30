@@ -22,6 +22,7 @@ const { DatabaseSync } = require("node:sqlite");
 const { isInside, isDirectory, sanitizeSessionId } = require("../../../hooks/lib/common");
 const { sessionBaseDir } = require("../../../hooks/lib/session");
 const { validateTaskPayload } = require("./task-contract");
+const { resolveHarnessRoute } = require("./harness-route");
 
 const BUSY_TIMEOUT_MS = 5000;
 const HARNESSES = ["claude", "codex", "grok", "antigravity"];
@@ -589,6 +590,43 @@ class HubState {
     if (!verdict.ok) {
       throw new HubError(400, `Invalid task payload: ${verdict.errors.join(" ")}`);
     }
+
+    // The repo profile's `harnesses` route is resolved HERE, from the file as
+    // it exists right now — not from whatever the orchestrator read earlier —
+    // so a mid-session profile edit retunes the very next publish. The caller
+    // may still pass target_harness for a user-directed delegation with no
+    // profile route; a caller value that CONTRADICTS the current profile is
+    // refused (mirroring model-router's deny-on-mismatch) so a stale
+    // orchestrator learns the fresh route instead of silently overriding it.
+    // A route naming the publisher's own harness means "this stage was not
+    // meant to leave that harness" — it never targets the publish, but the
+    // publish itself is honored as the user's explicit choice.
+    const resolved = resolveHarnessRoute({
+      repoRoot: payload.repo_root,
+      agentHint: payload.agent_hint,
+      phaseFile: payload.source && payload.source.phase_file,
+    });
+    let target = target_harness || null;
+    let routedBy = target ? "caller" : null;
+    if (resolved.route && resolved.route !== sender.harness) {
+      if (target && target !== resolved.route) {
+        throw new HubError(
+          409,
+          `repo-profile.json currently routes '${payload.agent_hint}' to '${resolved.route}' ` +
+            `(${resolved.source}), not '${target}'. Omit target_harness — the hub re-reads the profile on ` +
+            "every publish — or update the profile if the route should change.",
+        );
+      }
+      target = resolved.route;
+      routedBy = "profile";
+    }
+    // No profile route and no caller choice → default to the PUBLISHER's own
+    // harness, never "any harness": an absent setup must not scatter work to
+    // whichever harness happens to claim first.
+    if (!target) {
+      target = sender.harness;
+      routedBy = "default-current-harness";
+    }
     const now = nowIso();
     const result = this.db
       .prepare(
@@ -597,7 +635,7 @@ class HubState {
       )
       .run(
         sender.session_key,
-        target_harness || null,
+        target,
         capability ? requireString(capability, "capability") : null,
         name,
         JSON.stringify(payload),
@@ -612,8 +650,16 @@ class HubState {
         `SELECT * FROM sessions WHERE status = 'active' AND session_key != ?
          AND (? IS NULL OR harness = ?)`,
       )
-      .all(sender.session_key, target_harness || null, target_harness || null);
-    return { task_id: taskId, notify_candidates: candidates.map(publicSession) };
+      .all(sender.session_key, target, target);
+    return {
+      task_id: taskId,
+      target_harness: target,
+      routed_by: routedBy,
+      ...(resolved.invalid && {
+        route_warning: `repo-profile.json harnesses route for '${payload.agent_hint}' is '${resolved.invalid}', which is not a harness name — treated as absent; fix the profile.`,
+      }),
+      notify_candidates: candidates.map(publicSession),
+    };
   }
 
   reopenExpiredLeases() {

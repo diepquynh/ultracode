@@ -378,10 +378,26 @@ test("hub: claim honors target harness; complete confines report to worker sessi
   });
   assert.equal(denied.task, null);
 
+  // An untargeted publish defaults to the PUBLISHER's harness (claude here),
+  // so the grok worker still cannot claim it.
+  const defaulted = state.publishTask({
+    from_session_key: publisher.session_key,
+    from_secret: publisher.session_secret,
+    title: "Untargeted",
+    payload: validPayload(fixture),
+  });
+  assert.equal(defaulted.target_harness, "claude");
+  assert.equal(defaulted.routed_by, "default-current-harness");
+  assert.equal(
+    state.claimTask({ session_key: grokWorker.session_key, session_secret: grokWorker.session_secret }).task,
+    null,
+  );
+
   const open = state.publishTask({
     from_session_key: publisher.session_key,
     from_secret: publisher.session_secret,
-    title: "Any harness",
+    title: "Grok task",
+    target_harness: "grok",
     payload: validPayload(fixture),
   });
   const claimed = state.claimTask({
@@ -414,6 +430,66 @@ test("hub: claim honors target harness; complete confines report to worker sessi
   );
 });
 
+test("hub: publish resolves the harness route from the CURRENT repo-profile.json", (t) => {
+  const fixture = makeFixture(t);
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+
+  const publisher = registerDefault(state, fixture); // claude
+  const profilePath = path.join(fixture.repoRoot, ".ultracode", "repo-profile.json");
+  const writeProfile = (harnesses) =>
+    fs.writeFileSync(profilePath, JSON.stringify({ harnesses }, null, 2));
+  const publish = (extra = {}) =>
+    state.publishTask({
+      from_session_key: publisher.session_key,
+      from_secret: publisher.session_secret,
+      title: "Routed task",
+      payload: validPayload(fixture),
+      ...extra,
+    });
+
+  // byAgent route is applied when the caller omits target_harness.
+  writeProfile({ byAgent: { implement: "codex" } });
+  const routed = publish();
+  assert.equal(routed.target_harness, "codex");
+  assert.equal(routed.routed_by, "profile");
+
+  // A caller value contradicting the current profile is refused, naming the route.
+  assert.throws(() => publish({ target_harness: "grok" }), /routes 'implement' to 'codex'/);
+
+  // Mid-session profile edit wins on the very next publish (re-read, not cached).
+  writeProfile({ byAgent: { implement: "grok" } });
+  assert.equal(publish().target_harness, "grok");
+
+  // byPhaseComplexity (from the phase file's **Complexity:** line) wins over byAgent.
+  const phaseFile = path.join(fixture.sessionDir, "ultracode-plan-x-phase-2.md");
+  fs.writeFileSync(phaseFile, "# Phase 2\n\n**Complexity:** high\n");
+  writeProfile({
+    byAgent: { implement: "codex" },
+    byPhaseComplexity: { implement: { low: "codex", medium: "codex", high: "antigravity" } },
+  });
+  assert.equal(publish().target_harness, "antigravity");
+
+  // A route naming the publisher's own harness is "not meant to leave" — an
+  // explicit caller target is honored instead of refused.
+  writeProfile({ byAgent: { implement: "claude" } });
+  assert.equal(publish({ target_harness: "codex" }).target_harness, "codex");
+
+  // Invalid route value: warned, treated as absent, defaults to the publisher's harness.
+  writeProfile({ byAgent: { implement: "local" } });
+  const warned = publish();
+  assert.equal(warned.target_harness, "claude");
+  assert.equal(warned.routed_by, "default-current-harness");
+  assert.match(warned.route_warning, /'local'.*not a harness name/);
+
+  // No profile at all: same default, no warning.
+  fs.rmSync(profilePath);
+  const bare = publish();
+  assert.equal(bare.target_harness, "claude");
+  assert.equal(bare.routed_by, "default-current-harness");
+  assert.equal(bare.route_warning, undefined);
+});
+
 test("hub: expired lease reopens the task, then fails it after max attempts", (t) => {
   const fixture = makeFixture(t);
   const state = freshHubState(fixture);
@@ -431,6 +507,7 @@ test("hub: expired lease reopens the task, then fails it after max attempts", (t
     from_session_key: publisher.session_key,
     from_secret: publisher.session_secret,
     title: "Flaky task",
+    target_harness: "codex",
     payload: validPayload(fixture),
   });
 
@@ -589,6 +666,7 @@ test("hub: a worker may complete a task with a report inside its adopted session
     from_session_key: publisher.session_key,
     from_secret: publisher.session_secret,
     title: "Adopted-dir task",
+    target_harness: "codex",
     payload: validPayload(fixture),
   });
   state.claimTask({ session_key: worker.session_key, session_secret: worker.session_secret });
@@ -616,6 +694,7 @@ test("hub: a worker may complete a task with a report inside its adopted session
         from_session_key: publisher.session_key,
         from_secret: publisher.session_secret,
         title: "second",
+        target_harness: "codex",
         payload: validPayload(fixture),
       });
       state.claimTask({ session_key: worker.session_key, session_secret: worker.session_secret });

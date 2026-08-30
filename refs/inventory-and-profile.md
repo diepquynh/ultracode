@@ -137,6 +137,15 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
       "implement":  { "low": "fast", "medium": "fast", "high": "balanced" },
       "write-test": { "low": "fast", "medium": "fast", "high": "balanced" }
     }
+  },
+  "harnesses": {
+    "byAgent": {
+      "implement": "codex",
+      "write-test": "codex"
+    },
+    "byPhaseComplexity": {
+      "implement": { "low": "codex", "medium": "codex", "high": "claude" }
+    }
   }
 }
 ```
@@ -152,4 +161,29 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
   - **Keys stay bare; spawns stay prefixed.** Every key in both maps is the agent's unprefixed name. The hook strips the `ultracode:` prefix from the spawn's agent name and looks the route up by that bare key (e.g. `subagent_type: ultracode:explore` → key `explore`). Never write an `ultracode:`-prefixed key into this file — it would not match on lookup.
   - The `initializer` is absent by design — the `/init-kit` command (not the orchestrator) spawns it, as `ultracode:initializer`, and sets its model per mode. It is one of two agents the hook does not deny for a missing route: an initializer spawn keeps the model `/init-kit` chose, so re-initializing a repo that already has this profile behaves like a first run. Add an `initializer` route only to override that per-mode choice with a single tier.
   - `fact-check` is exempted the same way, so an existing profile written before this agent existed does not start hard-failing every spec/plan approval — `ultracode:fact-check` gates approval regardless of routing (`ultracode_gate` refuses `decision: "approved"` without a recorded `PASS`), so a missing route only affects which model runs it, never whether it runs. Add a `fact-check` route to pick a specific tier.
+- `harnesses` routes which **harness** executes each stage, through the cross-harness hub (docs/hub.md). It is
+  the harness-level sibling of `models`, with three deliberate differences. **The initializer never seeds this
+  section** — the example above is illustrative only; which harnesses a user runs is not detectable from the
+  repo, so the section exists only when a user (or the orchestrator, at the user's request) writes it.
+  - **Every value is a concrete harness name** — `claude`, `codex`, `grok`, or `antigravity`. Never a relative
+    term like `"local"` or `"self"`: this file is read by whichever harness happens to be orchestrating *and*
+    by workers on other harnesses, and a relative term resolves differently on each reader — a worker could
+    read "local" as itself and keep orchestration instead of reporting back. A stage that should run wherever
+    the orchestrator runs is expressed by **omitting its route** (or naming that harness explicitly).
+  - **The whole object is optional, and absence can never fail a stage.** A missing `harnesses` object, a
+    missing `byAgent`/`byPhaseComplexity` map, or a missing key all mean the same thing: the stage runs in the
+    current session's harness, exactly as if the feature were not configured. Same for an unrecognized value:
+    the orchestrator says so and runs the stage itself. Unlike `models`, there is no deny-on-missing-route —
+    routing work away from the session is advisory, not a gate.
+  - **The hub resolves it, fresh, at publish time.** The orchestrator reads this section only to decide
+    WHETHER to delegate (route absent or naming its own harness → normal spawn; another harness with a
+    registered listener → publish; no listener → normal spawn, saying so). The `ultracode_task_publish` tool
+    then re-reads this file itself and resolves the route again — so a profile edited mid-session wins over
+    whatever the orchestrator read at session start, exactly as the model-router hook re-reads model routes
+    on every spawn. A caller-passed `target_harness` that contradicts the current profile is refused with the
+    routed harness named; an untargeted publish with no route defaults to the publisher's own harness, never
+    "any harness". `byAgent`/`byPhaseComplexity` keys and the complexity tiers work exactly as in `models`
+    (bare agent names; the phase file's `**Complexity:**` line, with inline no-plan work counting as `low`).
+  - The worker's own `models` routing then applies on its side — a phase routed to another harness runs on
+    that harness's configured model tiers, which is usually the point of routing it there.
 - Consumers (orchestrator, subagents) prefer `repo-profile.json` for exact command strings and `INVENTORY.md` for routing decisions.

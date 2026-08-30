@@ -103,6 +103,34 @@ Operator flow on the receiving side: the user opens a session on the harness the
 runs `/ultracode:hub-listen` — register, drain the task queue, one `msg_wait`, end turn. The publisher's
 flow is the "Cross-harness delegation" section of `/ultracode:orchestrate`.
 
+## Harness routing (`repo-profile.json` → `harnesses`)
+
+The harness-level sibling of the `models` section: per-agent (and per-phase-complexity) routes naming which
+**harness** should execute a stage, read by the orchestrator to decide "spawn here" vs "publish a hub task."
+
+```json
+"harnesses": {
+  "byAgent": { "implement": "codex", "write-test": "codex" },
+  "byPhaseComplexity": { "implement": { "low": "codex", "medium": "codex", "high": "claude" } }
+}
+```
+
+Three rules keep it safe (full contract in `refs/inventory-and-profile.md`):
+
+- **Values are concrete harness names only** (`claude|codex|grok|antigravity`) — never a relative term like
+  `"local"`, which a worker harness reading the same profile would resolve to *itself* and keep orchestrating
+  instead of reporting back. "Runs with the orchestrator" is expressed by omitting the route.
+- **Absence never fails anything**: no section, no map, no key, or an unrecognized value all degrade to the
+  current harness, exactly as if the feature were unconfigured — an untargeted publish likewise defaults to
+  the publisher's own harness, never "any harness". Unlike model routing there is no deny-on-missing-route.
+- **The hub resolves the route itself, at publish time.** `ultracode_task_publish` re-reads
+  `repo-profile.json` on every call (the same freshness rule the model-router hook applies to model routes),
+  so a mid-session profile edit retunes the very next publish; a caller-passed `target_harness` contradicting
+  the current profile is refused with the routed harness named. The orchestrator reads the section only to
+  decide *whether* to delegate — and a routed harness with no listening session is a fallback to a local
+  spawn, not a failure. The initializer never seeds this section; users add it when they actually run a
+  second harness.
+
 ## Session adoption: sharing a session without inheriting a native id
 
 Ultracode's session dir is `{repo}/.ultracode/session/ultracode-session-<id>/`, where `<id>` is the

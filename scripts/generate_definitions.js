@@ -75,6 +75,7 @@ const HARNESS_TEMPLATE_KEYS = new Set([
   "reload_action",
   "balanced_model",
   "advanced_model",
+  "harness_name",
 ]);
 
 const HARNESS_TEMPLATE_PATTERN = /\{\{([a-z][a-z0-9_]*)\}\}/g;
@@ -689,6 +690,11 @@ function renderHarnessTemplate(text, target, harnessLayout, modelMapping, mappin
             : "starting a new Codex session",
     "{{balanced_model}}": modelMapping.tiers.balanced[target],
     "{{advanced_model}}": modelMapping.tiers.advanced[target],
+    // The generated copy's own harness identity, for prompts that compare a
+    // repo-profile harness route against "this session's harness". Always one
+    // of the four concrete names — never a relative term like "local", so a
+    // profile read by any harness resolves to the same routing decision.
+    "{{harness_name}}": target,
   };
   for (const [id, entry] of Object.entries(mapping.capabilities)) {
     replacements[`{{tool_${id}}}`] = entry[target];

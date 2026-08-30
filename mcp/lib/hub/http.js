@@ -134,7 +134,7 @@ class HubFacade {
   }
 
   async publishTask(args) {
-    const { task_id, notify_candidates } = this.state.publishTask(args);
+    const { task_id, notify_candidates, ...routing } = this.state.publishTask(args);
     let notified = 0;
     if (args.notify !== false && notify_candidates.length) {
       const notices = this.state.notifyTaskPublished(task_id, args.title, notify_candidates);
@@ -143,7 +143,7 @@ class HubFacade {
         if (delivery.pushed) notified++;
       }
     }
-    return { task_id, candidates: notify_candidates.length, woken: notified };
+    return { task_id, ...routing, candidates: notify_candidates.length, woken: notified };
   }
 
   async claimTask(args) {
