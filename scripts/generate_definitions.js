@@ -45,6 +45,7 @@ const COMMON_HOOK_FILES = [
   "lib/hook-context.js",
   "lib/subagent-params.js",
   "lib/session.js",
+  "lib/session-link.js",
   "lib/scope-policy.js",
   "lib/ledger-policy.js",
   "lib/report-policy.js",
@@ -983,10 +984,17 @@ function codexCommandMetadata(definition) {
 
 function gateMcpServers(target, harnessLayout) {
   const pluginRootEnv = harnessLayout.layouts[target].plugin_root_env;
+  // hub-shim.js, not gate-server.js: the shim serves the same five core tools
+  // locally (offline-identical), adds the cross-harness hub tools over the
+  // machine-level HTTP hub, and lazily revives a dead hub at MCP startup.
+  // Registration stays command-based stdio — the one shape all four harnesses
+  // support — so bearer tokens and ports never appear in generated configs.
+  // The server keeps the name "ultracode-gate" so existing external
+  // registrations (agy mcp add) update in place instead of orphaning.
   return {
     "ultracode-gate": {
       command: "node",
-      args: [`\${${pluginRootEnv}}/mcp/gate-server.js`],
+      args: [`\${${pluginRootEnv}}/mcp/hub-shim.js`],
     },
   };
 }

@@ -107,6 +107,13 @@ for HARNESS in $TARGETS; do
   ( cd "$PLUGIN_ROOT" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund ) \
     || { echo "Failed to install the ultracode_gate MCP server's dependencies in $PLUGIN_ROOT." >&2; exit 1; }
 
+  # Provision + start the machine-level cross-harness hub (idempotent across
+  # the harness loop: a running hub is detected and left alone, an older one
+  # is replaced by this newer install). Sessions also revive it lazily at MCP
+  # startup, so a failure here degrades to that instead of aborting install.
+  node "$PLUGIN_ROOT/mcp/hub-ctl.js" ensure --restart-if-older \
+    || echo "Warning: the ultracode hub did not start; cross-harness tools stay offline until: node \"$PLUGIN_ROOT/mcp/hub-ctl.js\" ensure" >&2
+
   if [ "$HARNESS" = claude ]; then
     marketplaces="$(claude plugin marketplace list --json)"
     if printf '%s' "$marketplaces" | grep -Fq '"name": "ultracode"'; then
@@ -149,8 +156,8 @@ for HARNESS in $TARGETS; do
     # gate deadlocks, and a recorded session responded to that deadlock by forging
     # pipeline state. So register the server explicitly, with the absolute path (the
     # bundled config's ${ANTIGRAVITY_PLUGIN_ROOT} is not expanded here).
-    agy mcp add ultracode-gate node "$PLUGIN_ROOT/mcp/gate-server.js" >/dev/null 2>&1 \
-      || echo "Warning: could not register the ultracode_gate MCP server with agy; run: agy mcp add ultracode-gate node \"$PLUGIN_ROOT/mcp/gate-server.js\"" >&2
+    agy mcp add ultracode-gate node "$PLUGIN_ROOT/mcp/hub-shim.js" >/dev/null 2>&1 \
+      || echo "Warning: could not register the ultracode_gate MCP server with agy; run: agy mcp add ultracode-gate node \"$PLUGIN_ROOT/mcp/hub-shim.js\"" >&2
     echo "Installed Ultracode. Start a new agy session, then run /init-kit."
   else
     MARKETPLACE_ROOT="${INSTALL_DIR}-marketplace/codex"

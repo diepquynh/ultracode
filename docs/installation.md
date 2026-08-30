@@ -39,6 +39,13 @@ not trust plugin hooks automatically, so the model-routing and pipeline guard ho
 Grok also auto-loads Claude Code plugins. If Ultracode is already installed for Claude, skip the Grok target
 or disable one copy so skills and hooks do not double-fire.
 
+The installer also provisions and starts the **cross-harness hub** (docs/hub.md): one loopback HTTP daemon per
+machine at `~/.ultracode`, started with `node <plugin>/mcp/hub-ctl.js ensure --restart-if-older`. If that step
+warns, cross-harness tools stay offline until a session's MCP startup revives the hub (the registered
+`ultracode-gate` server is `mcp/hub-shim.js`, which ensures the hub at boot) or you run the ctl command
+yourself. Everything else — gate, report, memory — works without it. Set `ULTRACODE_HUB_DISABLE=1` in a
+harness's environment to keep that machine or session daemon-free.
+
 ## Uninstall
 
 Revert a matching `install.sh` run. The argument list is the same: omit it (or pass `all`) to unregister every
@@ -54,7 +61,9 @@ curl -fsSL https://raw.githubusercontent.com/diepquynh/ultracode/main/uninstall.
 ```
 
 From a checkout, use `bash uninstall.sh`. Pass `--dry-run` to preview. Repo-local files from `/init-kit`
-(`.ultracode` and the generated skills under each harness's skills dir) are not removed.
+(`.ultracode` and the generated skills under each harness's skills dir) are not removed. A full (`all`)
+uninstall also stops the cross-harness hub daemon but leaves `~/.ultracode` — the hub's bearer token and
+queues — so a reinstall keeps working; delete that directory by hand to purge it.
 
 ## Claude Code manual install
 

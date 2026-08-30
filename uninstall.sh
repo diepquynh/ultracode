@@ -118,6 +118,18 @@ done
 
 # A single-harness uninstall leaves the checkout: other targets may still use it.
 if [ "$SELECTION" = all ]; then
+  # Stop the machine-level hub daemon before its code goes away. Its state
+  # (~/.ultracode/hub*, including the bearer token) is deliberately kept so a
+  # reinstall picks up the same registrations; remove it with --purge-hub or
+  # by deleting ~/.ultracode by hand.
+  for HARNESS in $TARGETS; do
+    CTL="$INSTALL_DIR/dist/$HARNESS/ultracode/mcp/hub-ctl.js"
+    if [ -f "$CTL" ]; then
+      node "$CTL" stop >/dev/null 2>&1 || true
+      break
+    fi
+  done
+  echo "Left ~/.ultracode (hub state/token) in place for reinstalls; delete it to purge."
   if [ -d "$INSTALL_DIR/.git" ]; then
     [ -f "$INSTALL_DIR/scripts/generate_definitions.js" ] || {
       echo "$INSTALL_DIR is a git checkout but is not an Ultracode tree; leaving it." >&2

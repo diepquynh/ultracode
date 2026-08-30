@@ -38,6 +38,38 @@ rather than refused. `askPreToolUse` in `hooks/lib/common.js` picks the shape pe
   always-allow cache, so a user who once chose always-allow for subagent spawns would never be shown the
   question; `force_ask` was verified to override an existing `command(…)` allow rule where a silent hook let the
   same call through.
+## Hub wake channels (checked 2026-08-30, not yet re-measured on qualifying versions)
+
+The cross-harness hub (docs/hub.md) can wake an idle interactive session only where the harness has a
+steering channel; everywhere else delivery is pull-only (`ultracode_msg_wait`). Feature flags stay off until
+a live run on a qualifying CLI version is recorded here.
+
+- **Claude Code**: cross-session messaging (named sessions, per-session Unix sockets under `/tmp/cc-socks`,
+  session records under `~/.claude/sessions/`) ships in ≥2.1.224. Verified live on 2.1.251 (2026-08-30): the
+  `mcp/lib/push/claude.js` frame pair (`{type:"auth",token}` from `<pid>.<sha256(socketPath)>.key`, then
+  `{type:"user",message}`) reached a background session, whose recipient verified the sender pid. Two measured
+  facts shape the adapter: (1) the wire protocol is undocumented and version-specific, so it stays behind
+  `ULTRACODE_HUB_CLAUDE_PUSH=1` and degrades to pull on any mismatch; (2) a recipient in `bypassPermissions`
+  mode HOLDS an unattested peer message for user approval ("The sender did not attest its permission mode and
+  this session bypasses prompts... set crossSessionInbound to accept") — the adapter respects that gate rather
+  than bypassing it, which is safe because the pushed payload is only a wake notice.
+- **Codex**: `codex queue` (deliver-to-named-session) ships in ≥0.149.0. Measured CLI is 0.147.0, where
+  `codex queue --help` fails — the adapter's feature-detect correctly reports unavailable and Codex sessions
+  are pull-only until an upgrade.
+- **Grok Build 1.0.13 / Antigravity 1.1.22**: no external steering channel found in either (AGY's
+  `send_message` is intra-conversation only). Pull-only by design, not by flag.
+
+Two hub-relevant behaviors measured live on 2026-08-30 while verifying the shim end to end:
+
+- **Codex 0.147.0 `exec` cancels MCP tool calls under its default approval policy.** A plain `codex exec`
+  reports `approval: never` yet every MCP call fails with "user cancelled MCP tool call"; the same run with
+  `--dangerously-bypass-approvals-and-sandbox` completes them. Headless Codex use of the hub tools needs that
+  flag (or an approvals config that actually covers MCP) until a newer CLI fixes the default.
+- **Grok 1.0.13 `-p` does not expose user-config stdio MCP servers in untrusted directories.** `grok mcp
+  doctor` reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
+  plugin-bundled servers and reported the same tools "not found". Run from a trusted project (or trust the
+  directory first); project-local `.mcp.json` in an untrusted dir is ignored the same way.
+
 - **Grok has no ask decision at all, so the cap's ask is broken there.** Measured on CLI 1.0.5 with a
   config-layer hook (`[[hooks.PreToolUse]]` in `~/.grok/config.toml`, which runs without project hook trust):
   both the Claude-shaped `permissionDecision: "ask"` and a top-level `{"decision":"ask"}` fail open and the call

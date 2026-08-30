@@ -9,6 +9,8 @@ const {
   commandFromToolInput,
   denyPreToolUse,
   isInside,
+  isMachineStatePath,
+  MACHINE_STATE_DENIAL,
   readHookInput,
   readJsonIfFile,
   resolvePathCandidate,
@@ -33,6 +35,12 @@ async function main() {
     if (!ledger.allowed) {
       denyPreToolUse(
         `ultracode: refusing this shell command — it writes, moves, or deletes "${candidate}". ${ledger.reason}`,
+      );
+      return 0;
+    }
+    if (isMachineStatePath(candidate)) {
+      denyPreToolUse(
+        `ultracode: refusing this shell command — it writes, moves, or deletes "${candidate}", and ${MACHINE_STATE_DENIAL}`,
       );
       return 0;
     }

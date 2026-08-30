@@ -9,7 +9,8 @@ const path = require("node:path");
 const { denyPreToolUse, knownAgents, readHookInput } = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
 const { validateSubagentParameters } = require("./lib/subagent-params");
-const { matchesSessionDir } = require("./lib/session");
+const { matchesSessionDir, sessionBaseDir } = require("./lib/session");
+const { isAdoptedSessionDir } = require("./lib/session-link");
 
 function spawnLabel(spawn, count) {
   return count > 1 ? `ultracode:${spawn.agent} (Subagents[${spawn.index}])` : `ultracode:${spawn.agent}`;
@@ -40,6 +41,26 @@ async function main() {
       context.targetInfo.runtimeDir,
       context.sessionId,
     );
+    // A session dir whose id is not this native session's is normally rejected.
+    // The exception is a shared ultracode session this native session has
+    // adopted through the hub (ultracode_session_adopt): the hub-written link
+    // authorizes working in that dir, so a harness can pick up or resume a
+    // session it could never inherit by native id. The link lives in machine
+    // state that models cannot write, so it cannot be forged to smuggle a spawn
+    // into an arbitrary dir. The repo-key subdirectory is still checked below.
+    if (
+      !ok &&
+      isAdoptedSessionDir(
+        context.target,
+        context.sessionId,
+        declaredSessionDir,
+        validation.values.primary_repo_root,
+      )
+    ) {
+      const base = sessionBaseDir(declaredSessionDir);
+      const relative = path.relative(path.resolve(base), path.resolve(declaredSessionDir));
+      if (!relative || relative === spawn.repoKey) continue;
+    }
     if (!ok) {
       denyPreToolUse(
         `ultracode: refusing ${spawnLabel(spawn, spawns.length)} because Session dir: ` +

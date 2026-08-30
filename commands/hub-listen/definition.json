@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "command",
+  "name": "hub-listen",
+  "description": "Register this interactive session with the machine-level ultracode hub as a worker, then claim and execute cross-harness tasks published by orchestrator sessions on other harnesses. Executes each claimed task through the normal ultracode pipeline in this session's own session dir, reports completion back through the hub (which wakes the publisher), and waits for more work with a single long-poll. Manually invoked only: the user opens this session on the harness they chose for the work and turns listening on explicitly.",
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "[optional: capabilities to claim, e.g. 'implement review', or a display name]"
+  }
+}

@@ -51,7 +51,7 @@ const SUBAGENT_PARAMETERS = JSON.parse(
 
 const LAYOUT_TOKEN_PATTERN = /\{\{[a-z][a-z0-9_]*\}\}/g;
 
-const COMMAND_NAMES = new Set(["init-kit", "orchestrate"]);
+const COMMAND_NAMES = new Set(["hub-listen", "init-kit", "orchestrate"]);
 
 let WORKSPACE = null;
 let GENERATED_SOURCE_ROOT = null;
@@ -339,7 +339,7 @@ function sourceDefinitions() {
 
 test("every definition was migrated", () => {
   const definitions = sourceDefinitions();
-  assert.equal(definitions.length, 14);
+  assert.equal(definitions.length, 15);
   assert.deepEqual(
     new Set(
       definitions
@@ -443,7 +443,7 @@ test("claude generation matches pre-refactor behavior", () => {
     );
     assert.equal(body, adaptForTarget(sourceBody, "claude"));
   }
-  assert.match(stdout, /generated 14 definitions for claude/);
+  assert.match(stdout, /generated 15 definitions for claude/);
 });
 
 test("generation is deterministic for every target", () => {
@@ -798,6 +798,22 @@ test("installer installs the bundled MCP server's dependencies into each plugin 
   assert.ok(claudeRegisterIndex > 0 && claudeRegisterIndex > npmCiIndex);
 });
 
+test("installer ensures the machine-level hub after dependencies, before registration", () => {
+  const script = fs.readFileSync(INSTALLER, "utf-8");
+  assert.match(script, /node "\$PLUGIN_ROOT\/mcp\/hub-ctl\.js" ensure --restart-if-older/);
+  const npmCiIndex = script.indexOf("npm ci --omit=dev");
+  const hubEnsureIndex = script.indexOf("hub-ctl.js\" ensure");
+  const claudeRegisterIndex = script.indexOf('if [ "$HARNESS" = claude ]');
+  assert.ok(hubEnsureIndex > npmCiIndex, "hub ensure needs the installed node_modules");
+  assert.ok(claudeRegisterIndex > hubEnsureIndex);
+  // AGY's external MCP registration must point at the shim, not the bare stdio server.
+  assert.match(script, /agy mcp add ultracode-gate node "\$PLUGIN_ROOT\/mcp\/hub-shim\.js"/);
+  // Uninstall stops the daemon but keeps ~/.ultracode (token survives reinstalls).
+  const uninstall = fs.readFileSync(UNINSTALLER, "utf-8");
+  assert.match(uninstall, /hub-ctl\.js/);
+  assert.match(uninstall, /Left ~\/\.ultracode/);
+});
+
 test("real npm ci against the generated plugin root installs a working ultracode_gate MCP server", () => {
   const output = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-mcp-install-"));
   runGenerator("claude", output);
@@ -814,6 +830,14 @@ test("real npm ci against the generated plugin root installs a working ultracode
     encoding: "utf-8",
   });
   assert.equal(result, "");
+  // The registered entry point is the hub shim; with the hub disabled it must
+  // boot offline (core tools only) and shut down just as cleanly.
+  const shimResult = execFileSync("node", [path.join(output, "mcp", "hub-shim.js")], {
+    input: "",
+    encoding: "utf-8",
+    env: { ...process.env, ULTRACODE_HUB_DISABLE: "1" },
+  });
+  assert.equal(shimResult, "");
 });
 
 function pluginRootFor(target) {
@@ -3662,6 +3686,9 @@ test("every plugin distribution bundles the ultracode_gate MCP server", () => {
     ["antigravity", ANTIGRAVITY_PLUGIN_ROOT, "ANTIGRAVITY_PLUGIN_ROOT"],
   ]) {
     assert.ok(fs.statSync(path.join(root, "mcp", "gate-server.js")).isFile());
+    assert.ok(fs.statSync(path.join(root, "mcp", "hub-shim.js")).isFile());
+    assert.ok(fs.statSync(path.join(root, "mcp", "hub-server.js")).isFile());
+    assert.ok(fs.statSync(path.join(root, "mcp", "hub-ctl.js")).isFile());
     assert.ok(fs.statSync(path.join(root, "package.json")).isFile());
     assert.ok(fs.statSync(path.join(root, "package-lock.json")).isFile());
     const servers =
@@ -3682,7 +3709,7 @@ test("every plugin distribution bundles the ultracode_gate MCP server", () => {
     assert.deepEqual(servers, {
       "ultracode-gate": {
         command: "node",
-        args: [`\${${envVar}}/mcp/gate-server.js`],
+        args: [`\${${envVar}}/mcp/hub-shim.js`],
       },
     });
   }

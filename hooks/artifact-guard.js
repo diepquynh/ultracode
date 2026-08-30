@@ -5,7 +5,13 @@
 "use strict";
 
 const path = require("node:path");
-const { denyPreToolUse, readHookInput, writePathFromToolInput } = require("./lib/common");
+const {
+  denyPreToolUse,
+  readHookInput,
+  writePathFromToolInput,
+  isMachineStatePath,
+  MACHINE_STATE_DENIAL,
+} = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
 const { checkLedger } = require("./lib/ledger-policy");
 
@@ -26,6 +32,11 @@ async function main() {
   const ledger = checkLedger(actor.agent, filePath);
   if (!ledger.allowed) {
     denyPreToolUse(`ultracode: refusing this write — ${ledger.reason}`);
+    return 0;
+  }
+
+  if (isMachineStatePath(filePath)) {
+    denyPreToolUse(`ultracode: refusing this write — ${MACHINE_STATE_DENIAL}`);
     return 0;
   }
 

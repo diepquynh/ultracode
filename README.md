@@ -70,6 +70,11 @@ your conventions instead of a framework's defaults:
 
 **Model router** - driving your subagents at the most efficient model. See [Model routing](docs/model-routing.md)
 
+**A cross-harness hub** — one loopback HTTP MCP daemon per machine that lets your interactive sessions on
+different harnesses message each other and hand each other tasks by *address* (paths into the shared session
+dir), not by re-serialized context. Delegate a phase to the harness best suited for it, end your turn, and get
+woken when the result lands — no third-party model proxy, no polling. See [The cross-harness hub](docs/hub.md)
+
 **Tools and hooks** — strict guardrails that prevent the subagents from going haywire, and tools
 that helps them learn and improve, just like humans :p
 
@@ -81,6 +86,7 @@ that helps them learn and improve, just like humans :p
 - [Agents](docs/agents.md)
 - [Harness limitations](docs/harness-limitations.md)
 - [Model routing](docs/model-routing.md)
+- [The cross-harness hub](docs/hub.md)
 - [Tested models](docs/tested-models.md)
 - [Definition authoring](docs/definitions.md)
 - [Extending & publishing](docs/extending.md)
@@ -161,6 +167,11 @@ terminals open if useful, but hand ownership over at clear phase boundaries and 
 continue from the existing approved spec or plan. Do not run the same phase against the same repo from two
 harnesses at once: they share both the working tree and session state. See
 [How the agents communicate](docs/architecture.md#how-the-agents-communicate) for the session layout.
+
+For live handoffs — instead of copying session IDs by hand — the [cross-harness hub](docs/hub.md) connects the
+open sessions themselves: run `/ultracode:hub-listen` in the receiving harness's session, and the
+orchestrating session publishes tasks to it and gets woken when they complete, each session working in its own
+session dir and reading the other's artifacts from disk.
 
 ## How much does it actually cost in a real-world task?
 

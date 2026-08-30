@@ -622,6 +622,42 @@ to confirm. If the spawn comes back refused with the cap named (a rejection, or 
 that is the answer: stop the loop and report the findings as they stand.
 `BLOCKER` findings have no iteration cap and no "ask how to proceed".
 
+## Cross-harness delegation via the hub (OPTIONAL)
+
+The machine-level ultracode hub connects interactive sessions across harnesses. Use it only when work should
+run on a **different harness** than this session's (the user asked for it, or a stage clearly fits another
+harness better); everything else stays with the normal spawn pipeline above. If the hub tools answer
+"hub is not reachable", relay that message to the user and continue single-harness — never start, repair, or
+reconfigure the hub yourself (Hard rule 23 covers its code and its state).
+
+1. **Register once**, right after deriving `$SESSION_DIR`: call `ultracode_session_register` with your
+   harness, this session's real session id ({{session_id_expr}} — never the `no-session-id` fallback), the
+   absolute repo roots in scope, and `$SESSION_DIR`. Keep the returned `session_key`, `session_secret`, and
+   `cursor` for every later hub call; they are this session's identity, not something to share or invent.
+2. **Delegate by address, never by content.** Call `ultracode_session_list`, put the choice of target
+   session/harness to the user with {{tool_ask_user}}, then `ultracode_task_publish` with a payload that
+   carries exactly what a spawn prompt would: `task`, `repo_root`, `repo_key`, and `source` addresses
+   (`session_dir`, plus the spec/phase/report paths under it). The worker reads those artifacts from disk
+   itself — inlining their contents into the payload wastes the tokens the hub exists to save, and the
+   publish is refused past 32 KiB for that reason.
+3. **End your turn after publishing.** Say which task id you are waiting on and stop. The completion wakes
+   you — as a pushed message on push-capable harnesses, or on your next single `ultracode_msg_wait` call
+   (pass your cursor; one call, never a loop — Hard rule 19's no-polling applies to hub waits exactly as it
+   does to spawns). A `timed_out: true` result means finish the turn and let the user re-prompt; the cursor
+   guarantees nothing is lost.
+4. **On wake, treat the result like a subagent return.** The completion message carries `status`, `summary`,
+   and the worker's `report_file`. When the worker adopted this session (the usual case), that report sits
+   in **your own** session dir beside your artifacts — read it there. The normal pipeline still applies: a
+   delegated spec or plan still needs its fact-check and its `ultracode_gate` approval here before the next
+   stage spawns; delegation changes where work ran, never which gates it passes.
+
+Adoption is what makes a delegated *plan-gated* stage work: the worker calls `ultracode_session_adopt` on
+`source.session_dir` and runs inside this shared session, so the plan approval you already recorded here is
+the one its guards check — no re-approval, one session dir, and the session stays resumable if the worker's
+harness breaks. You do not adopt anything; you publish, and the worker adopts on its side.
+
+The receiving side of this flow is `/ultracode:hub-listen`, run by the user in the other harness's session.
+
 ## Hard rules
 
 1. **Orchestrator, not implementer, with narrow exceptions.** Do not write code or run build/test yourself —

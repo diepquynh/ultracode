@@ -217,6 +217,31 @@ function resolvePathCandidate(baseDir, candidate) {
   return path.resolve(baseDir, candidate);
 }
 
+// Machine-level ultracode state: ~/.ultracode holds the cross-harness hub's
+// discovery file + bearer token (hub.json), its SQLite registry/message/task
+// queues, lock, and log. Tool-owned in the ledger-policy sense, but its file
+// names are generic (hub.json could legitimately exist in a user repo), so it
+// is protected by LOCATION: any model-issued write resolving under this root
+// is denied by artifact-guard.js and bash-scope-guard.js. ULTRACODE_HUB_HOME
+// relocates the root for tests — set in the hook's own environment, which a
+// model-issued tool call cannot influence.
+function machineStateRoot() {
+  return process.env.ULTRACODE_HUB_HOME
+    ? path.resolve(process.env.ULTRACODE_HUB_HOME)
+    : path.join(os.homedir(), ".ultracode");
+}
+
+function isMachineStatePath(candidate, baseDir = process.cwd()) {
+  if (typeof candidate !== "string" || !candidate.trim()) return false;
+  return isInside(machineStateRoot(), resolvePathCandidate(baseDir, candidate.trim()));
+}
+
+const MACHINE_STATE_DENIAL =
+  "it resolves inside ~/.ultracode — machine-level state owned by the ultracode hub daemon " +
+  "(session registry, cross-harness message/task queues, and the hub bearer token). A hand-authored " +
+  "write there would forge another session's messages or acknowledgements rather than send one; use " +
+  "the ultracode hub tools (ultracode_msg_send, ultracode_task_*) instead.";
+
 function sanitizeSessionId(id) {
   const value = typeof id === "string" && id.trim() ? id.trim() : "no-session-id";
   const cleaned = value.replace(/[^A-Za-z0-9_-]/g, "-");
@@ -439,6 +464,9 @@ module.exports = {
   isFile,
   isInside,
   resolvePathCandidate,
+  machineStateRoot,
+  isMachineStatePath,
+  MACHINE_STATE_DENIAL,
   sanitizeSessionId,
   readStdin,
   readHookInput,

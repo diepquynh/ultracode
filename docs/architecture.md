@@ -62,8 +62,10 @@ Alongside `INVENTORY.md` and `repo-profile.json`, the runtime dir holds `memory/
 repo-scoped lessons — a non-obvious constraint, a subtle invariant, a workaround for a specific bug — that
 survive across sessions, mirroring Pi's `memory.ts`.
 
-Three MCP tools, served from `mcp/gate-server.js` (storage logic in `mcp/lib/memory.js`) alongside the
-`ultracode_gate` spec/plan-approval tool:
+Three MCP tools, registered by the shared factory `mcp/create-server.js` (storage logic in
+`mcp/lib/memory.js`) alongside the `ultracode_gate` spec/plan-approval tool — every transport entry point
+(`mcp/gate-server.js` stdio, `mcp/hub-shim.js`, the hub's `/mcp` endpoint) serves the same surface from that
+one factory:
 
 - **`ultracode_memory_recall`** — any agent, not just the orchestrator, passes its own `repo_root`, an optional
   `area` scope (matching hierarchical sub-scopes like `billing-service::InvoiceCalculator`), and a free-text
@@ -131,6 +133,51 @@ per repo. Joining a filename onto whichever form a prompt happened to pass is wh
 `PASS` into `{session dir}/{repo key}/` and looked for it in `{session dir}/`, leaving the gate to refuse an
 approval for a verdict that existed. A spawn or gate call with no repo key is refused outright rather than
 defaulted, for the same reason: there is no key to guess that both sides would guess alike.
+
+## How the harnesses communicate
+
+Everything above is one session on one harness. The **cross-harness hub** (docs/hub.md) extends the same
+artifact-passing model across harnesses — control messages travel through one loopback daemon, while the
+content stays where it already is, on disk in the shared session dir:
+
+```mermaid
+flowchart TB
+    subgraph publisher["Publisher session (e.g. Claude Code, /ultracode:orchestrate)"]
+        P1["session_register"] --> P2["task_publish (addresses only)"]
+        P2 --> P3["turn ends — no polling"]
+        P4["woken by completion → read worker's report"]
+    end
+    subgraph worker["Worker session (e.g. Codex, /ultracode:hub-listen)"]
+        W1["session_register (caps, optional wake address)"] --> W2["task_claim (lease)"]
+        W2 --> W3["normal pipeline, in OWN session dir"]
+        W3 --> W4["task_complete (report path)"]
+    end
+    subgraph hub["mcp/hub-server.js — one loopback daemon per machine"]
+        DB[("~/.ultracode/hub/hub.sqlite3<br/>sessions · messages (cursor queue) · tasks (leases)")]
+        WAKE["wake order: parked msg_wait → native push<br/>(codex queue / claude UDS) → stays queued"]
+    end
+    SHIM1["mcp/hub-shim.js (stdio)<br/>core tools local · hub tools → REST · revives daemon"]
+    SHIM2["mcp/hub-shim.js (stdio)"]
+    SESSDIR[("{repo}/.ultracode/session/ultracode-session-*/<br/>specs · plans · phase files · reports")]
+
+    publisher -- stdio --> SHIM1 -- "REST + bearer" --> hub
+    worker -- stdio --> SHIM2 -- "REST + bearer" --> hub
+    hub -. "wake notice" .-> P4
+    hub -. "wake notice" .-> W2
+    publisher -- "writes artifacts" --> SESSDIR
+    worker -- "reads source.* (read-only)" --> SESSDIR
+```
+
+Task payloads carry **addresses into that session dir, never content** (refused past 32 KiB); the worker
+reads artifacts from disk exactly as a forked subagent would. It works inside the session by **adoption**:
+`ultracode_session_adopt` records a hub link authorizing the worker's native session to use a shared
+`ultracode-session-<id>` dir it did not create, so a harness can join — or resume — a session it could never
+inherit by native id (the old cross-harness path required both harnesses to launch with the same native id).
+On Claude/Antigravity, `hooks/session-guard.js` reads that link from machine state to allow the shared dir;
+because the dir holds the recorded spec/plan approval, a delegated plan-gated stage spawns without
+re-approval. `~/.ultracode` itself — hub queues and the adoption links — is tool-owned state protected by
+location (`isMachineStatePath` in `hooks/lib/common.js`, enforced by `artifact-guard.js`/`bash-scope-guard.js`),
+the same ownership rule `hooks/lib/ledger-policy.js` applies to the per-repo ledgers.
 
 ```
  ORCHESTRATOR — the only router: derives the session dir, hands each agent a

@@ -29,6 +29,10 @@
 
 const path = require("node:path");
 
+// Machine-level hub state (~/.ultracode: hub.json token, registry/message/task
+// SQLite, lock, log) is ALSO tool-owned, but its names are generic, so it is
+// protected by location instead of by an entry here: isMachineStatePath() in
+// hooks/lib/common.js, enforced by artifact-guard.js and bash-scope-guard.js.
 const HOOK_OWNED = [
   {
     pattern: /^factcheck\.json$/,
