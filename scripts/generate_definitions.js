@@ -48,6 +48,7 @@ const COMMON_HOOK_FILES = [
   "lib/subagent-params.js",
   "lib/session.js",
   "lib/session-link.js",
+  "lib/yolo-state.js",
   "lib/scope-policy.js",
   "lib/ledger-policy.js",
   "lib/report-policy.js",

@@ -78,6 +78,16 @@ have not already, then execute the task through the **normal ultracode pipeline*
 orchestrator procedure routes it (an `agent_hint` of `implement` means spawn `ultracode:implement`, and the
 review loop that follows it still applies).
 
+**YOLO mode follows the session, not the harness.** Before executing your first claimed task for a session —
+and again only when a `yolo-mode` message says it changed — call `ultracode_yolo_status` with the adopted
+`session_dir`. When it is on, the primary session's user has granted unattended autonomy for the
+implementation phases, and you execute under the orchestrator procedure's **YOLO mode** rules: no user
+questions mid-task (defer them into the task's completion summary), resolve build/format friction yourself,
+run the review loop on its YOLO budget and take over resolution when the hook denies at the cap, and report
+a genuinely blocked task as `failed` with the open findings rather than parking on it. YOLO never waives
+gates, fact-checks, or `BLOCKER` findings here either — and it never changes Hard rule 1: you still execute
+only the tasks you claimed.
+
 **Spawn pipeline agents by name, exactly as the orchestrator procedure's Subagent inventory specifies** —
 the named role carries its own prompt, tool policy, and model routing. Never read a role's definition file
 and paste its contents into a generic forked agent: that spawn has no role binding, so none of the role's
@@ -125,9 +135,12 @@ still one single blocking call, not a loop (Hard rule 19's no-polling rule appli
 to spawns). Tell the user before parking: "listening — press ESC to stop." Only they end the park.
 
 - **Messages arrived:** a task notice (`task_id` with `status: "open"`) means claim it — back to Step 3. A
-  direct message means read it, act on the addresses it carries, and reply with `ultracode_msg_send`
-  (`reply_to` set) only when the sender asked a question. After handling everything, park again — handling a
-  message and returning to the park is the listening loop's ONLY legitimate repetition.
+  `yolo-mode` notice (`type: "yolo-mode"`) means the primary session's YOLO state changed: note the new
+  `enabled` value, apply it to every task you execute from now on (Step 3's YOLO rules), send no reply, and
+  park again. A direct message means read it, act on the addresses it carries, and reply with
+  `ultracode_msg_send` (`reply_to` set) only when the sender asked a question. After handling everything,
+  park again — handling a message and returning to the park is the listening loop's ONLY legitimate
+  repetition.
 - **`shutdown: true`:** the hub is restarting; finish the turn and tell the user to re-run
   `/ultracode:hub-listen` in a moment.
 - **The user cancelled (ESC), or the harness cut the call** (some harnesses cap tool-call duration; the

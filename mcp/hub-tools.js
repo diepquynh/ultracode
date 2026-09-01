@@ -164,6 +164,61 @@ function registerHubTools(server, hub) {
   );
 
   server.registerTool(
+    "ultracode_yolo_set",
+    {
+      description:
+        "Turn YOLO mode on or off for one primary ultracode session — the user's standing permission for " +
+        "fully autonomous resolution during the IMPLEMENTATION phases (after the plan is approved), so an " +
+        "unattended run finishes instead of parking on a question nobody is present to answer. Call this " +
+        "ONLY when the user explicitly asked to toggle it (e.g. via the yolo command) — never on your own " +
+        "initiative, and never to get past a gate. YOLO never waives the spec/plan approval gates, " +
+        "fact-check PASSes, or BLOCKER security findings. The state is machine-level, keyed by the primary " +
+        "session, and every child of that session follows it: subagent hooks read it locally, and every " +
+        "other registered participant — including parked hub-listen workers — is notified through the " +
+        "message queue so they apply the new mode from their next task onward. Toggling requires being a " +
+        "participant: register with the session's dir, or adopt it via ultracode_session_adopt first.",
+      inputSchema: {
+        session_key: z.string(),
+        session_secret: z.string(),
+        enabled: z.boolean().describe("true = YOLO on, false = back to interactive gating."),
+        session_dir: z
+          .string()
+          .optional()
+          .describe(
+            "The target session's dir. Defaults to this session's own registered dir; pass it explicitly " +
+              "when toggling a shared session you adopted.",
+          ),
+        note: z
+          .string()
+          .optional()
+          .describe("Optional one-line context from the user, e.g. 'finish D2 overnight'."),
+      },
+    },
+    call("setYolo"),
+  );
+
+  server.registerTool(
+    "ultracode_yolo_status",
+    {
+      description:
+        "Read whether YOLO mode is on for an ultracode session. Call it once at session start (after " +
+        "registering) and again when a yolo-mode message arrives; between those, the recorded state stands — " +
+        "never poll it. Returns enabled (false when never toggled), plus who last changed it and any note. " +
+        "Address the session by session_dir, or by ultracode_session_id + repo_root as listed by " +
+        "ultracode_session_query.",
+      inputSchema: {
+        session_dir: z.string().optional().describe("The session dir to check (either form)."),
+        ultracode_session_id: z
+          .string()
+          .optional()
+          .describe("Check by id instead (with repo_root), e.g. from ultracode_session_query."),
+        repo_root: z.string().optional().describe("Absolute repo root owning the session (with the id)."),
+      },
+    },
+    call("yoloStatus"),
+  );
+
+  server.registerTool(
     "ultracode_msg_send",
     {
       description:

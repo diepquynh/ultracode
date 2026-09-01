@@ -111,6 +111,18 @@ from the hub's registry only, so an unregistered orchestrate session is invisibl
 see an empty list and cannot know your session id), and it cannot be found for resume if this harness dies
 mid-run. Keep the returned `session_key`, `session_secret`, and `cursor`. If the tool answers "hub is not
 reachable", mention it once and continue single-harness — registration is best-effort, never a gate.
+Right after registering, resolve **YOLO mode** (the **YOLO mode** section below) for this session, once:
+
+- **The invocation carried a `--yolo` flag** (in the command's arguments, anywhere before the request text) →
+  that flag is the user's explicit instruction: call `ultracode_yolo_set` with `enabled: true` for
+  `$SESSION_DIR` now, strip the flag from the request text, and proceed with YOLO on. This flag — and the
+  `/ultracode:yolo` command — are the only ways YOLO turns on; never call `ultracode_yolo_set` on your own
+  initiative.
+- **Otherwise** call `ultracode_yolo_status` with `$SESSION_DIR` — the user may have switched this session
+  into YOLO before or between your turns; unreadable or unreachable means YOLO off.
+
+Between that read and a `yolo-mode` message (or a compaction checkpoint restating it), the answer stands:
+never poll it.
 
 Every subagent prompt carries four lines that separate session ownership from work scope:
 
@@ -237,6 +249,10 @@ itself optional.
 its 3-iteration cap with findings open, or an agent returns `STUCK:` you cannot resolve — do **not** start any
 phase that depends on it, directly or transitively. Report the blocked phase and its deliverable to the user
 with the open findings and ask how to proceed. Independent phases in other repos keep running (Rule M6).
+Under **YOLO mode**, "ask how to proceed" applies only after the YOLO resolution protocol (**YOLO mode**
+below) has genuinely failed, and it becomes "record and route around": mark the phase blocked in the
+completion report — with the open findings or the `STUCK:` context verbatim — and keep running every phase
+that does not depend on it; never wait on an answer, and never start a dependent phase anyway.
 
 A `STUCK:` return means the agent hit its enforced retry ceiling on the same build/test failure, so it is
 carrying a diagnostic and a specific question, not a vague difficulty. Read its escalation request before
@@ -493,7 +509,9 @@ its `format` command has run, call **{{tool_ask_user}}** with these two question
 The recommended option goes first, as everywhere else in this skill (**Asking the user with {{tool_ask_user}}**).
 Do not add an "Other" option — the tool adds it. Ask only what is actually on offer: if the user already asked
 for one of the two stages, drop that question (Rule T3) and ask the remaining one; if they asked for both, skip
-the gate entirely. Run the stages the user picked, tests first, then docs.
+the gate entirely. Run the stages the user picked, tests first, then docs. Under **YOLO mode** the gate is not
+asked: take the recommended defaults unless the user's request already opted a stage in (Rule T3), and report
+what was skipped (**YOLO mode**, item 5).
 
 **Rule T3 — An explicit request replaces the gate; never re-ask it.** When the user's own words already ask for
 a stage, that request **is** the decision — run it, without a gate. This covers a request classified UNIT TEST,
@@ -648,6 +666,8 @@ Ask them yourself, with the open findings in hand; if they choose another pass, 
 to confirm. If the spawn comes back refused with the cap named (a rejection, or a run with no one to prompt),
 that is the answer: stop the loop and report the findings as they stand.
 `BLOCKER` findings have no iteration cap and no "ask how to proceed".
+Under **YOLO mode** this paragraph's ask is replaced: the loop keeps running on its larger budget, and at
+exhaustion the resolution comes to you instead of the user — see the **YOLO mode** section, item 3.
 
 ## Cross-harness delegation via the hub (OPTIONAL)
 
@@ -709,6 +729,62 @@ the one its guards check — no re-approval, one session dir, and the session st
 harness breaks. You do not adopt anything; you publish, and the worker adopts on its side.
 
 The receiving side of this flow is `/ultracode:hub-listen`, run by the user in the other harness's session.
+
+## YOLO mode — unattended autonomy for the implementation phases
+
+YOLO mode is the user's standing permission to resolve implementation-phase friction **autonomously and
+continuously**, so a run they started before walking away (an overnight "finish D2" session) completes the
+approved plan instead of parking on a question nobody is present to answer. It exists because runs have died
+overnight on exactly that: a random formatting failure, a review-cap approval prompt, a closing-gate question.
+
+**How it turns on and off — never by you, except on the user's own flag.** The user runs
+`/ultracode:yolo on|off` (any participating session), or invokes this command with `--yolo` (Session
+isolation covers both reads). The state is machine-level, keyed by this primary session — not per repo — and
+**every child of the session follows it**: subagent hooks read the same state locally, and hub-listen workers
+that adopted this session are notified through the message queue. A mid-run toggle arrives as a `yolo-mode`
+message (a wake, or on your next `ultracode_msg_wait` result): acknowledge it in one line and apply it from
+the next spawn onward — the state file the hooks read is already updated, so no re-read is needed.
+
+**Scope.** YOLO governs the phases **after plan approval** — implement, review loops, format, the closing
+stages. It changes *who answers* operational questions mid-run, never *what must be true*:
+
+- **Unchanged, always:** spec approval (Rule D3), plan approval (Rule D5), fact-check `PASS`es, `BLOCKER`
+  security findings (Hard rule 21), and every hard rule below. YOLO is not a gate bypass; a still-unapproved
+  spec or plan waits for the user exactly as before, and you never invent a user answer (Hard rule 5) — you
+  defer the question instead of answering it.
+
+**With YOLO on, in the implementation phases:**
+
+1. **Nothing waits on the user.** Do not call {{tool_ask_user}} between plan approval and the completion
+   report. Every question that would have been asked is instead **recorded in the completion report** with
+   what you did in the meantime.
+2. **Friction is yours to fix, and the loop is continuous.** A build/test/format failure, a lint or
+   formatting complaint, a flaky command — diagnose and resolve it through the normal channels (re-spawn with
+   rescue context, `ultracode_memory_recall` with the error as the query, `HANDOFF:` specialists), as many
+   rounds as it takes, without narration and without pausing. A formatting issue is never a reason for the
+   run to stop.
+3. **The review loop gets budget, then escalates to you — never past you.** The 3-iteration "ask the user"
+   cap (Step 4) does not apply; keep the loop running while passes make progress. At the hook's YOLO budget
+   (10 passes per loop), `hooks/review-cap.js` denies the next reviewer spawn and hands **you** the
+   resolution: read that loop's review ledger, diagnose why the open findings keep recurring, apply
+   auto-fixable ones directly, re-spawn the fix agent with exact per-finding instructions and rescue context,
+   then re-spawn the reviewer **once** to verify (the hook allows exactly one verification pass per denial).
+   Repeat that resolution round as long as it converges. Open findings are **never** carried into dependent
+   work — proceeding to the next phase with a broken one breaks everything built on it.
+4. **Only a genuinely unresolvable phase is set aside.** When your resolution rounds stop converging too, or
+   a `STUCK:` needs a fact only the user has, apply Rule D9's YOLO form: record the phase as blocked (open
+   findings or `STUCK:` context verbatim, plus the ledger path), run **only** work that does not depend on
+   it, and surface it prominently in the completion report. Never mark it done, never guess the missing fact.
+5. **The closing gate answers itself with its recommended defaults.** Do not ask Rule T2's questions: take
+   the recommended options (no tests, no docs) unless the user's own request already opted in (Rule T3 —
+   their words already decided). Report what was skipped and how to request it later (Rule T7), as always.
+6. **Survives compaction.** After a context compaction, the pipeline checkpoint (`hooks/session-resume.js`)
+   restates the YOLO state alongside the gates and review counts — resume autonomously from the recorded
+   state; compaction is never a reason to stop or to start asking again.
+
+The completion report of a YOLO run carries one extra section — **Deferred to you** — listing every question
+not asked, every finding left open (with ledger paths), every blocked phase, and every closing stage skipped
+by default. Autonomy defers decisions; it never hides them.
 
 ## Hard rules
 
@@ -810,4 +886,10 @@ The receiving side of this flow is `/ultracode:hub-listen`, run by the user in t
     One legitimate retry first: `ultracode_gate` reports `none recorded` when its `repo_key` is not the key the
     fact-check spawn carried, so re-read both and, if they differ, call the tool again with the matching key.
     That is fixing the address of a real verdict, not manufacturing one — and it is the only retry available.
+24. **YOLO defers to the user; it never decides for them.** YOLO mode (its own section above) turns on only by
+    the user's hand — `/ultracode:yolo`, or this command's `--yolo` flag — never by you calling
+    `ultracode_yolo_set` on your own initiative, and never as a way past a gate. Under it, every question you
+    would have asked between plan approval and completion is deferred to the completion report, not answered
+    on the user's behalf; open review findings are resolved (or the phase blocked), never carried into
+    dependent work; and the spec/plan gates, fact-check, and `BLOCKER` rules stand exactly as written.
     A pipeline that lies about what it verified is worse than one that admits it is stuck.

@@ -22,6 +22,7 @@ const { emit, pick, readHookInput, readTextIfFile, readJsonIfFile } = require(".
 const { recordCompaction, consumeCompactionMarker } = require("./lib/grok-hooks");
 const { HookContext } = require("./lib/hook-context");
 const { REVIEW_LEDGER_PATTERN } = require("./lib/ledger-policy");
+const { yoloStateFor } = require("./lib/yolo-state");
 
 function formatRecord(record) {
   const phase = record.phase ? ` ${record.phase}` : "";
@@ -37,7 +38,7 @@ function formatRecord(record) {
 // Review loops are per phase — one for its implementation, one for its tests — so
 // a session dir holds a ledger per loop. Report each separately: the cap is counted
 // per ledger, and a merged count would misstate where any of them stands against it.
-function reviewLines(sessionDir, label) {
+function reviewLines(sessionDir, label, reviewCap) {
   let entries = [];
   try {
     entries = fs.readdirSync(sessionDir);
@@ -52,17 +53,17 @@ function reviewLines(sessionDir, label) {
     if (!ledger) continue;
     const iterations = (ledger.match(/^## Iteration \d+/gm) || []).length;
     const scope = match[1] ? `phase ${match[1]} ` : "";
-    lines.push(`  ${label}${scope}review iterations so far: ${iterations}/3`);
+    lines.push(`  ${label}${scope}review iterations so far: ${iterations}/${reviewCap}`);
   }
   return lines;
 }
 
-function reportFor(sessionDir, label) {
+function reportFor(sessionDir, label, reviewCap) {
   const lines = [];
   const progress = readJsonIfFile(path.join(sessionDir, "progress.json"));
   const records = progress && Array.isArray(progress.records) ? progress.records : [];
   if (records.length) lines.push(`  ${label}last spawn: ${formatRecord(records[records.length - 1])}`);
-  lines.push(...reviewLines(sessionDir, label));
+  lines.push(...reviewLines(sessionDir, label, reviewCap));
   const gates = readJsonIfFile(path.join(sessionDir, "gates.json"));
   for (const gate of ["spec", "plan"]) {
     if (gates && gates[gate]) lines.push(`  ${label}${gate} gate: ${gates[gate].decision}`);
@@ -79,7 +80,21 @@ function reportFor(sessionDir, label) {
 function checkpointLines(context) {
   const baseDir = context.sessionRoot;
   if (!baseDir) return [];
-  const found = [...reportFor(baseDir, "")];
+  // YOLO is exactly the state a compaction must not erase: the run was told to
+  // continue unattended, and the summary that replaced the conversation may
+  // not say so. Restating it here (with the matching per-loop cap) is what
+  // keeps the autonomous loop continuous across compactions.
+  const yolo = yoloStateFor(baseDir);
+  const yoloOn = Boolean(yolo && yolo.enabled === true);
+  const reviewCap = yoloOn ? 10 : 3;
+  const found = [];
+  if (yoloOn) {
+    found.push(
+      `  YOLO mode: ON${yolo.note ? ` (${yolo.note})` : ""} — continue autonomously per the YOLO mode ` +
+        "rules: no user questions before the completion report; defer them there instead.",
+    );
+  }
+  found.push(...reportFor(baseDir, "", reviewCap));
   let repoKeys = [];
   try {
     repoKeys = fs
@@ -90,7 +105,7 @@ function checkpointLines(context) {
     repoKeys = [];
   }
   for (const key of repoKeys) {
-    found.push(...reportFor(path.join(baseDir, key), `${key}: `));
+    found.push(...reportFor(path.join(baseDir, key), `${key}: `, reviewCap));
   }
   return found;
 }

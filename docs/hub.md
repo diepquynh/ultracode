@@ -42,7 +42,7 @@ flowchart LR
 - **`mcp/hub-server.js`** — the daemon. Loopback-only (`127.0.0.1`), bearer-token auth
   (`timingSafeEqual`), fixed default port `45777` (`ULTRACODE_HUB_PORT` overrides; a foreign occupant
   pushes it to an ephemeral port recorded in `hub.json`). Serves `/healthz` (open), `/api/v1/*` (REST used
-  by the shim), and `/mcp` (stateless streamable-HTTP MCP exposing all 13 tools).
+  by the shim), and `/mcp` (stateless streamable-HTTP MCP exposing all 15 tools).
 - **`mcp/hub-shim.js`** — the stdio entry point every harness actually registers (still named
   `ultracode-gate`). Core tools (gate/report/memory) run locally, identical online or offline; hub tools
   travel over REST. At boot it revives a dead hub (bounded ≤5 s) and replaces an older-versioned one —
@@ -62,7 +62,7 @@ over native channels, not MCP — and is deferred until verified per harness (V4
 ## The tool surface
 
 Five core tools (`ultracode_gate`, `ultracode_report`, `ultracode_memory`, `ultracode_memory_recall`,
-`ultracode_memory_forget`) plus eight hub tools, all registered from one factory (`mcp/create-server.js`)
+`ultracode_memory_forget`) plus ten hub tools, all registered from one factory (`mcp/create-server.js`)
 so stdio and HTTP can never drift:
 
 | Tool | What it does |
@@ -77,6 +77,8 @@ so stdio and HTTP can never drift:
 | `ultracode_task_publish` | Queue a task addressed by `target_harness`/`capability`, payload validated against the same required-inputs contract as subagent spawns (≤ 32 KiB, all paths confined to the publisher's session dir). Candidates are woken automatically. |
 | `ultracode_task_claim` | Exclusive claim under a lease (default 15 min, cap 60). Expired leases reopen (attempts+1); the third expiry fails the task and notifies the publisher. |
 | `ultracode_task_complete` | `done`/`failed` + summary + `report_file` **inside the worker's own session dir**. Inserts the completion message and wakes the publisher. |
+| `ultracode_yolo_set` | Toggle YOLO mode for one primary ultracode session — user-initiated only (`/ultracode:yolo`, or orchestrate's `--yolo` flag). Participant-authenticated: the caller must be registered with, or have adopted, the target session dir. Persists to `~/.ultracode/hub/yolo/` (where the hooks read it) and notifies every other participant through the message queue, waking parked listeners. |
+| `ultracode_yolo_status` | Read a session's YOLO state (by `session_dir`, or `ultracode_session_id` + `repo_root`) — `enabled: false` when never toggled. Answered from the same machine-state file the hooks read, so tool and hook can never disagree. |
 
 ## Delivery: push first, one pull as fallback
 
@@ -183,6 +185,45 @@ flowchart LR
 - **Resume** falls out of the same mechanism: a session whose original harness broke is still listed by
   `ultracode_session_query`; another harness adopts it by id and continues from its recorded stage.
 
+## YOLO mode: one toggle, every participant
+
+YOLO mode is the user's standing permission for fully autonomous resolution during the **implementation
+phases** of one primary ultracode session — the fix for runs that die overnight on a review-cap approval
+prompt, a closing-gate question, or a random formatting failure after the user already approved the spec and
+the plan. It never waives the spec/plan gates, fact-check `PASS`es, or `BLOCKER` security findings; it
+changes who answers operational questions mid-run (the orchestrator, with everything deferred into the
+completion report), not what must be true.
+
+```mermaid
+flowchart LR
+    USER["user: /ultracode:yolo on<br/>(or orchestrate --yolo)"] --> SET["ultracode_yolo_set<br/>(participant-authenticated)"]
+    SET --> FILE["~/.ultracode/hub/yolo/&lt;session-id&gt;.json<br/>daemon-written, model-write-guarded"]
+    SET --> Q["yolo-mode notice per participant<br/>(message queue → parked msg_wait / native push)"]
+    FILE --> HOOK["hooks read it locally per spawn:<br/>review-cap.js budget+escalation ·<br/>session-resume.js compaction checkpoint"]
+    Q --> WORKERS["hub-listen workers apply it<br/>from their next task"]
+```
+
+Design decisions, mirroring the rest of this document:
+
+- **State is machine-level and keyed by the primary session, not per repo** — one file per
+  `ultracode-session-<id>` under `~/.ultracode/hub/yolo/`, entry-per-session-dir. Every child of the session
+  (subagent hooks, adopted workers on other harnesses) resolves the same file from the session dir alone; a
+  hub restart loses nothing.
+- **The daemon is the only writer**, like the adoption links: `isMachineStatePath` write-guarding means a
+  model cannot forge the user's own permission switch, and toggling through the tool requires being a
+  registered participant (own dir, or adopted). The user flips it — via the `/ultracode:yolo` command or
+  orchestrate's `--yolo` flag — never the model on its own initiative.
+- **Mid-session toggles are pushed, not polled.** `ultracode_yolo_set` inserts one `yolo-mode` notice per
+  other participant and delivers it through the normal order (parked `msg_wait` first, then native push), so
+  a parked listener applies the new mode to its next task; the state file is already updated when the wake
+  arrives.
+- **The autonomous loop is continuous and survives compaction.** Under YOLO, `hooks/review-cap.js` swaps the
+  review-loop ask for a larger budget (10 passes per loop) and, at exhaustion, denies with an
+  orchestrator-resolution protocol (fix the open findings, then exactly one verification pass per denial —
+  tracked in `ultracode-yolo-review-escalations.json`), so open findings are never carried into dependent
+  phases. `hooks/session-resume.js` restates the YOLO state in its post-compaction checkpoint, so a
+  compacted orchestrator resumes autonomously instead of rediscovering (or forgetting) the mode.
+
 ## Security model
 
 - Loopback bind hard-coded; 64-hex bearer token in `hub.json` (0600, dir 0700), compared timing-safe.
@@ -200,6 +241,10 @@ flowchart LR
 - Adoption links live in machine state (`~/.ultracode/hub/links`, daemon-written, `isMachineStatePath`
   write-guarded), so a worker cannot authorize itself into a session dir the user did not adopt through the
   tool. `session-guard` still checks the repo-key subdirectory of an adopted dir, exactly as for a native one.
+- YOLO state lives under the same ownership rule (`~/.ultracode/hub/yolo`, daemon-written): the write guards
+  stop a model from switching its own run to autonomous, and `ultracode_yolo_set` additionally requires the
+  caller to be a participant of the session it toggles — one local session cannot flip another run's
+  autonomy on a bearer token alone.
 - Log lines carry routes and ids, never bodies or tokens.
 
 ## Live-verification ledger

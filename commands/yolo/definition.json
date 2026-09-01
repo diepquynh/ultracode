@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "kind": "command",
+  "name": "yolo",
+  "description": "Toggle YOLO mode for an ultracode primary session: the user's standing permission for fully autonomous resolution during the implementation phases, so an unattended run (e.g. overnight) finishes the approved plan instead of parking on a review-cap question, a closing-gate prompt, or a random formatting failure. The toggle is one immediate hub call (ultracode_yolo_set over the MCP shim's HTTP transport); the hub persists it in machine state keyed by the primary session — not per repo — where every child of that session reads it, and notifies every other registered participant through the message queue so parked hub-listen workers apply it from their next task. YOLO never waives spec/plan approval, fact-check PASSes, or BLOCKER security findings.",
+  "prompt": "prompt.md",
+  "config": {
+    "argument_hint": "on | off | status [optional note, e.g. 'finish D2 overnight']"
+  }
+}

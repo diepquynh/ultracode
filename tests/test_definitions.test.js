@@ -51,7 +51,7 @@ const SUBAGENT_PARAMETERS = JSON.parse(
 
 const LAYOUT_TOKEN_PATTERN = /\{\{[a-z][a-z0-9_]*\}\}/g;
 
-const COMMAND_NAMES = new Set(["hub-listen", "init-kit", "orchestrate"]);
+const COMMAND_NAMES = new Set(["hub-listen", "init-kit", "orchestrate", "yolo"]);
 
 let WORKSPACE = null;
 let GENERATED_SOURCE_ROOT = null;
@@ -347,7 +347,7 @@ function sourceDefinitions() {
 
 test("every definition was migrated", () => {
   const definitions = sourceDefinitions();
-  assert.equal(definitions.length, 15);
+  assert.equal(definitions.length, 16);
   assert.deepEqual(
     new Set(
       definitions
@@ -451,7 +451,7 @@ test("claude generation matches pre-refactor behavior", () => {
     );
     assert.equal(body, adaptForTarget(sourceBody, "claude"));
   }
-  assert.match(stdout, /generated 15 definitions for claude/);
+  assert.match(stdout, /generated 16 definitions for claude/);
 });
 
 test("generation is deterministic for every target", () => {
@@ -1590,6 +1590,59 @@ function reviewCapTest(target) {
     target,
   );
   assert.equal(run("2"), ""); // phase 2 still untouched by either exhausted loop
+
+  // YOLO mode: nobody is present to answer an ask, so the loop runs on a larger
+  // budget (10), and at exhaustion the spawn is DENIED with the orchestrator
+  // told to resolve the impasse itself — each denial then authorizes exactly
+  // one verification pass, so the loop can converge but never spin blind.
+  const hubHome = path.join(tempDir, "machine-state");
+  process.env.ULTRACODE_HUB_HOME = hubHome;
+  try {
+    const { writeYoloEntry } = require(path.join(ROOT, "hooks", "lib", "yolo-state.js"));
+    writeYoloEntry({
+      session_dir: sessionDir,
+      primary_repo_root: repo,
+      enabled: true,
+      updated_by: "test",
+    });
+  } finally {
+    delete process.env.ULTRACODE_HUB_HOME;
+  }
+  const runYolo = (phase) =>
+    runHook(path.join(pluginRoot, "hooks", "review-cap.js"), payloadFor(phase), {
+      ...env,
+      ULTRACODE_HUB_HOME: hubHome,
+    });
+  // 3 iterations sit under the YOLO budget: the pass the ask would have gated
+  // now just runs.
+  assert.equal(runYolo("1"), "");
+  fs.writeFileSync(
+    ledgerPath,
+    Array.from({ length: 10 }, (_, i) => `## Iteration ${i + 1}`).join("\n") + "\n",
+    "utf-8",
+  );
+  assertDenied(
+    JSON.parse(runYolo("1")),
+    /YOLO review budget exhausted \(10\/10\) for phase 1 /,
+    `${target}: exhausted YOLO loop escalates to the orchestrator`,
+  );
+  const escalations = JSON.parse(
+    fs.readFileSync(path.join(sessionDir, "ultracode-yolo-review-escalations.json"), "utf-8"),
+  );
+  assert.equal(escalations["ultracode-review-ledger-phase-1.md"], 10);
+  // The denial authorized one verification pass at the same iteration count...
+  assert.equal(runYolo("1"), "");
+  // ...and the pass after it (the ledger grew) is denied again.
+  fs.appendFileSync(ledgerPath, "## Iteration 11\n", "utf-8");
+  assertDenied(
+    JSON.parse(runYolo("1")),
+    /YOLO review budget exhausted \(11\/10\) for phase 1 /,
+    `${target}: every extra YOLO pass costs a resolution round`,
+  );
+  // Other loops keep their own budget, and the interactive ask returns the
+  // moment YOLO is off (env without the hub home reads no YOLO state).
+  assert.equal(runYolo("2"), "");
+  assertCapAsked(JSON.parse(run("1-tests")), /review loop cap reached \(3\/3\) /, target);
 }
 
 test("review-cap puts a 4th code-review iteration to the user", () => {
@@ -4082,6 +4135,54 @@ function progressTrackerTest(target) {
   assert.match(resumeOutput, /code-reviewer phase-2-tests \[ok\]/);
   assert.match(resumeOutput, /phase 2 review iterations so far: 2\/3/);
   assert.match(resumeOutput, /phase 2-tests review iterations so far: 1\/3/);
+
+  // A compaction must not erase YOLO: with it recorded, the checkpoint restates
+  // the mode (so the run stays autonomous) and reports the per-loop caps the
+  // YOLO budget actually enforces.
+  const yoloHome = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-progress-yolo-"));
+  process.env.ULTRACODE_HUB_HOME = yoloHome;
+  try {
+    const { writeYoloEntry } = require(path.join(ROOT, "hooks", "lib", "yolo-state.js"));
+    writeYoloEntry({
+      session_dir: sessionDir,
+      primary_repo_root: repo,
+      enabled: true,
+      note: "finish D2 overnight",
+      updated_by: "test",
+    });
+  } finally {
+    delete process.env.ULTRACODE_HUB_HOME;
+  }
+  const yoloEnv = { PLUGIN_ROOT: pluginRoot, ULTRACODE_HUB_HOME: yoloHome };
+  let yoloResume;
+  if (target === "grok") {
+    runHook(
+      path.join(pluginRoot, "hooks", "session-resume.js"),
+      { cwd: repo, session_id: "testsess", hook_event_name: "pre_compact", source: "auto" },
+      yoloEnv,
+    );
+    yoloResume = JSON.parse(
+      runHook(
+        path.join(pluginRoot, "hooks", "session-resume.js"),
+        {
+          cwd: repo,
+          session_id: "testsess",
+          hook_event_name: "pre_tool_use",
+          toolName: "read_file",
+          toolInput: { file_path: "README.md" },
+        },
+        yoloEnv,
+      ),
+    ).hookSpecificOutput.additionalContext;
+  } else {
+    yoloResume = runHook(
+      path.join(pluginRoot, "hooks", "session-resume.js"),
+      { cwd: repo, session_id: "testsess" },
+      yoloEnv,
+    );
+  }
+  assert.match(yoloResume, /YOLO mode: ON \(finish D2 overnight\)/);
+  assert.match(yoloResume, /phase 2 review iterations so far: 2\/10/);
 }
 
 test("spawn-log records structured progress.json read back by session-resume", () => {
@@ -4284,6 +4385,7 @@ test("every plugin distribution includes target hooks", () => {
       "hook-context.js",
       "subagent-params.js",
       "session.js",
+      "yolo-state.js",
       "scope-policy.js",
       "ledger-policy.js",
       "plugin-policy.js",

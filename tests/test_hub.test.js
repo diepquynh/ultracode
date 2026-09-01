@@ -1003,6 +1003,158 @@ test("hub: a worker may complete a task with a report inside its adopted session
     });
 });
 
+test("hub: yolo set persists machine state, notifies participants, and status reads it back", async (t) => {
+  const fixture = makeFixture(t);
+  const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const yoloState = require(path.join(ROOT, "hooks", "lib", "yolo-state.js"));
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const facade = new HubFacade(state);
+
+  const publisher = registerDefault(state, fixture); // owns fixture.sessionDir
+  const workerDir = path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-yolo-w");
+  fs.mkdirSync(workerDir, { recursive: true });
+  const worker = state.registerSession({
+    harness: "codex",
+    session_id: "yolo-w",
+    repo_roots: [fixture.repoRoot],
+    session_dir: workerDir,
+  });
+  await facade.adoptSession({
+    session_key: worker.session_key,
+    session_secret: worker.session_secret,
+    session_dir: fixture.sessionDir,
+  });
+  const strangerDir = path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-other");
+  fs.mkdirSync(strangerDir, { recursive: true });
+  const stranger = state.registerSession({
+    harness: "grok",
+    session_id: "other",
+    repo_roots: [fixture.repoRoot],
+    session_dir: strangerDir,
+  });
+
+  // Never toggled → off, and the hooks read the same answer.
+  const before = await facade.yoloStatus({ session_dir: fixture.sessionDir });
+  assert.deepEqual(
+    { enabled: before.enabled, recorded: before.recorded },
+    { enabled: false, recorded: false },
+  );
+  assert.equal(yoloState.isYoloEnabled(fixture.sessionDir), false);
+
+  // The publisher (registered with the dir) turns YOLO on. The adopted worker
+  // is notified through the message queue; the caller and the unrelated
+  // session are not.
+  const on = await facade.setYolo({
+    session_key: publisher.session_key,
+    session_secret: publisher.session_secret,
+    enabled: true,
+    note: "finish D2 overnight",
+  });
+  assert.equal(on.enabled, true);
+  assert.equal(on.session_dir, fixture.sessionDir);
+  assert.equal(on.notified, 1);
+
+  // Machine-state file: the hooks' local read agrees, keyed by the primary
+  // session, not the repo.
+  assert.equal(yoloState.isYoloEnabled(fixture.sessionDir), true);
+  assert.equal(yoloState.isYoloEnabled(path.join(fixture.sessionDir, "repo")), true);
+  assert.equal(yoloState.isYoloEnabled(strangerDir), false);
+  const entry = yoloState.yoloStateFor(fixture.sessionDir);
+  assert.equal(entry.note, "finish D2 overnight");
+  assert.equal(entry.updated_by, publisher.session_key);
+
+  // Status answers by dir and by id+root, from the same file.
+  const byDir = await facade.yoloStatus({ session_dir: path.join(fixture.sessionDir, "repo") });
+  assert.deepEqual({ enabled: byDir.enabled, recorded: byDir.recorded }, { enabled: true, recorded: true });
+  const byId = await facade.yoloStatus({
+    ultracode_session_id: "test-abc123",
+    repo_root: fixture.repoRoot,
+  });
+  assert.equal(byId.enabled, true);
+
+  // The worker's queued notice names the mode change.
+  const workerInbox = state.fetchMessages({
+    session_key: worker.session_key,
+    session_secret: worker.session_secret,
+    cursor: worker.cursor,
+  });
+  const notice = workerInbox.messages.map((m) => JSON.parse(m.body)).find((b) => b.type === "yolo-mode");
+  assert.equal(notice.enabled, true);
+  assert.equal(notice.session_dir, fixture.sessionDir);
+  const strangerInbox = state.fetchMessages({
+    session_key: stranger.session_key,
+    session_secret: stranger.session_secret,
+    cursor: stranger.cursor,
+  });
+  assert.equal(strangerInbox.messages.some((m) => JSON.parse(m.body).type === "yolo-mode"), false);
+
+  // The adopted worker may toggle the shared session off; the publisher is the
+  // one notified this time.
+  const off = await facade.setYolo({
+    session_key: worker.session_key,
+    session_secret: worker.session_secret,
+    enabled: false,
+    session_dir: fixture.sessionDir,
+  });
+  assert.equal(off.enabled, false);
+  assert.equal(off.notified, 1);
+  assert.equal(yoloState.isYoloEnabled(fixture.sessionDir), false);
+  const publisherInbox = state.fetchMessages({
+    session_key: publisher.session_key,
+    session_secret: publisher.session_secret,
+    cursor: publisher.cursor,
+  });
+  const offNotice = publisherInbox.messages
+    .map((m) => JSON.parse(m.body))
+    .find((b) => b.type === "yolo-mode");
+  assert.equal(offNotice.enabled, false);
+});
+
+test("hub: yolo toggling requires participation, a boolean, and a real session shape", (t) => {
+  const fixture = makeFixture(t);
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+
+  const publisher = registerDefault(state, fixture);
+  const strangerDir = path.join(fixture.repoRoot, ".ultracode", "session", "ultracode-session-nosy");
+  fs.mkdirSync(strangerDir, { recursive: true });
+  const stranger = state.registerSession({
+    harness: "grok",
+    session_id: "nosy",
+    repo_roots: [fixture.repoRoot],
+    session_dir: strangerDir,
+  });
+
+  // A session that neither registered with nor adopted the target dir cannot
+  // flip another run's autonomy, bearer token or not.
+  assert.throws(
+    () =>
+      state.setYolo({
+        session_key: stranger.session_key,
+        session_secret: stranger.session_secret,
+        enabled: true,
+        session_dir: fixture.sessionDir,
+      }),
+    /Only a participant may toggle YOLO/,
+  );
+  assert.throws(
+    () =>
+      state.setYolo({
+        session_key: publisher.session_key,
+        session_secret: publisher.session_secret,
+        enabled: "yes",
+      }),
+    /enabled must be a boolean/,
+  );
+  assert.throws(
+    () =>
+      state.yoloStatus({ session_dir: path.join(fixture.repoRoot, ".ultracode", "session") }),
+    /ultracode-session-/,
+  );
+  assert.throws(() => state.yoloStatus({}), /ultracode_session_id/);
+});
+
 // ---------------------------------------------------------------------------
 // task-contract.js
 // ---------------------------------------------------------------------------
@@ -1175,7 +1327,39 @@ test("hub daemon: msg_wait long-poll resolves when a concurrent send lands", asy
   assert.equal(waited.messages[0].body, "report ready at ultracode-implement-phase-1.md");
 });
 
-test("hub daemon: MCP-over-HTTP lists all 17 tools and core tools behave as on stdio", async (t) => {
+test("hub daemon: yolo set/status round-trips over REST and lands in machine state", async (t) => {
+  const fixture = makeFixture(t);
+  const client = await startDaemon(t);
+  const reg = await registerViaClient(client, fixture);
+
+  const set = await client.setYolo({
+    session_key: reg.session_key,
+    session_secret: reg.session_secret,
+    enabled: true,
+    note: "over rest",
+  });
+  assert.equal(set.enabled, true);
+  assert.equal(set.session_dir, fixture.sessionDir);
+
+  const status = await client.yoloStatus({ session_dir: fixture.sessionDir });
+  assert.equal(status.enabled, true);
+  assert.equal(status.note, "over rest");
+
+  // The DAEMON (a separate process) wrote the state file the hooks read.
+  const yoloState = require(path.join(ROOT, "hooks", "lib", "yolo-state.js"));
+  assert.equal(yoloState.isYoloEnabled(fixture.sessionDir), true);
+
+  await assert.rejects(
+    client.setYolo({
+      session_key: reg.session_key,
+      session_secret: "wrong",
+      enabled: false,
+    }),
+    /session_secret does not match/,
+  );
+});
+
+test("hub daemon: MCP-over-HTTP lists all 19 tools and core tools behave as on stdio", async (t) => {
   const fixture = makeFixture(t);
   await startDaemon(t);
   const config = require(path.join(ROOT, "mcp", "lib", "hub", "config.js"));
@@ -1212,6 +1396,8 @@ test("hub daemon: MCP-over-HTTP lists all 17 tools and core tools behave as on s
     "ultracode_task_claim",
     "ultracode_task_complete",
     "ultracode_task_publish",
+    "ultracode_yolo_set",
+    "ultracode_yolo_status",
   ]);
 
   // Core-tool parity: a rejected gate decision lands in the same gates.json a
@@ -1297,7 +1483,7 @@ test("hub shim: offline boot serves core tools and actionable hub-tool errors", 
   });
 
   const { tools } = await shim.listTools();
-  assert.equal(tools.length, 17, "hub tools stay registered even offline");
+  assert.equal(tools.length, 19, "hub tools stay registered even offline");
 
   const gate = await shim.callTool({
     name: "ultracode_gate",

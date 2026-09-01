@@ -107,6 +107,19 @@ class HubClient {
     return this.request("POST", "/api/v1/sessions/adopt", args);
   }
 
+  setYolo(args) {
+    return this.request("POST", "/api/v1/yolo", args);
+  }
+
+  yoloStatus(args = {}) {
+    const params = new URLSearchParams();
+    if (args.session_dir) params.set("session_dir", args.session_dir);
+    if (args.ultracode_session_id) params.set("ultracode_session_id", args.ultracode_session_id);
+    if (args.repo_root) params.set("repo_root", args.repo_root);
+    const query = params.toString();
+    return this.request("GET", `/api/v1/yolo${query ? `?${query}` : ""}`);
+  }
+
   sendMessage(args) {
     return this.request("POST", "/api/v1/messages", args);
   }

@@ -139,6 +139,7 @@ See [Installation](docs/installation.md) for manual installation and uninstall.
 | Initialize the current repository | `/init-kit` | `/init-kit` | `$init-kit` | `/init-kit` |
 | Explicitly activate the pipeline router | `/ultracode:orchestrate` | `/ultracode:orchestrate` | `$orchestrate` | `/ultracode:orchestrate` |
 | Explicitly activate the prompt-authoring standard | `/ultracode:meta-author` | `/ultracode:meta-author` | `$meta-author` | `/ultracode:meta-author` |
+| Toggle unattended autonomy (YOLO) for a session | `/ultracode:yolo on\|off\|status` | `/ultracode:yolo on\|off\|status` | `$yolo on\|off\|status` | `/ultracode:yolo on\|off\|status` |
 | Invoke a generated project skill | `/<skill-name>` | `/<skill-name>` | `$<skill-name>` | `/<skill-name>` |
 | Reload newly generated project skills | `/reload-plugins` or restart | Press `r` in `/plugins` or start a new session | Start a new session | Restart agy session |
 | Runtime inventory and profile | `.ultracode/` | `.ultracode/` | `.ultracode/` | `.ultracode/` |

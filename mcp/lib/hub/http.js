@@ -18,6 +18,7 @@ const http = require("node:http");
 const { HubError } = require("./state");
 const { attemptPush, wakeNotice } = require("../push");
 const { writeLink } = require("../../../hooks/lib/session-link");
+const { writeYoloEntry } = require("../../../hooks/lib/yolo-state");
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_WAIT_MS = 25 * 1000;
@@ -70,6 +71,34 @@ class HubFacade {
       this.log(`adopt link write failed for ${result.harness}:${result.harness_session_id}: ${error.message}`);
     }
     return result;
+  }
+
+  // Order matters: validate + compute the entry, WRITE the machine-state file
+  // (the source of truth hooks and yolo_status read — a write failure fails the
+  // whole call, so a notice can never announce a mode that did not persist),
+  // and only then queue + deliver the participant notices.
+  async setYolo(args) {
+    const { entry, participants } = this.state.setYolo(args);
+    writeYoloEntry(entry);
+    const notifications = this.state.notifyYoloChanged(entry, participants);
+    let woken = 0;
+    for (const notice of notifications) {
+      const delivery = await this.deliver(notice.recipient, null, notice.message_id);
+      if (delivery.pushed) woken++;
+    }
+    return {
+      enabled: entry.enabled,
+      session_dir: entry.session_dir,
+      note: entry.note,
+      updated_at: entry.updated_at,
+      updated_by: entry.updated_by,
+      notified: notifications.length,
+      woken,
+    };
+  }
+
+  async yoloStatus(args) {
+    return this.state.yoloStatus(args || {});
   }
 
   async sendMessage(args) {
@@ -296,6 +325,13 @@ function createHubHttpServer({ state, getToken, version, log = () => {} }) {
     "GET /api/v1/ultracode-sessions": (_body, query) =>
       facade.queryUltracodeSessions({ repo_root: query.get("repo_root") || undefined }),
     "POST /api/v1/sessions/adopt": (body) => facade.adoptSession(body),
+    "POST /api/v1/yolo": (body) => facade.setYolo(body),
+    "GET /api/v1/yolo": (_body, query) =>
+      facade.yoloStatus({
+        session_dir: query.get("session_dir") || undefined,
+        ultracode_session_id: query.get("ultracode_session_id") || undefined,
+        repo_root: query.get("repo_root") || undefined,
+      }),
     "POST /api/v1/messages": (body) => facade.sendMessage(body),
     "POST /api/v1/messages/wait": (body, _query, ctx) => facade.waitMessages(body, { signal: ctx.signal }),
     "POST /api/v1/tasks": (body) => facade.publishTask(body),

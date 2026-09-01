@@ -244,6 +244,9 @@ Some channels are structured rather than prose:
   `FIXED`/`WONTFIX` with a rationale; the reviewer re-raises or closes on the next pass. Capped so it can't
   spin forever — per loop, so an exhausted loop never caps the next one before it runs. At the cap the next
   spawn is put to the user (`review-cap.js` asks rather than denies), so a 4th pass is spent only on request.
+  Under **YOLO mode** (docs/hub.md, "YOLO mode") the ask becomes a larger automatic budget plus an
+  orchestrator-resolution escalation at exhaustion — an unattended run never parks on the question, and open
+  findings are never carried into dependent phases.
 - **JSON findings** — `code-reviewer` returns one machine-parseable object so the orchestrator can split
   findings by severity and rule ID. **Auto-fixable** findings carry an exact replacement the orchestrator
   applies directly, skipping a fix-agent round trip.

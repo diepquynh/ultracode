@@ -10,6 +10,20 @@
 // instead of stalling silently. See askPreToolUse in lib/common.js for what each
 // harness does with it.
 //
+// YOLO mode changes the shape, not the existence, of the cap. An ask is the one
+// thing an unattended run cannot survive — the question parks the session until
+// morning — so when the user has switched this primary session into YOLO
+// (hooks/lib/yolo-state.js, written only by the hub's ultracode_yolo_set tool),
+// the loop instead gets a larger automatic budget, and past it the resolution
+// moves UP, not on: each further pass is denied with the instruction that the
+// ORCHESTRATOR must resolve the impasse itself — read the ledger, fix the open
+// findings via targeted spawns — and then exactly one verification pass is
+// allowed (tracked per loop in ultracode-yolo-review-escalations.json, keyed by
+// the iteration count each denial saw). The loop can still converge to clean,
+// but it can never spin blind, and open findings are never carried into a
+// dependent phase — skipping ahead with a broken phase breaks everything built
+// on it.
+//
 // Known gap: the ask does not work on Grok. It has no ask decision — both shapes
 // fail open there, which would delete the cap rather than soften it — so Grok
 // gets the denial below and its user cannot approve a 4th pass at the prompt at
@@ -18,11 +32,25 @@
 "use strict";
 
 const path = require("node:path");
-const { askPreToolUse, readHookInput, readJsonIfFile, readTextIfFile } = require("./lib/common");
+const {
+  askPreToolUse,
+  denyPreToolUse,
+  readHookInput,
+  readJsonIfFile,
+  readTextIfFile,
+  writeJsonAtomic,
+} = require("./lib/common");
 const { HookContext } = require("./lib/hook-context");
 const { reviewLedgerName } = require("./lib/ledger-policy");
+const { isYoloEnabled } = require("./lib/yolo-state");
 
 const MAX_ITERATIONS = 3;
+// The YOLO budget: unattended loops may spend more automatic passes — the user
+// traded oversight for progress — but past this point the reviewer and the fix
+// agent are demonstrably not converging, so every further pass costs an
+// orchestrator-resolution round first.
+const YOLO_MAX_ITERATIONS = 10;
+const YOLO_ESCALATIONS_FILE = "ultracode-yolo-review-escalations.json";
 
 async function main() {
   const hookInput = await readHookInput();
@@ -38,10 +66,43 @@ async function main() {
     const ledger = readTextIfFile(path.join(sessionDir, reviewLedgerName(phase)));
     if (!ledger) continue;
     const iterations = ledger.match(/^## Iteration \d+/gm) || [];
-    if (iterations.length < MAX_ITERATIONS) continue;
+    const yolo = isYoloEnabled(sessionDir);
+    if (iterations.length < (yolo ? YOLO_MAX_ITERATIONS : MAX_ITERATIONS)) continue;
     const block = readJsonIfFile(path.join(sessionDir, "ultracode-security-block.json"));
     if (block && block.blocked === true) continue;
     const scope = /^\d+(-tests)?$/i.test(phase) ? `phase ${phase} of repo key` : "repo key";
+    if (yolo) {
+      // One denial per iteration count: the denial that lands at N iterations
+      // authorizes exactly one verification pass (the ledger only grows when a
+      // review actually runs, so the next spawn at the same count is the
+      // orchestrator's post-resolution verify). A pass after that sits at N+1
+      // and is denied again — every extra pass costs a resolution round.
+      const ledgerName = reviewLedgerName(phase);
+      const escalationsPath = path.join(sessionDir, YOLO_ESCALATIONS_FILE);
+      const escalations = readJsonIfFile(escalationsPath) || {};
+      const deniedAt = Number.isInteger(escalations[ledgerName]) ? escalations[ledgerName] : 0;
+      if (iterations.length <= deniedAt) continue;
+      escalations[ledgerName] = iterations.length;
+      writeJsonAtomic(escalationsPath, escalations);
+      const cappedYolo =
+        `ultracode: YOLO review budget exhausted (${iterations.length}/${YOLO_MAX_ITERATIONS}) for ${scope} ` +
+        `"${spawn.repoKey}".`;
+      denyPreToolUse(
+        `${cappedYolo} The loop is not converging on its own, and YOLO mode means there is nobody to ask — ` +
+          "so resolution is now YOURS, before any re-spawn: read this loop's review ledger, diagnose why " +
+          "the open findings keep recurring, apply auto-fixable ones directly, and re-spawn the fix agent " +
+          "with exact per-finding instructions and rescue context — not another generic pass. Then re-spawn " +
+          "the reviewer ONCE to verify; that verification pass is allowed. Open findings are never carried " +
+          "forward: do not start any phase or stage that depends on this one, and never mark a finding " +
+          "resolved without the reviewer confirming. If your resolution rounds are not converging either, " +
+          "treat the phase as blocked (Rule D9): record the findings and the ledger path in the completion " +
+          "report and continue only work that does not depend on this phase.",
+        `${cappedYolo} Resolve it yourself before re-spawning: read the ledger, fix the open findings via ` +
+          "targeted fix-agent spawns, then ONE verify review (allowed). Never start dependent phases while " +
+          "findings are open.",
+      );
+      return 0;
+    }
     const capped =
       `ultracode: review loop cap reached (${iterations.length}/${MAX_ITERATIONS}) for ${scope} ` +
       `"${spawn.repoKey}".`;

@@ -21,6 +21,7 @@ const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { isInside, isDirectory, sanitizeSessionId } = require("../../../hooks/lib/common");
 const { sessionBaseDir } = require("../../../hooks/lib/session");
+const { yoloStateFor } = require("../../../hooks/lib/yolo-state");
 const { validateTaskPayload } = require("./task-contract");
 const { resolveHarnessRoute } = require("./harness-route");
 
@@ -556,6 +557,121 @@ class HubState {
       .prepare("SELECT session_dir FROM adoptions WHERE session_key = ?")
       .all(sessionKey)
       .map((row) => row.session_dir);
+  }
+
+  // ---- YOLO mode -------------------------------------------------------------
+
+  // Validate a YOLO toggle and compute the entry the facade persists to machine
+  // state (hooks/lib/yolo-state.js — the file review-cap.js and the prompts
+  // read). Authorization is participation: only a session registered with the
+  // target session dir, or one that adopted it through ultracode_session_adopt,
+  // may flip the session's autonomy — a bearer token alone must not let one
+  // local session put another session's overnight run into YOLO.
+  setYolo({ session_key, session_secret, enabled, session_dir, note }) {
+    const caller = this.verifySession(session_key, session_secret);
+    if (typeof enabled !== "boolean") {
+      throw new HubError(400, "enabled must be a boolean.");
+    }
+    const declared = session_dir
+      ? path.resolve(requireString(session_dir, "session_dir"))
+      : caller.session_dir;
+    const base = sessionBaseDir(declared);
+    if (!path.basename(base).startsWith("ultracode-session-")) {
+      throw new HubError(400, "session_dir must contain an 'ultracode-session-<id>' component.");
+    }
+    let primaryRepoRoot = null;
+    if (sessionBaseDir(caller.session_dir) === base) {
+      primaryRepoRoot = caller.primary_repo_root;
+    } else {
+      const adoption = this.db
+        .prepare("SELECT primary_repo_root FROM adoptions WHERE session_key = ? AND session_dir = ?")
+        .get(caller.session_key, base);
+      if (!adoption) {
+        throw new HubError(
+          403,
+          "Only a participant may toggle YOLO for a session: register with that session_dir, or adopt it " +
+            "through ultracode_session_adopt first.",
+        );
+      }
+      primaryRepoRoot = adoption.primary_repo_root;
+    }
+    const entry = {
+      ultracode_session_id: ultracodeSessionIdFromDir(base),
+      primary_repo_root: primaryRepoRoot,
+      session_dir: base,
+      enabled,
+      note: typeof note === "string" && note.trim() ? note.trim() : null,
+      updated_at: nowIso(),
+      updated_by: caller.session_key,
+    };
+    // Every other participant of this session — registered with the same dir,
+    // or holding an adoption for it — is told through the message queue, so a
+    // parked hub-listen worker (or an idle orchestrator, via native push)
+    // learns the new mode before its next task rather than on its next run.
+    const adopters = new Set(
+      this.db
+        .prepare("SELECT session_key FROM adoptions WHERE session_dir = ?")
+        .all(base)
+        .map((row) => row.session_key),
+    );
+    const participants = this.db
+      .prepare("SELECT * FROM sessions WHERE status != 'gone' AND session_key != ?")
+      .all(caller.session_key)
+      .filter((row) => sessionBaseDir(row.session_dir) === base || adopters.has(row.session_key));
+    return { entry, participants: participants.map(publicSession) };
+  }
+
+  // Queue notices for a committed YOLO change; the facade delivers them (waiter
+  // wake, then native push) exactly as it does for task notices. Called only
+  // after the state file is written, so a woken participant always reads the
+  // new mode.
+  notifyYoloChanged(entry, participants) {
+    const notifications = [];
+    const body = JSON.stringify({
+      type: "yolo-mode",
+      enabled: entry.enabled,
+      session_dir: entry.session_dir,
+      note: entry.note,
+      updated_by: entry.updated_by,
+    });
+    for (const participant of participants) {
+      const inserted = this.db
+        .prepare(
+          `INSERT INTO messages (from_session, to_session, body, created_at)
+           VALUES (?, ?, ?, ?)`,
+        )
+        .run(entry.updated_by || "hub", participant.session_key, body, nowIso());
+      notifications.push({ message_id: Number(inserted.lastInsertRowid), recipient: participant });
+    }
+    return notifications;
+  }
+
+  // Read-only and file-backed: answers from the same machine-state file the
+  // hooks read, so tool and hook can never disagree. Addressed by session_dir,
+  // or by ultracode_session_id + repo_root (the ultracode_session_query pair).
+  yoloStatus({ session_dir, ultracode_session_id, repo_root }) {
+    let base;
+    if (session_dir) {
+      base = sessionBaseDir(path.resolve(requireString(session_dir, "session_dir")));
+    } else {
+      const id = requireString(ultracode_session_id, "ultracode_session_id (or pass session_dir)");
+      const root = path.resolve(requireString(repo_root, "repo_root (or pass session_dir)"));
+      base = path.join(root, RUNTIME_DIR, "session", `ultracode-session-${sanitizeSessionId(id)}`);
+    }
+    if (!path.basename(base).startsWith("ultracode-session-")) {
+      throw new HubError(400, "session_dir must contain an 'ultracode-session-<id>' component.");
+    }
+    const entry = yoloStateFor(base);
+    return {
+      enabled: Boolean(entry && entry.enabled === true),
+      recorded: Boolean(entry),
+      session_dir: base,
+      ...(entry && {
+        note: entry.note || null,
+        updated_at: entry.updated_at || null,
+        updated_by: entry.updated_by || null,
+      }),
+    };
   }
 
   // ---- messages ------------------------------------------------------------
