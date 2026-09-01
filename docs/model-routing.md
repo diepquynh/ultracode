@@ -42,7 +42,7 @@ The hook re-reads the file on every spawn, so an edit takes effect on the next o
 
 | Value | Definition |
 | --- | --- |
-| `"fast"` / `"balanced"` / `"advanced"` | A neutral tier, resolved to a concrete model for whichever harness is running. The normal case. |
+| `"fast"` / `"balanced"` / `"advanced"` / `"frontier"` | A neutral tier, resolved to a concrete model for whichever harness is running. The normal case. |
 | `"gpt-5.6-sol"` | A concrete model name. Names belonging to another harness's tier get translated (see below); anything else is passed through as written. |
 | `{ "claude": "…", "codex": "…" }` | Pick the model per harness explicitly, with no translation. For when your backends don't line up with the tiers. |
 | `"default"` | The tier baked into the agent's own definition. An explicit "I looked at this and the default is fine." |
@@ -174,7 +174,9 @@ the hooks are not running, a model-less spawn inherits the parent's model and no
 
 The generated routing table carries the tier→model map for the harness it was built for, plus aliases from
 every *other* harness's model names to the local equivalent. Write `"opus"` in a profile and run it on Codex,
-and you get that harness's advanced model. A name that belongs to no tier is passed through untouched, so
+and you get that harness's advanced model. A name shared by several tiers resolves through the last tier in
+the mapping that lists it (so `gpt-5.6-sol`, which `advanced` and `frontier` share, translates as
+`frontier`). A name that belongs to no tier is passed through untouched, so
 pointing a route at something the mapping has never heard of still works.
 
 This matters because the profile is a committed file. One repo, one `models` block, a team split across Claude

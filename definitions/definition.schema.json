@@ -23,7 +23,7 @@
           "additionalProperties": false,
           "required": ["model_tier", "reasoning_effort", "tools", "timeout_seconds", "context"],
           "properties": {
-            "model_tier": { "enum": ["fast", "balanced", "advanced"] },
+            "model_tier": { "enum": ["fast", "balanced", "advanced", "frontier"] },
             "reasoning_effort": {
               "type": "object",
               "additionalProperties": false,

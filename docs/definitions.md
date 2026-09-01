@@ -29,8 +29,10 @@ The schema is `definitions/definition.schema.json`. Neutral model tiers resolve 
 | `fast` | `haiku` | `gpt-5.6-luna` | `grok-4.5` | `flash` |
 | `balanced` | `sonnet` | `gpt-5.6-terra` | `grok-4.5` | `flash` |
 | `advanced` | `opus` | `gpt-5.6-sol` | `grok-4.5` | `flash` |
+| `frontier` | `fable` | `gpt-5.6-sol` | `grok-4.5` | `flash` |
 
-Every Grok and Antigravity tier currently resolves to the same model.
+Every Grok and Antigravity tier currently resolves to the same model, and `frontier` differs from `advanced`
+only on Claude Code (where it selects Claude Fable 5).
 
 Canonical capabilities and their per-harness translations are explicit in `definitions/tool-mapping.json` — add
 a mapping before using a new capability in a definition. Where a harness has no equivalent, the mapping emits an

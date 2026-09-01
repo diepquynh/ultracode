@@ -18,6 +18,12 @@
       "codex": "gpt-5.6-sol",
       "grok": "grok-4.5",
       "antigravity": "flash"
+    },
+    "frontier": {
+      "claude": "fable",
+      "codex": "gpt-5.6-sol",
+      "grok": "grok-4.5",
+      "antigravity": "flash"
     }
   }
 }
