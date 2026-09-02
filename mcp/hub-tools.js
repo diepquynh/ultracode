@@ -7,10 +7,12 @@
 // A null hub still registers every tool so agents get an actionable error
 // instead of a missing tool name.
 //
-// Design rule carried through every description below: senders finish their
-// turn. msg_send and task_publish return immediately and the hub wakes the
-// recipient (native push or its single blocking msg_wait) — no tool here is
-// meant to be called in a status-polling loop.
+// Design rule carried through every description below: sessions never poll.
+// msg_send and task_publish return immediately and the hub wakes the recipient
+// (native push, or the finite msg_wait its ultracode:hub-wait subagent is
+// parked in). The only loop over msg_wait lives inside that fast-tier
+// subagent, whose spawn is the session's one blocking call — a harness lets a
+// subagent run far longer than it lets a single tool call run.
 
 const { z } = require("zod");
 
@@ -224,10 +226,10 @@ function registerHubTools(server, hub) {
       description:
         "Send a message to another registered session (to_session_key) or broadcast to every session of a " +
         "harness (to_harness) — exactly one of the two. Returns immediately; the hub wakes the recipient " +
-        "(native push, or its pending ultracode_msg_wait). The body must carry ADDRESSES — paths into the " +
-        "shared .ultracode session dir — not file contents; it is capped at 64 KiB for that reason. After " +
-        "sending, finish your turn: the reply arrives as a wake, not as something to poll for. Pass a " +
-        "dedupe_key when retrying so a resend cannot double-deliver.",
+        "(native push, or the ultracode_msg_wait its hub-wait subagent is parked in). The body must carry " +
+        "ADDRESSES — paths into the shared .ultracode session dir — not file contents; it is capped at 64 KiB " +
+        "for that reason. After sending, do not poll for the reply: it arrives as a wake, or inside the next " +
+        "ultracode:hub-wait result. Pass a dedupe_key when retrying so a resend cannot double-deliver.",
       inputSchema: {
         from_session_key: z.string(),
         from_secret: z.string(),
@@ -246,13 +248,17 @@ function registerHubTools(server, hub) {
     "ultracode_msg_wait",
     {
       description:
-        "Fetch messages addressed to this session, blocking until one arrives. This is ONE call, and the " +
-        "only blocking wait permitted — never call it in a loop. When the user asked this session to LISTEN " +
-        "(hub-listen), pass timeout_ms 0: the call parks indefinitely until a message arrives, the hub " +
-        "restarts, or the user cancels it themselves (ESC) — that park IS the listening state, and it keeps " +
-        "this session's registration alive. Otherwise use a finite timeout (default 25000, max 120000) and " +
-        "finish your turn on timed_out. Pass the cursor from your registration or the previous result; " +
-        "passing it back is the ack, so no ending of this call ever loses a message.",
+        "Fetch messages addressed to this session, blocking until one arrives or the timeout passes. An " +
+        "interactive session does not wait on this call itself — every harness cuts a long tool call — it " +
+        "spawns the ultracode:hub-wait subagent (fast tier) with its session_key, session_secret, and cursor, " +
+        "and that agent calls this tool in a loop of finite timeouts (55000 ms; 20000 on Grok) that stay " +
+        "under the cap, returning the first non-empty result. The spawn is the session's one blocking call. " +
+        "Inside hub-wait, repeating this call after timed_out is the job. Outside it, the only direct call " +
+        "is the immediate fetch after a pushed wake notice (the messages are already queued, so the default " +
+        "timeout returns at once). timeout_ms 0 parks indefinitely and is reserved for headless runs whose " +
+        "MCP tool timeout was raised. Finite timeouts default to 25000 and cap at 120000. Pass the cursor " +
+        "from your registration or the previous result; passing it back is the ack, so no ending of this " +
+        "call ever loses a message.",
       inputSchema: {
         session_key: z.string(),
         session_secret: z.string(),
@@ -263,8 +269,9 @@ function registerHubTools(server, hub) {
           .min(0)
           .optional()
           .describe(
-            "0 = park indefinitely (listening mode; ended by a message or the user's ESC). " +
-              "Otherwise how long to block (default 25000, max 120000).",
+            "How long to block (default 25000, max 120000). ultracode:hub-wait uses 55000 (20000 on Grok). " +
+              "0 = park indefinitely; only for headless runs with a raised MCP tool timeout, never from an " +
+              "interactive session.",
           ),
       },
     },
@@ -283,8 +290,8 @@ function registerHubTools(server, hub) {
         "payload.agent_hint and the phase file's complexity: OMIT target_harness whenever the profile routes " +
         "this stage. Pass target_harness only for a user-directed delegation with no profile route; a value " +
         "contradicting the current profile is refused with the routed harness named. Active sessions that " +
-        "could claim the task are woken automatically. After publishing, FINISH YOUR TURN and say you are " +
-        "waiting to be woken by the task's completion — do not poll.",
+        "could claim the task are woken automatically. After publishing, say which task id you are waiting " +
+        "on and spawn ultracode:hub-wait to wait for the completion notice — never poll this hub yourself.",
       inputSchema: {
         from_session_key: z.string(),
         from_secret: z.string(),

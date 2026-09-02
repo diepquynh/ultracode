@@ -719,13 +719,23 @@ when both name the agent). Then:
    the profile nor the user named a harness, put the choice to the user with {{tool_ask_user}} first. The
    publish result's `target_harness` and `routed_by` tell you where it actually went. Surface any
    `route_warning` to the user.
-3. **End your turn after publishing.** Say which task id you are waiting on and stop. The completion wakes you,
-   as a pushed message on push-capable harnesses, or on your next single `ultracode_msg_wait` call (pass your
-   cursor; one call, never a loop; Hard rule 19's no-polling applies to hub waits exactly as it does to
-   spawns). A `timed_out: true` result means finish the turn and let the user re-prompt. The cursor guarantees
-   nothing is lost.
-4. **On wake, treat the result like a subagent return.** The completion message carries `status`, `summary`,
-   and the worker's `report_file`. When the worker adopted this session (the usual case), that report sits in
+3. **Wait for the completion through `ultracode:hub-wait`.** Say which task id you are waiting on, then spawn
+   `ultracode:hub-wait` in the foreground. That spawn is your one blocking call (Hard rule 19): you never park
+   on `ultracode_msg_wait` yourself, because this harness cuts long tool calls while it lets a subagent run
+   for the whole wait. Its prompt carries `Primary repo root:`, `Repo root:`, `Session dir:` (`$SESSION_DIR`
+   itself), `Repo key:`, `Task: Wait for the completion notice of hub task {id}`, `Hub session key:`,
+   `Hub session secret:`, and `Hub cursor:` from your registration, and `Wait budget: 55`. It loops
+   `ultracode_msg_wait` with short finite timeouts under the cap and returns the first non-empty result as one
+   JSON object with the advanced `cursor`. Keep that cursor for every later wait. On `outcome: "timed_out"`
+   spawn it again with the returned cursor. On `"shutdown"` or `"error"` tell the user and stop. The secret
+   goes to this one agent and nowhere else. On a harness with a native wake channel the hub may also inject a
+   wake notice as a new turn: the messages it announces are already queued, so one `ultracode_msg_wait` call
+   with the default finite timeout returns them at once. That immediate fetch is the only direct
+   `ultracode_msg_wait` call you make, and a notice for messages the subagent already returned is stale.
+4. **On return, treat the completion notice like a subagent return.** The message whose `task_id` is yours
+   carries `status`, `summary`, and the worker's `report_file` in its JSON `body`. Other messages in the same
+   result (a `yolo-mode` notice, a direct message) are handled as their own sections describe, and you wait
+   again if your task is still open. When the worker adopted this session (the usual case), that report sits in
    **your own** session dir beside your artifacts. Read it there. The normal pipeline still applies: a
    delegated spec or plan still needs its fact-check and its `ultracode_gate` approval here before the next
    stage spawns. Delegation changes where work ran, never which gates it passes.
@@ -749,7 +759,7 @@ overnight on exactly that: a formatting failure, a review-cap approval prompt, a
 isolation covers both reads). The state is machine-level, keyed by this primary session, not per repo, and
 **every child of the session follows it**: subagent hooks read the same state locally, and hub-listen workers
 that adopted this session are notified through the message queue. A mid-run toggle arrives as a `yolo-mode`
-message (a wake, or on your next `ultracode_msg_wait` result). Acknowledge it in one line and apply it from
+message (a wake, or inside the next `ultracode:hub-wait` result). Acknowledge it in one line and apply it from
 the next spawn onward. The state file the hooks read is already updated, so no re-read is needed.
 
 **Scope.** YOLO governs the phases **after plan approval**: implement, review loops, format, the closing
@@ -859,7 +869,8 @@ default. Autonomy defers decisions. It never hides them.
     poll: no `{{tool_shell}}` sleep, wait, busy-loop, or keepalive, no `TaskOutput` polling, no reading agent
     output files in a loop, no "are you done?" pings. Phrases like "Wait for every plan agent to return" mean
     **do not spawn dependent work until those agents have returned**: a sequencing constraint, not a license
-    to poll.
+    to poll. Waiting on the hub is no exception: `ultracode:hub-wait` is a foreground spawn like any other,
+    and the finite-timeout `ultracode_msg_wait` loop lives inside it, never in this session.
 20. **Tests are opt-in, and never mid-pipeline.** Never spawn `ultracode:execution-path-analyzer`,
     `ultracode:write-test`, or the test review loop inside the per-phase loop (**Rule T1**). Run them only
     after **every** coding phase for that repo has passed review **and** the user has asked for tests, at the

@@ -33,6 +33,7 @@ const SESSION_ONLY_AGENTS = new Set([
   "explore",
   "fact-check",
   "generate-spec",
+  "hub-wait",
 ]);
 
 // agent -> (repoRoot, info) => extra absolute directories that agent may write

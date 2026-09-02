@@ -86,8 +86,9 @@ flowchart LR
 
 **A cross-harness hub.** One loopback HTTP MCP daemon per machine. It lets your interactive sessions on
 different harnesses message each other and hand each other tasks. A task carries paths into the shared
-session directory, not copied context. Delegate a phase to the harness best suited for it, end your turn,
-and get woken when the result lands. No third-party model proxy, no polling. See
+session directory, not copied context. Delegate a phase to the harness best suited for it and hand the wait
+to a cheapest-tier subagent that returns when the result lands. No third-party model proxy, no polling in
+the session. See
 [The cross-harness hub](docs/hub.md).
 
 **Tools and hooks.** Strict guardrails that stop the subagents from going off track, plus tools that let them
@@ -174,7 +175,7 @@ authorizes the worker's own native session to work inside a session directory it
 ```mermaid
 flowchart TD
     ORCH["Orchestrating session: /ultracode:orchestrate<br/>registers with the hub at session start"] -- "task_publish: paths into<br/>its session dir, never content" --> HUB["cross-harness hub<br/>one loopback daemon per machine"]
-    WORK["Worker session on any harness:<br/>/ultracode:hub-listen registers,<br/>drains the queue, parks on msg_wait, ends turn"] --- HUB
+    WORK["Worker session on any harness:<br/>/ultracode:hub-listen registers,<br/>drains the queue, waits through ultracode:hub-wait"] --- HUB
     HUB -- "wake notice<br/>(push or long-poll)" --> WORK
     WORK --> ADOPT["ultracode_session_query, pick the shared session,<br/>ultracode_session_adopt authorizes it<br/>for this native session"]
     ADOPT --> RUN["worker runs the delegated stage IN the shared dir.<br/>Recorded spec/plan approvals hold, so a plan-gated<br/>stage spawns without re-approval"]

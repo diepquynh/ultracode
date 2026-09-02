@@ -548,6 +548,30 @@ test("hub: expired lease reopens the task, then fails it after max attempts", (t
   assert.equal(JSON.parse(inbox.messages[0].body).status, "failed");
 });
 
+// The normal state of an ultracode:hub-wait loop: a finite wait on an empty
+// inbox ends with timed_out and an unchanged cursor, so the next call resumes
+// from the same place and nothing is lost between iterations.
+test("hub: a finite wait on an empty inbox reports timed_out with the cursor unchanged", async (t) => {
+  const fixture = makeFixture(t);
+  const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const facade = new HubFacade(state);
+  const session = registerDefault(state, fixture);
+
+  const result = await facade.waitMessages({
+    session_key: session.session_key,
+    session_secret: session.session_secret,
+    cursor: session.cursor,
+    timeout_ms: 50,
+  });
+  assert.deepEqual(result.messages, []);
+  assert.equal(result.cursor, session.cursor);
+  assert.equal(result.timed_out, true);
+  assert.equal(result.shutdown, false);
+  assert.equal(facade.waiters.size, 0);
+});
+
 test("hub: a claim's lease sweep wakes the publisher whose task it failed", async (t) => {
   const fixture = makeFixture(t);
   const { HubFacade } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));

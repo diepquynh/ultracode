@@ -217,6 +217,34 @@
         "Target file"
       ],
       "type": "text"
+    },
+    "hub_session_key": {
+      "labels": [
+        "Hub session key"
+      ],
+      "type": "text",
+      "description": "The waiting session's hub session_key, as returned by ultracode_session_register."
+    },
+    "hub_session_secret": {
+      "labels": [
+        "Hub session secret"
+      ],
+      "type": "text",
+      "description": "The waiting session's hub session_secret. Consumed only by ultracode:hub-wait, which never echoes it."
+    },
+    "hub_cursor": {
+      "labels": [
+        "Hub cursor"
+      ],
+      "type": "text",
+      "description": "The last hub message id the waiting session has already seen (from registration or the previous wait result)."
+    },
+    "wait_budget": {
+      "labels": [
+        "Wait budget"
+      ],
+      "type": "text",
+      "description": "How long ultracode:hub-wait keeps waiting before returning timed_out: a whole number of minutes, or \"none\" for as long as the harness allows the spawn to run."
     }
   },
   "agents": {
@@ -362,6 +390,19 @@
         "repo_key",
         "implement_reports",
         "report_file"
+      ]
+    },
+    "hub-wait": {
+      "required": [
+        "primary_repo_root",
+        "repo_root",
+        "session_dir",
+        "repo_key",
+        "task",
+        "hub_session_key",
+        "hub_session_secret",
+        "hub_cursor",
+        "wait_budget"
       ]
     }
   }

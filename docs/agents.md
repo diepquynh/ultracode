@@ -22,6 +22,7 @@ The files under `dist/<harness>/ultracode/agents/` are generated. Edit `agents/<
 | `ultracode:write-test` | Write one test per new execution path, using the repo's test framework. Optional stage, runs after every phase, on request. |
 | `ultracode:module-documentation` | Update area references under `skills/module-hub/references/`. Optional stage, runs after every phase, on request. |
 | `ultracode:prompt-generation` | Write or edit prompts, skills, and agent files following the meta-author standard. |
+| `ultracode:hub-wait` | Wait on the cross-harness hub for the session that spawned it: loop `ultracode_msg_wait` with finite timeouts under the harness's tool-call cap and return the first non-empty result verbatim. Runs on the `fast` tier, pinned by the model router. The only agent whose tool list is an MCP tool. |
 
 The prefix comes from the plugin loader, which registers each agent as `{plugin}:{frontmatter name}`. Agent
 files therefore keep a bare `name:` in their front matter. Writing `name: ultracode:explore` would register it

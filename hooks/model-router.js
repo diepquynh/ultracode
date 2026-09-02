@@ -111,8 +111,14 @@ async function main() {
 
     const profilePath = path.join(spawn.workRepoRoot, routing.runtime_dir, "repo-profile.json");
     const exempt = agent === "initializer" || agent === "fact-check";
+    // hub-wait is pinned to its definition tier (the cheapest one). It makes no
+    // decisions, so no repo has a reason to spend more on it, and reading the
+    // profile would only let a route that predates the agent deny the wait.
+    const pinned = agent === "hub-wait";
     let route;
-    if (!isFile(profilePath)) {
+    if (pinned) {
+      route = "default";
+    } else if (!isFile(profilePath)) {
       route = exempt ? spawn.model || "default" : "default";
     } else {
       const profile = readJsonIfFile(profilePath);

@@ -37,6 +37,10 @@ Routing works in two ways:
 - **By agent.** For subagents that always run on one model.
 - **By phase complexity.** For `implement` and `write-test`, whose model is chosen per plan phase by that
   phase's complexity tier.
+- **Pinned.** `hub-wait` always runs on the `fast` tier. It relays hub messages and decides nothing, so the
+  router ignores the profile for it: it is never denied for a missing route, and a `byAgent` entry for it has
+  no effect. A caller-supplied `model` that differs from the tier's model is still denied, like any other
+  spawn.
 
 The hook re-reads the file on every spawn, so an edit takes effect on the next one. No restart, no reload.
 

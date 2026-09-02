@@ -196,6 +196,9 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
     start failing every spec and plan approval. `ultracode:fact-check` gates approval regardless of routing
     (`ultracode_gate` refuses `decision: "approved"` without a recorded `PASS`), so a missing route only
     affects which model runs it, never whether it runs. Add a `fact-check` route to pick a specific tier.
+  - `hub-wait` is absent on purpose and cannot be routed. The hook pins it to its definition tier (`fast`)
+    without reading the profile: it only relays hub messages, so no repo has a reason to spend more on it. A
+    `hub-wait` key in `byAgent` is ignored.
 - `harnesses` routes which **harness** executes each stage, through the cross-harness hub (docs/hub.md). It is
   the harness-level sibling of `models`, with three differences. **The initializer never seeds this
   section.** The example above is illustrative only. Which harnesses a user runs is not detectable from the

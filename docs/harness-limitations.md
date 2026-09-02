@@ -262,8 +262,9 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
   reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
   plugin-bundled servers and reported the same tools "not found". Project-local `.mcp.json` in an untrusted
   dir is ignored the same way. Run from a trusted project or trust the directory first. Measured only.
-- Grok 1.0.13: only short (25 s or less) `ultracode_msg_wait` parks were measured. Grok is pull-only, so
-  re-run `/ultracode:hub-listen` when the harness cuts a park.
+- Grok 1.0.13: only short (25 s or less) `ultracode_msg_wait` parks were measured, which is why
+  `ultracode:hub-wait` uses 20 s waits here. Grok is pull-only, so re-run `/ultracode:hub-listen` if the
+  harness cuts the wait spawn itself.
 
 ## The ask channel (live, 2026-08-23)
 
@@ -285,7 +286,8 @@ rather than refused. `askPreToolUse` in `hooks/lib/common.js` picks the shape pe
 ## Hub wake channels (checked 2026-08-30)
 
 The cross-harness hub (docs/hub.md) can wake an idle interactive session only where the harness has a
-steering channel. Everywhere else delivery is pull-only (`ultracode_msg_wait`). A channel turns on by default
+steering channel. Everywhere else delivery is pull-only: the session's `ultracode:hub-wait` subagent sits in
+`ultracode_msg_wait`. A channel turns on by default
 only once a live run on a qualifying CLI version is recorded here. Claude and Codex are. Grok and Antigravity
 have no channel to gate.
 
@@ -311,9 +313,13 @@ have no channel to gate.
 ## Tool-call duration caps (live, 2026-08-30)
 
 Every harness bounds how long one tool call may run. That is what ends an "infinite" `ultracode_msg_wait`
-park (`timeout_ms: 0`) when the user does not. The park is designed to survive this. Whatever cuts the call,
-the registration stays alive (7-day idle expiry, parked waiters exempt from sweeps) and the cursor re-reads
-everything on the next wait. A cap costs a re-run of `/ultracode:hub-listen`, never a message.
+park (`timeout_ms: 0`) when the user does not. Whatever cuts the call, the registration stays alive (7-day
+idle expiry, parked waiters exempt from sweeps) and the cursor re-reads everything on the next wait, so a cut
+never costs a message. Because of these caps no interactive session parks itself any more: the wait runs
+inside the `ultracode:hub-wait` subagent (docs/hub.md, "Waiting without parking"), which loops finite waits
+sized from the measurements below (55 s per call; 20 s on Grok) for a budget the parent sets, while the
+parent blocks on the spawn. Subagent spawns are the one kind of call every harness lets run long. The
+measurements below are what set those per-call timeouts.
 
 - **Codex 0.151.0** (session 01a05219): long tool calls are moved to background cells that the model polls
   with its `wait` tool (about 60 s yields). After several yields the harness cut the listening park, and the

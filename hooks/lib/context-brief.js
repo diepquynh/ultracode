@@ -63,6 +63,8 @@ const SECTIONS_BY_AGENT = {
   "module-documentation": ["skills", "modules"],
   "fact-check": ["stack", "modules"],
   "prompt-generation": ["skills"],
+  // hub-wait only relays hub messages; nothing about the repo helps it.
+  "hub-wait": [],
 };
 
 function readJson(filePath) {
@@ -151,6 +153,7 @@ function buildBrief({ agent, prompt, repoRoot, runtimeDir }) {
   const inventoryRaw = readText(inventoryPath) || "";
   const inventory = inventoryRaw.replace(/\s+/g, " ");
   const sections = SECTIONS_BY_AGENT[agent] || ["commands", "skills"];
+  if (sections.length === 0) return null;
   const out = [];
 
   out.push(`## Repo brief — resolved for ultracode:${agent}`);

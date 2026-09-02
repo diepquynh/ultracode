@@ -104,7 +104,8 @@ agent afterwards on harnesses where children linger as separate threads.
 **Spawn tickets (MANDATORY before every spawn):** this harness seals spawn messages in transit, so before
 **every** subagent spawn call `ultracode_spawn_ticket` with `harness_session_id: $SESSION_ID`, the agent
 name, and `parameters` carrying exactly the spawn prompt's `Label: value` lines under snake_case keys
-(`repo_root`, `session_dir`, `repo_key`, `primary_repo_root`, `task`, and the agent-specific fields). The
+(`repo_root`, `session_dir`, `repo_key`, `primary_repo_root`, `task`, and the agent-specific fields; for
+`ultracode:hub-wait` those are `hub_session_key`, `hub_session_secret`, `hub_cursor`, and `wait_budget`). The
 `session_dir` is the **adopted** session dir. Tickets are single-use. File a fresh one per spawn, including
 re-spawns after a denial.
 {{/codex}}
@@ -127,24 +128,48 @@ same task. Then claim again. Drain the queue before waiting.
 
 **No task (`task: null`).** Go to Step 4.
 
-## Step 4: Park and listen
+## Step 4: Listen through a wait subagent
 
-Call `ultracode_msg_wait` **once**, with your `cursor` and **`timeout_ms: 0`**. The call parks until a
-message arrives. That park IS the listening state. It keeps your registration alive indefinitely, and it is
-still one single blocking call, not a loop (Hard rule 19's no-polling rule applies here exactly as it does to
-spawns). Tell the user before parking: "listening. Press ESC to stop." Only they end the park.
+Every harness caps how long one of your own tool calls may run, so you never park on `ultracode_msg_wait`
+yourself. Spawn `ultracode:hub-wait` in the foreground and let it wait for you. It runs on the cheapest model
+tier, calls `ultracode_msg_wait` in a loop of short finite timeouts that stay under the cap, keeps your
+registration alive, and returns the first non-empty result as one JSON object. That spawn is your single
+blocking call, and it IS the listening state. Tell the user before spawning: "listening. Press ESC to stop."
+Only they end the wait.
 
-- **Messages arrived:** a task notice (`task_id` with `status: "open"`) means claim it. Go back to Step 3. A
-  `yolo-mode` notice (`type: "yolo-mode"`) means the primary session's YOLO state changed: note the new
-  `enabled` value, apply it to every task you execute from now on (Step 3's YOLO rules), send no reply, and
-  park again. A direct message means read it, act on the paths it carries, and reply with `ultracode_msg_send`
-  (`reply_to` set) only when the sender asked a question. After handling everything, park again. Handling a
-  message and returning to the park is the listening loop's ONLY legitimate repetition.
-- **`shutdown: true`:** the hub is restarting. Finish the turn and tell the user to re-run
+The spawn prompt carries all of these lines, every time:
+
+- `Primary repo root:` `$PWD`. `Repo root:` `$PWD`. `Session dir:` the adopted (or fresh) session dir itself,
+  never a repo-key subdirectory. `Repo key:` this repo's key.
+- `Task:` `Listen for hub messages: task notices, yolo-mode notices, direct messages.`
+- `Hub session key:` and `Hub session secret:` from your registration. `Hub cursor:` the cursor you hold: from
+  registration, or the `cursor` of the previous wait result. The secret goes to this one agent and nowhere
+  else: never into a report, a message body, or a task summary.
+- `Wait budget:` `55`. The agent returns `timed_out` after that many minutes and you spawn it again with the
+  cursor it returned. One spawn per return is the listening loop's ONLY legitimate repetition.
+
+Read the returned JSON (`outcome`, `cursor`, `messages`). Its `cursor` is now your cursor. Then:
+
+- **`outcome: "messages"`:** each entry's `body` is a hub notice (a JSON string) or a direct message's text.
+  A task notice (`task_id` with `status: "open"`) means claim it. Go back to Step 3. A `yolo-mode` notice
+  (`type: "yolo-mode"`) means the primary session's YOLO state changed: note the new `enabled` value, apply it
+  to every task you execute from now on (Step 3's YOLO rules), and send no reply. A direct message means read
+  it, act on the paths it carries, and reply with `ultracode_msg_send` (`reply_to` set) only when the sender
+  asked a question. After handling everything, spawn `ultracode:hub-wait` again.
+- **`outcome: "timed_out"`:** nothing arrived within the wait budget. Spawn again with the returned cursor and
+  say nothing. Silence is the normal state of listening.
+- **`outcome: "shutdown"`:** the hub is restarting. Finish the turn and tell the user to re-run
   `/ultracode:hub-listen` in a moment.
-- **The user cancelled (ESC), or the harness cut the call** (some harnesses cap tool-call duration; the result
-  may show `timed_out: true` or the call may simply end): finish the turn. The registration survives for days
-  and the cursor loses nothing. Re-running `/ultracode:hub-listen` resumes exactly where the park ended.
+- **`outcome: "error"`:** relay the error text to the user and finish the turn. Never retry a failed
+  authentication with guessed values.
+- **`outcome: "cancelled"`, the user cancelled (ESC), or the harness cut the spawn:** finish the turn. The
+  registration survives for days and the cursor loses nothing. Re-running `/ultracode:hub-listen` resumes
+  exactly where the wait ended.
+
+**Pushed wake notices.** On a harness with a native wake channel the hub may also inject a wake notice as a
+new turn. The messages it announces are already queued, so one `ultracode_msg_wait` call with the default
+finite timeout returns them at once without parking. That is the only direct `ultracode_msg_wait` call you
+ever make. If it returns nothing new, the wait subagent already delivered them: continue as above.
 
 ## Hard rules
 
@@ -163,6 +188,8 @@ spawns). Tell the user before parking: "listening. Press ESC to stop." Only they
    orchestrator procedure's Hard rule 23 applies verbatim). Adopt a session only through
    `ultracode_session_adopt`, never by hand-picking a session dir whose id is not yours. The guards reject
    that precisely because no adoption authorized it.
-5. **One park, never a poll.** The `timeout_ms: 0` wait blocks until there is something to do. Calling
-   `ultracode_msg_wait` repeatedly with short timeouts is polling and stays forbidden. Ending the park is the
-   user's move (ESC), not yours.
+5. **Wait through `ultracode:hub-wait`, never by hand.** You never park on `ultracode_msg_wait` yourself: a
+   `timeout_ms: 0` park is cut by the harness, and repeated short calls from this session are polling, which
+   stays forbidden. The finite-timeout loop lives inside the wait subagent, which is one foreground spawn
+   (Hard rule 19 of the orchestrator procedure). The one direct call you make is the immediate fetch after a
+   pushed wake notice. Ending the wait is the user's move (ESC), not yours.

@@ -55,6 +55,24 @@
       },
       "body_sha256": "dd9de9f1754eb27d31d9a0a22732bf1492524503b3daf4bbfb8f5acfd6c8dea5"
     },
+    "fact-check": {
+      "frontmatter": {
+        "name": "fact-check",
+        "description": "Repo-agnostic fact-checking subagent for ultracode. Spawned by the orchestrator after ultracode:generate-spec and after ultracode:plan return, before either is presented for approval: (1) every request that reaches a spec or a plan runs this agent against that artifact, mandatorily, (2) the user explicitly asks to fact-check a spec, plan, or research document. It verifies that every concrete claim the target file makes — a referenced file, function, API, or library capability — is actually true of this repo or is traceable to fetched documentation rather than recalled knowledge, and returns a single {verdict, target, findings} JSON object. A PASS verdict is required before the ultracode_gate MCP tool will record spec or plan approval, regardless of what the orchestrator or the user decides. It does NOT modify project source.",
+        "model": "opus",
+        "effort": "high",
+        "tools": [
+          "Read",
+          "Write",
+          "Bash",
+          "Grep",
+          "Glob"
+        ],
+        "timeout": "600",
+        "context": "fork"
+      },
+      "body_sha256": "898ce13d496c6d81769cb629435ec03db45fddb7a3f3243e662c7eddc51991d1"
+    },
     "generate-spec": {
       "frontmatter": {
         "name": "generate-spec",
@@ -73,6 +91,21 @@
         "context": "fork"
       },
       "body_sha256": "b3c9b368c4ebc2790ee5701ab988f6a32ae5c04ccae3efdd745e896fb28de56b"
+    },
+    "hub-wait": {
+      "frontmatter": {
+        "name": "hub-wait",
+        "description": "Repo-agnostic hub-waiting subagent for ultracode. Spawned by an orchestrate or hub-listen session whenever that session must wait for something from the cross-harness hub: (1) a hub-listen worker has drained its task queue and is listening for the next task notice, (2) an orchestrator published a task to another harness and is waiting for its completion notice, (3) any session is waiting for a direct message or a yolo-mode notice. It is the ONLY place a session waits: it calls the ultracode_msg_wait MCP tool in a loop of finite timeouts that stay under every harness's tool-call duration cap, keeps the parent's hub registration alive, and returns the first non-empty result as one JSON object with the advanced cursor. The parent's single blocking call is this spawn, never a hub tool. It runs on the cheapest model tier because it decides nothing: it never claims, completes, replies, or interprets a message, and it never touches project source or the session dir.",
+        "model": "haiku",
+        "effort": "low",
+        "tools": [
+          "Read",
+          "mcp__plugin_ultracode_ultracode-gate__ultracode_msg_wait"
+        ],
+        "timeout": "3600",
+        "context": "fork"
+      },
+      "body_sha256": "9ea627f4a4987e80db27586502d11c5afde38d93903014f683e40386ba3d367b"
     },
     "implement": {
       "frontmatter": {
@@ -111,7 +144,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "cf73fc19a42fcab688a6c94452ec68e221983e50ca691a0cd81e01bfeab3cec2"
+      "body_sha256": "066176777066b4535f715909b0ee0fd89224ed65af542ae3549c09a8e48f30ab"
     },
     "module-documentation": {
       "frontmatter": {
@@ -188,24 +221,6 @@
         "context": "fork"
       },
       "body_sha256": "0d8855926926295d32292a43b6d9c710a244f65744378472e7fad4d432c35741"
-    },
-    "fact-check": {
-      "frontmatter": {
-        "name": "fact-check",
-        "description": "Repo-agnostic fact-checking subagent for ultracode. Spawned by the orchestrator after ultracode:generate-spec and after ultracode:plan return, before either is presented for approval: (1) every request that reaches a spec or a plan runs this agent against that artifact, mandatorily, (2) the user explicitly asks to fact-check a spec, plan, or research document. It verifies that every concrete claim the target file makes — a referenced file, function, API, or library capability — is actually true of this repo or is traceable to fetched documentation rather than recalled knowledge, and returns a single {verdict, target, findings} JSON object. A PASS verdict is required before the ultracode_gate MCP tool will record spec or plan approval, regardless of what the orchestrator or the user decides. It does NOT modify project source.",
-        "model": "opus",
-        "effort": "high",
-        "tools": [
-          "Read",
-          "Write",
-          "Bash",
-          "Grep",
-          "Glob"
-        ],
-        "timeout": "600",
-        "context": "fork"
-      },
-      "body_sha256": "898ce13d496c6d81769cb629435ec03db45fddb7a3f3243e662c7eddc51991d1"
     }
   },
   "skills": {

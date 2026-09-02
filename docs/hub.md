@@ -73,7 +73,7 @@ stdio and HTTP can never drift:
 | `ultracode_session_query` | Lists the shared ultracode sessions known for a repo (id, dir, inferred stage, participants, last activity). Used by the hub-listen picker and for resume. |
 | `ultracode_session_adopt` | Authorizes this session to work inside a shared ultracode session it did not create (by dir, or by id plus repo for resume). Returns the shared `session_dir` to use as `Session dir:` from then on. |
 | `ultracode_msg_send` | Sends a direct message (`to_session_key`) or a harness broadcast (`to_harness`). Returns immediately. The body is capped at 64 KiB and carries paths, not content. `dedupe_key` makes retries idempotent. |
-| `ultracode_msg_wait` | One cursor-based long-poll. `timeout_ms: 0` parks indefinitely. That is the listening state for pull-only harnesses, ended only by a message, a hub restart, or the user pressing ESC (the harness's MCP cancellation aborts the request and the hub reaps the waiter; a dropped connection reaps it too). Finite waits default to 25 s and cap at 120 s. Reads destroy nothing. Passing the advanced cursor on the next call is the acknowledgement, so every ending is lossless. |
+| `ultracode_msg_wait` | One cursor-based long-poll. Finite waits default to 25 s and cap at 120 s; `timeout_ms: 0` parks indefinitely (headless runs only). An interactive session never waits on it directly: it spawns `ultracode:hub-wait`, a `fast`-tier subagent that loops finite waits under the harness's tool-call cap and returns the first non-empty result, so the session's one blocking call is a spawn the harness lets run for the whole wait. Cancellation (ESC) aborts the request and the hub reaps the waiter; a dropped connection reaps it too. Reads destroy nothing. Passing the advanced cursor on the next call is the acknowledgement, so every ending is lossless. |
 | `ultracode_task_publish` | Queues a task addressed by `target_harness` or `capability`. The payload is validated against the same required-inputs contract as subagent spawns, capped at 32 KiB, with all paths confined to the publisher's session dir. Candidate workers are woken automatically. |
 | `ultracode_task_claim` | Takes an exclusive claim under a lease (default 15 min, cap 60). Expired leases reopen the task with `attempts` incremented. The third expiry fails the task and notifies the publisher. |
 | `ultracode_task_complete` | Records `done` or `failed`, a summary, and a `report_file` inside the worker's own session dir. Inserts the completion message and wakes the publisher. |
@@ -82,12 +82,13 @@ stdio and HTTP can never drift:
 
 ## Delivery: push first, one pull as fallback
 
-The goal is that a sender ends its turn after `msg_send` or `task_publish` instead of burning tool calls
-polling. Delivery order for each committed message:
+The goal is that no session ever polls. After `msg_send` or `task_publish` the sender hands the wait to
+`ultracode:hub-wait` (the "Waiting without parking" section below) instead of burning its own tool calls.
+Delivery order for each committed message:
 
 ```mermaid
 flowchart TD
-    COMMIT["message row committed to hub.sqlite3<br/>(before any push is attempted, so<br/>adapter failure can never lose a message)"] --> PARKED{"recipient has a<br/>parked long-poll?"}
+    COMMIT["message row committed to hub.sqlite3<br/>(before any push is attempted, so<br/>adapter failure can never lose a message)"] --> PARKED{"recipient has a<br/>parked long-poll?<br/>(its hub-wait subagent's finite wait)"}
     PARKED -- yes --> LP["resolves immediately<br/>(channel: long-poll)"]
     PARKED -- no --> NATIVE{"native push channel<br/>for the recipient?"}
     NATIVE -- codex-queue --> CQ["codex queue --thread &lt;session-UUID-or-name&gt;<br/>--message &lt;notice&gt;"]
@@ -118,8 +119,35 @@ daemon out with `ULTRACODE_HUB_CLAUDE_PUSH=0` or `ULTRACODE_HUB_CODEX_PUSH=0`.
   a per-user trust decision Claude Code owns. ultracode documents it but never sets it for you.
 
 On the receiving side, the user opens a session on the harness they want doing the work and runs
-`/ultracode:hub-listen`: register, drain the task queue, one `msg_wait`, end turn. The publisher's flow is the
-"Cross-harness delegation" section of `/ultracode:orchestrate`.
+`/ultracode:hub-listen`: register, drain the task queue, then block on an `ultracode:hub-wait` spawn that
+returns when a message lands. The publisher's flow is the "Cross-harness delegation" section of
+`/ultracode:orchestrate`.
+
+## Waiting without parking
+
+Every harness caps how long one tool call may run (measured in docs/harness-limitations.md, "Tool-call
+duration caps"), and a session's own `ultracode_msg_wait` park dies with that cap. A subagent spawn is allowed
+to run far longer, so the wait moves into one. `ultracode:hub-wait` is a `fast`-tier agent whose only tool is
+`ultracode_msg_wait`. The waiting session spawns it in the foreground with its hub `session_key`,
+`session_secret`, and `cursor`, a `Task:` line naming what it waits for, and a `Wait budget:` in minutes. The
+agent loops finite waits (55 s, or 20 s on Grok) under the cap, and returns the first non-empty result as one
+JSON object: `outcome` (`messages`, `timed_out`, `shutdown`, `cancelled`, `error`), the advanced `cursor`, and
+every message verbatim. The parent claims, completes, replies, or applies YOLO from that result itself. The
+agent decides nothing, which is why it runs on the cheapest tier: the model router pins it there regardless of
+the repo profile.
+
+The rules that follow from this:
+
+- A session's one blocking call is the spawn. It never calls `ultracode_msg_wait` itself, except once, with a
+  finite timeout, right after a pushed wake notice, when the messages are already queued and the call returns
+  at once.
+- The loop of finite waits is legitimate only inside `hub-wait`. From any other context it is polling.
+- A `timed_out` return means nothing arrived within the budget: the parent spawns again with the returned
+  cursor. One spawn per return is the listening loop's only repetition.
+- The secret travels in the spawn prompt to this one agent and nowhere else. Spawn hooks persist only the
+  repo, session, phase, and report parameters from a prompt, never the whole prompt, and the agent is
+  forbidden to echo it. On Codex the same fields ride in the single-use spawn ticket under `~/.ultracode`
+  (mode 0600, the same trust domain as the hub's own database).
 
 ## Harness routing (`repo-profile.json`, `harnesses` section)
 
@@ -259,6 +287,7 @@ Mirrors docs/harness-limitations.md: a dated, measured entry gates each feature 
 | V3 | `codex queue` flags and behavior (0.149.0 or newer) | pinning `push/codex.js` argv | **Verified 2026-08-30 on 0.151.0**: `codex queue --thread <UUID\|name> --message <text>`. Pinned, default-on, `ULTRACODE_HUB_CODEX_PUSH=0` to opt out. Feature detection keeps pre-0.149 CLIs pull-only |
 | V4 | Direct HTTP MCP registration per harness (Codex `url` plus `bearer_token_env_var`, Grok config.toml `url`, Claude plugin `type:"http"`, AGY `agy mcp add --url`) | a `--mcp-transport http` generator mode | Open. Shim registration is v1 for all four |
 | V5 | Per-harness tool-call duration caps that cut a `msg_wait` park | documented behavior per harness | **Measured 2026-08-30**. See "Tool-call duration caps" in docs/harness-limitations.md (codex backgrounds then caps, but push wakes it anyway; claude honors `MCP_TOOL_TIMEOUT`; agy and grok cut, and you re-run). Always harmless: registration and cursor survive |
+| V6 | `ultracode:hub-wait` finite-wait loop (55 s per call, 20 s on Grok) runs for a full 55-minute budget inside one subagent spawn on every harness, and the Claude agent's explicit MCP tool allowlist resolves | the per-call `timeout_ms` and the `Wait budget` default in the command prompts | Open. Per-call timeouts were chosen from V5's measurements (110 s completed on Claude and AGY; 25 s or less measured on Grok; Codex yields at about 60 s); the long spawn itself is unmeasured. If a harness cuts the spawn early, the cursor survives and the parent re-spawns |
 
 ## Operations
 
@@ -298,5 +327,6 @@ agy mcp add uchub node <abs>/mcp/hub-shim.js && agy -p "<prompt>" --dangerously-
 ```
 
 Blocking `ultracode_msg_wait` calls in a headless run need the harness's MCP tool timeout raised
-(`MCP_TOOL_TIMEOUT=180000` for Claude) and the prompt told that the block is expected. Clean up with
+(`MCP_TOOL_TIMEOUT=180000` for Claude) and the prompt told that the block is expected. Interactive sessions
+need neither: they wait through `ultracode:hub-wait`. Clean up with
 `grok mcp remove uchub`, `agy mcp remove uchub`, and `node mcp/hub-ctl.js stop` under the same env.
