@@ -1,7 +1,7 @@
-# Stack Reference — java-spring
+# Stack Reference: java-spring
 
-Java + Spring Boot, Maven or Gradle, typically a multi-module monorepo. This reference tells the scout
-which component types recur, how to find them, and which invariants to capture per type.
+Java + Spring Boot, Maven or Gradle, typically a multi-module monorepo. This reference tells the scout which
+component types recur, how to find them, and which invariants to capture per type.
 
 ## Detection signals
 - `pom.xml` (Maven) or `build.gradle`/`build.gradle.kts` (Gradle) at root and/or per module.
@@ -22,7 +22,8 @@ which component types recur, how to find them, and which invariants to capture p
 | lint | checkstyle/PMD if configured, else null | same |
 | run | `./mvnw spring-boot:run -pl {MODULE}` | `./gradlew :{MODULE}:bootRun` |
 
-Detect the wrapper actually present (`mvnw` vs `gradlew`) and whether `spotless` is configured before writing commands.
+Detect the wrapper actually present (`mvnw` vs `gradlew`) and whether `spotless` is configured before writing
+commands.
 
 ## Test framework
 JUnit 5 + Mockito. Location: mirror the SUT package under `{module}/src/test/java/**`, class named `{Sut}Test`.
@@ -32,7 +33,7 @@ replacement for `@MockBean`) in context tests. Slice/context per test type: `@Ex
 `@SpringBootTest(webEnvironment = NONE)` (integration `contextLoads`). Commands: `./mvnw test`; one test
 `./mvnw test -pl {MODULE} -am -Dtest={TEST} -Dsurefire.failIfNoSpecifiedTests=false`.
 
-**Capture import packages from the real test, do not assume.** A Spring Boot 4 / modularized codebase uses
+**Capture import packages from the real test. Do not assume.** A Spring Boot 4 / modularized codebase uses
 `org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest` and
 `org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase` (not the Boot 3
 `org.springframework.boot.test.autoconfigure.*` paths). If a module has no `*Test.java`, treat T1 ("new public
@@ -43,9 +44,9 @@ method without a unit test") as a gap to fill from this convention, not an exist
 For each test type: **find** (grep, `--include='*.java'`), **capture** invariants from ONE real exemplar,
 generate the named **skill** (Archetype D). Propose ONE shared convention skill `unit-test-common` (JUnit 5 +
 `@DisplayName` behavior naming, one behavior per `@Test`, static imports, Arrange-Act-Assert / Given-When-Then,
-mock collaborators — no Spring context in a unit test); every test skill below applies it first.
+mock collaborators, no Spring context in a unit test). Every test skill below applies it first.
 
-### service unit test → skill `unit-test-services`
+### service unit test: skill `unit-test-services`
 - find: `*ServiceTest.java` annotated `@ExtendWith(MockitoExtension.class)` (the test for a `Default*Service`).
 - capture: collaborators as `@Mock`, SUT as `@InjectMocks`; `@BeforeEach` stubs shared mocks; fixed time via a
   `private static final ZonedDateTime` constant; one `@Test @DisplayName("Should …")` per path (null arg, empty
@@ -54,10 +55,10 @@ mock collaborators — no Spring context in a unit test); every test skill below
   assertions; assert return value and captured event/args.
 - exemplar: `order-rest/src/test/java/com/example/backend/order/service/impl/DefaultOrderServiceTest.java`.
 
-### repository test → skill `unit-test-repository`
+### repository test: skill `unit-test-repository`
 - find: `*RepositoryTest.java` that `extends BaseRepositoryTest`.
 - capture: per-module abstract `BaseRepositoryTest` carrying `@DataJpaTest` + `@AutoConfigureTestDatabase(replace = NONE)`
-  + `@ActiveProfiles("test")` + `@Import(TestDatasourceConfig.class)` — the `replace = NONE` keeps the real
+  + `@ActiveProfiles("test")` + `@Import(TestDatasourceConfig.class)`. The `replace = NONE` keeps the real
   datasource (this suite runs on real PostgreSQL, not an embedded DB; confirm from the module's
   `application-test.yaml`). Concrete test `@Autowired`s the repository + FK-parent repositories +
   `@PersistenceContext EntityManager`; seeds via entity builders setting EVERY `NOT NULL` column (check the
@@ -66,7 +67,7 @@ mock collaborators — no Spring context in a unit test); every test skill below
   in reverse FK order.
 - exemplar: `order-rest/src/test/java/com/example/backend/order/repository/OrderRepositoryTest.java` + sibling `BaseRepositoryTest.java`.
 
-### controller test → skill `unit-test-rest-controller`
+### controller test: skill `unit-test-rest-controller`
 - find: `*ControllerTest.java` importing `org.springframework.test.web.servlet.MockMvc`.
 - capture: `@ActiveProfiles("test")` + `@SpringBootTest(classes = {Module}Application.class, webEnvironment = MOCK)`;
   every service dependency `@MockitoBean`; `MockMvc` built in `@BeforeEach` via `MockMvcBuilders.webAppContextSetup(webApplicationContext)`;
@@ -75,7 +76,7 @@ mock collaborators — no Spring context in a unit test); every test skill below
   assertions via `.andExpect(status()...)` + `jsonPath(...)`; stub services with `when(...).thenReturn(...)`; `@AfterEach` resets mocks.
 - exemplar: `order-rest/src/test/java/com/example/backend/order/controller/OrderControllerTest.java`.
 
-### integration boot test → reference only (fold into `unit-test-common`, not a separate skill)
+### integration boot test: reference only (fold into `unit-test-common`, not a separate skill)
 - find: `*IntegrationSpringBootTest.java`.
 - capture: one per module; a single `contextLoads()` `@Test`; `@SpringBootTest(classes = {Module}Application.class, webEnvironment = NONE)`.
   Use it in `unit-test-common` to draw the unit/integration boundary (unit tests mock collaborators; this boots the whole context).
@@ -111,7 +112,7 @@ For each type: **find** (grep pattern, `--include='*.java'`) then **capture** th
 
 ### mq / message handler
 - find: `@RabbitListener` / `RedisStream` / `CommandHandler` / `CommandListener`
-- invariants: listener→handler split; idempotency; redrive/retry scheduler; command deserialization.
+- invariants: listener/handler split; idempotency; redrive/retry scheduler; command deserialization.
 
 ### scheduler
 - find: `@Scheduled` / `ShedLock` / `@SchedulerLock`

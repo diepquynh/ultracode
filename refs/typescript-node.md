@@ -1,4 +1,4 @@
-# Stack Reference — typescript-node
+# Stack Reference: typescript-node
 
 TypeScript on Node, pnpm workspaces monorepo. Backend frameworks: NestJS, Express, Fastify. Front-end/full-stack:
 Next.js, React, Expo/React Native. Data layer: Prisma, TypeORM, Drizzle, or a hand-rolled driver (e.g. `better-sqlite3`).
@@ -6,8 +6,8 @@ This reference tells the scout which component types recur, how to find them, an
 
 ## Detection signals
 - `package.json` + `tsconfig.json` (often a shared `tsconfig.base.json` at root that each workspace `extends`).
-- Lockfile picks the package manager: `pnpm-lock.yaml`→pnpm, `yarn.lock`→yarn, `package-lock.json`→npm, `bun.lockb`→bun.
-  Also read `packageManager` in root `package.json` (e.g. `"pnpm@11.1.1"`).
+- Lockfile picks the package manager: `pnpm-lock.yaml` means pnpm, `yarn.lock` means yarn, `package-lock.json` means npm,
+  `bun.lockb` means bun. Also read `packageManager` in root `package.json` (e.g. `"pnpm@11.1.1"`).
 - Monorepo: `pnpm-workspace.yaml` (`packages: ["apps/*", "packages/*"]`), `workspaces`, `turbo.json`, or `nx.json`.
 - Framework by dependency: `@nestjs/*`, `express`, `fastify`, `next`, `react`, `expo`.
 - Data layer by dependency/files: `@prisma/client` + `schema.prisma`; `typeorm` + `@Entity`; `drizzle-orm`; or a driver
@@ -30,16 +30,16 @@ Root usually fans out to every workspace via `pnpm -r run <script>` (add `--para
 | run (dev) | `{pm} run dev` (per-app: `nest start --watch` / `next dev` / `expo start`) |
 
 Detect the package manager from the lockfile and target a single workspace with `--filter <name>` before writing commands.
-Do not assume `format`/`lint` exist — many scripts are stubs (`echo "(no lint configured)"`); treat a stub as "not configured".
+Do not assume `format`/`lint` exist. Many scripts are stubs (`echo "(no lint configured)"`). Treat a stub as "not configured".
 
 ## Test framework
-Jest and/or Vitest — a monorepo may use both (e.g. Jest for the app, Vitest for a pure package). Detect per workspace:
+Jest and/or Vitest. A monorepo may use both (e.g. Jest for the app, Vitest for a pure package). Detect per workspace:
 - Jest: a `jest.config.ts`/`jest.config.js` or a `jest` key in `package.json`; test files matched by `testRegex`
   (commonly `.*\.test\.ts$`) or `*.spec.ts`. NestJS commonly pairs `ts-jest` + `@nestjs/testing`.
 - Vitest: `vitest.config.ts` or a `test` block in the config; script `vitest run`.
 - Test doubles: `jest-mock-extended` (`mock<T>()`, `DeepMockProxy`) for interfaces; `@nestjs/testing`
   `Test.createTestingModule` for wiring; `supertest` for HTTP; Testing Library (`@testing-library/react[-native]`) for UI.
-Confirm which framework each workspace actually uses before writing a test command — do not assume one globally.
+Confirm which framework each workspace actually uses before writing a test command. Do not assume one globally.
 
 **Angular workspaces use a different stack:** Jasmine + Karma via the Angular CLI, not Jest/Vitest. Signals:
 `@types/jasmine` + `karma*` devDeps, `"test": "ng test"`, Karma config inlined in `angular.json` (builder
@@ -53,7 +53,7 @@ For each test type: **find** (grep), **capture** invariants from ONE real exempl
 **skill** (Archetype D). Propose ONE shared convention skill `unit-test-common` per workspace, matched to the
 runner that workspace actually uses (Jest, Vitest, or Jasmine/Karma).
 
-### Angular component spec → skill `unit-test-component`  (Jasmine + Karma + TestBed)
+### Angular component spec: skill `unit-test-component`  (Jasmine + Karma + TestBed)
 - find: `*.component.spec.ts` importing `TestBed` from `@angular/core/testing`.
 - capture: `describe('{Component}', () => { let component; let fixture: ComponentFixture<{Component}>; … })`;
   `beforeEach(async () => { await TestBed.configureTestingModule({ imports: [{StandaloneComponent}] }).compileComponents(); … })`;
@@ -66,13 +66,13 @@ runner that workspace actually uses (Jest, Vitest, or Jasmine/Karma).
   injecting `MatDialogRef`/`MAT_DIALOG_DATA` needs matching `providers` or `detectChanges()` throws.
 - exemplar: `src/app/<feature>/<feature>.component.spec.ts` (smoke baseline); the root `app.component.spec.ts` often carries the one DOM assertion.
 
-### Jest/Vitest unit test (provider / service / route) → skill `unit-test-{type}`
+### Jest/Vitest unit test (provider / service / route): skill `unit-test-{type}`
 - find: `*.test.ts` / `*.spec.ts` matched by the workspace's `testRegex`.
 - capture: `mock<T>()`/`DeepMockProxy` (`jest-mock-extended`) or `Test.createTestingModule` (`@nestjs/testing`)
   for interfaces; `supertest` for HTTP; Testing Library for UI. One test per execution path; assert result and
   verify mock calls. Only propose this when the workspace has committed Jest/Vitest tests to ground it.
 
-## Component catalog (find → capture invariants)
+## Component catalog (find, then capture invariants)
 
 For each type: **find** (grep, `--include='*.ts'` / `'*.tsx'`) then **capture** the listed invariants. Verify a pattern
 returns hits in the target repo before relying on it.
@@ -87,11 +87,11 @@ returns hits in the target repo before relying on it.
 
 ### dto / schema
 - find: `class .*Dto` + `class-validator` (`@IsString`, `@IsOptional`, `@MaxLength`), or `z.object(` (zod). ex: `apps/api/src/article/dto/create-article.dto.ts` (class); `apps/api/src/ingest/ingest.schema.ts` (zod)
-- invariants: two idioms coexist — **request DTOs** are `class` + `class-validator` (enforced by a global `ValidationPipe`, non-`Dto` fields whitelisted/rejected); **internal/LLM payloads** are zod `z.object(...)` with `type X = z.infer<typeof Schema>`. Capture which lib guards which boundary; `!`/`?` mark required/optional.
+- invariants: two idioms coexist. **Request DTOs** are `class` + `class-validator` (enforced by a global `ValidationPipe`, non-`Dto` fields whitelisted/rejected). **Internal/LLM payloads** are zod `z.object(...)` with `type X = z.infer<typeof Schema>`. Capture which lib guards which boundary; `!`/`?` mark required/optional.
 
 ### entity / model / repository
 - find: Prisma `model X` in `schema.prisma`; TypeORM `@Entity(`; or `class .*Repository`. ex: `apps/api/prisma/schema.prisma`; `apps/api/src/article/article.repository.ts`; `apps/api/src/database/migration-runner.ts`
-- invariants: **ORM boundary** — which store each layer owns (e.g. one DB via Prisma, another via a raw driver). Prisma: `@id`/`@default`, relations, `@@map`/`@@index`, `prisma migrate`. Raw-driver repository: `@Injectable()`; a `*Row` (snake_case) + `*Domain` (camelCase) type pair with a `toDomain()` mapper; prepared statements; multi-step deletes wrapped in `db.transaction(() => …)`; migration mechanism (`prisma migrate` vs hand-rolled SQL under a `migrations/` dir applied by a runner).
+- invariants: **ORM boundary**: which store each layer owns (e.g. one DB via Prisma, another via a raw driver). Prisma: `@id`/`@default`, relations, `@@map`/`@@index`, `prisma migrate`. Raw-driver repository: `@Injectable()`; a `*Row` (snake_case) + `*Domain` (camelCase) type pair with a `toDomain()` mapper; prepared statements; multi-step deletes wrapped in `db.transaction(() => …)`; migration mechanism (`prisma migrate` vs hand-rolled SQL under a `migrations/` dir applied by a runner).
 
 ### module
 - find: `@Module(` (Nest). ex: `apps/api/src/article/article.module.ts`
@@ -103,7 +103,7 @@ returns hits in the target repo before relying on it.
 
 ### job / worker (queue)
 - find: `@Processor(` + `extends WorkerHost` (Nest BullMQ) / `new Worker(` / `.process(` (bare BullMQ) / `@Cron(`. ex: `apps/api/src/generation/content-generation.worker.ts`; `apps/api/src/queue/queue.module.ts`
-- invariants: `@Processor(QUEUE_NAME, { concurrency, lockDuration, … })`; `override async process(job: Job<T>)`; job data typed (often a discriminated union on a `type` field); retry semantics (throw → BullMQ retries; `return` for terminal failures); fire-and-forget follow-ups via `void queue.add(...).catch(...)`; queue names centralized in a constants module and registered via `BullModule.registerQueue`.
+- invariants: `@Processor(QUEUE_NAME, { concurrency, lockDuration, … })`; `override async process(job: Job<T>)`; job data typed (often a discriminated union on a `type` field); retry semantics (throw means BullMQ retries; `return` for terminal failures); fire-and-forget follow-ups via `void queue.add(...).catch(...)`; queue names centralized in a constants module and registered via `BullModule.registerQueue`.
 
 ### auth strategy / config
 - find: Passport `new Strategy(...)` inside an `@Injectable()`, or env-schema parsing. ex: `apps/api/src/auth/google.strategy.ts`; `apps/api/src/common/config/config.schema.ts`
@@ -111,7 +111,7 @@ returns hits in the target repo before relying on it.
 
 ### exception / error filter
 - find: `extends Error` (domain error) and `implements ExceptionFilter` + `@Catch()` (global filter). ex: `apps/api/src/article/errors/article-not-found.error.ts`; `apps/api/src/common/filters/global-exception.filter.ts`
-- invariants: domain errors are thin `class X extends Error` with a literal `readonly code = '…' as const` and `this.name = 'X'`; a single `@Catch()` filter maps error class name → HTTP status and emits a consistent `{ error: { code, message } }` body; registered once via `app.useGlobalFilters(...)` at bootstrap.
+- invariants: domain errors are thin `class X extends Error` with a literal `readonly code = '…' as const` and `this.name = 'X'`; a single `@Catch()` filter maps error class name to HTTP status and emits a consistent `{ error: { code, message } }` body; registered once via `app.useGlobalFilters(...)` at bootstrap.
 
 ### front-end (Next.js / React / Expo)
 - find: `'use client'`, `@tanstack/react-query` `useQuery`/`useMutation`, `export default function`. ex: `apps/web/src/hooks/useItems.ts`; pure package fn: `packages/prompt/src/serializers/summary.ts`
@@ -119,25 +119,25 @@ returns hits in the target repo before relying on it.
 
 ## Conventions to look for (seed the convention skill only if consistently observed)
 - `strict` tsconfig (a shared `tsconfig.base.json` commonly also sets `noUnusedLocals`, `noUnusedParameters`,
-  `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`) — respect all that are enabled.
+  `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`). Respect all that are enabled.
 - `const`/`let`, never `var`. No `any`. `as` casts require an inline `// reason:` comment justifying them.
 - Explicit return types on exported/public functions, including `Promise<T>` on every `async`.
 - Named exports for shared code; `export default function` reserved for React components / Next pages.
 - Import via path aliases (`@shared/*`, `@/*`), not deep relative chains, when aliases are configured.
-- Errors are typed classes + a global filter; never `throw 'string'`. No `console.log` in committed code — use a `Logger`.
+- Errors are typed classes + a global filter; never `throw 'string'`. No `console.log` in committed code; use a `Logger`.
 - Repository layer wraps the DB; services never issue queries directly.
 - Config is validated once and read through a typed accessor, never raw `process.env` in feature code.
 
 ## Real-world variations you may encounter
 - Multiple persistence stores: e.g. Prisma owning one DB while per-tenant/per-user SQLite files (`better-sqlite3`) use
-  hand-rolled SQL migrations applied via `PRAGMA user_version` by a runner — no Prisma migrate for those. Detect the
-  migration mechanism per store; don't assume one ORM owns everything.
+  hand-rolled SQL migrations applied via `PRAGMA user_version` by a runner, with no Prisma migrate for those. Detect the
+  migration mechanism per store. Do not assume one ORM owns everything.
 - NestJS may run on the **Fastify** adapter instead of Express; guards may read both an HTTP-only cookie and a `Bearer` token.
 - Jest and Vitest can coexist (Jest for an app's colocated `*.test.ts`; Vitest for a pure package's golden tests). A package
-  may be wired for a runner yet have no committed tests — verify presence before assuming coverage.
+  may be wired for a runner yet have no committed tests. Verify presence before assuming coverage.
 - LLM code often wraps a vendor SDK (e.g. Anthropic's `@anthropic-ai/sdk`) behind a service that streams generation and
   validates JSON output against a zod schema; model choice may come from a config file rather than env.
-- `lint`/`format`/`test` scripts are frequently stubs in some workspaces — confirm each does real work.
+- `lint`/`format`/`test` scripts are frequently stubs in some workspaces. Confirm each does real work.
 
 ## Review rule seeds (copy stable IDs into INVENTORY Review Rule Set)
 | ID | Rule | Severity | Auto-fixable |

@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "7b44aa821de6387e76e2870ccb28689c07aa5234073744183ed1d78e8dbe2220"
+      "body_sha256": "06dbb20261aaa017c4f5e04f0b816b46f5a0df09a49adb6bd4cd8d63d3adff36"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -33,7 +33,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "a1675d874fcbaf74f777d03c0e5316b0bff7b58f084ed7a55c8455ced8fb7872"
+      "body_sha256": "e15867ee2a6fbd9d26f63162133cd2bf2084e31c7773e9f45c797039a8d3ca96"
     },
     "explore": {
       "frontmatter": {
@@ -53,7 +53,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "2a767eda7f61ed7c4d71d9631f8d642dba6d80d93f8a548893830e2555a27b92"
+      "body_sha256": "dd9de9f1754eb27d31d9a0a22732bf1492524503b3daf4bbfb8f5acfd6c8dea5"
     },
     "generate-spec": {
       "frontmatter": {
@@ -72,7 +72,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "2196a261f0d4f5c2d893084d515a7356493293360a1109a3464bfa6d61cceccb"
+      "body_sha256": "b3c9b368c4ebc2790ee5701ab988f6a32ae5c04ccae3efdd745e896fb28de56b"
     },
     "implement": {
       "frontmatter": {
@@ -92,7 +92,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "b626d49d3afc402934067eedc64d2af0e4706129bfa5a9fb6c823b55cc2e5c04"
+      "body_sha256": "c38b9b6adca33d140cea1ca8fbad6dbb62bf25589e046fb0c6ff4ba2c1df8ac0"
     },
     "initializer": {
       "frontmatter": {
@@ -111,7 +111,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "dfc493244baba8eb57f7fae644b91538767af43661fe53d9bf25c5d7b25191ba"
+      "body_sha256": "cf73fc19a42fcab688a6c94452ec68e221983e50ca691a0cd81e01bfeab3cec2"
     },
     "module-documentation": {
       "frontmatter": {
@@ -130,7 +130,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "9d39fc0b2892ab5c0f6e2259c46e5389ba7d3fd65e1c8fe6b7017d7e6e9508d7"
+      "body_sha256": "caab4c2e3afef4bc8ec65fd7f7ae9053c3de4bc1c931c4e0fa789be9051c20db"
     },
     "plan": {
       "frontmatter": {
@@ -147,7 +147,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "49a1273636860c7cbcf5c3b6021e035de62252bf24f9e1d4ac37875dc1733412"
+      "body_sha256": "2993cb2ff392ac2c5afd6fca3c9c35be0291841c9677d52be1bd7b09598e1a76"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -167,7 +167,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "edca6e9bfe3cea75c64db52981c52ff2757d13f13851d2fb0eb43fc277e3c50e"
+      "body_sha256": "7637cdbccd4596da0ad240a21535373524f79273c18990fcd3d61cc39ee0c007"
     },
     "write-test": {
       "frontmatter": {
@@ -187,7 +187,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "4eb3899bdb25d733467aea36a9cbb74e9b19cb656a000e4f5d2d3ac70cdfdfcb"
+      "body_sha256": "0d8855926926295d32292a43b6d9c710a244f65744378472e7fad4d432c35741"
     },
     "fact-check": {
       "frontmatter": {
@@ -205,7 +205,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "590375a242b4891ef59ad1c1cfded162b6a3399c70acd9a6997c0110b96c67a6"
+      "body_sha256": "898ce13d496c6d81769cb629435ec03db45fddb7a3f3243e662c7eddc51991d1"
     }
   },
   "skills": {
@@ -214,7 +214,7 @@
         "name": "meta-author",
         "description": "Authoring standard for any instruction file — SKILL.md skills, subagent markdown files, and LLM system prompts. ACTIVATE when creating or editing a skill, an agent definition, or an AI prompt. Encodes the 15 Writing Laws, Chain-of-Thought structure, and a mandatory self-review checklist so the output is executable by any model on the first pass without re-reading or guessing."
       },
-      "body_sha256": "0f772a424b1646dae88b15d97837db64da12372f161788e73cfaac1b8e5302ff"
+      "body_sha256": "92e4cf75f16e7cfe9b06fc245b530eab8a9c83794c6a6c9e31a8af4665bcb022"
     }
   }
 }

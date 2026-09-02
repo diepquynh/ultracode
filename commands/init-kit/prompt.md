@@ -1,11 +1,12 @@
-# {{command_prefix}}init-kit — Generate this repo's skill inventory
+# {{command_prefix}}init-kit: Generate this repo's skill inventory
 
 You are about to bootstrap **ultracode** for the current repository. The `ultracode:initializer` agent is a leaf
-agent: it does one slice/skill of work and returns a file path. **You (the main loop) own the fan-out and the
-approval gate** — you spawn `ultracode:initializer` directly with the **{{tool_delegate}} tool**. Where the work is
-independent, spawn in parallel: emit multiple {{tool_delegate}} tool calls in a **single message** and they run concurrently.
+agent. It does one slice or skill of work and returns a file path. **You (the main loop) own the fan-out and the
+approval gate.** You spawn `ultracode:initializer` directly with the **{{tool_delegate}} tool**. Where the work
+is independent, spawn in parallel: emit multiple {{tool_delegate}} tool calls in a **single message** and they
+run concurrently.
 
-**Spawn the prefixed name.** Every spawn below passes `{{agent_selector}}: ultracode:initializer` verbatim — the
+**Spawn the prefixed name.** Every spawn below passes `{{agent_selector}}: ultracode:initializer` verbatim. The
 `ultracode:` prefix is part of the agent's registered name, not decoration. Never spawn a bare `initializer`.
 
 This runs as a five-mode pipeline with a user-approval gate in the middle:
@@ -18,13 +19,13 @@ detect (1) → scout (N, parallel) → propose (1)
             (re)generate-skill (N, parallel) → generate-inventory (1)
 ```
 
-**Cross-harness shortcut.** Ultracode's runtime dir is `{{runtime_dir}}/` at the project root — shared by every
-harness — but older versions kept a per-harness one inside `.claude`/`.codex`/`.grok`/`.agent`/`.agents`.
+**Cross-harness shortcut.** Ultracode's runtime dir is `{{runtime_dir}}/` at the project root, shared by every
+harness. Older versions kept a per-harness one inside `.claude`, `.codex`, `.grok`, `.agent`, or `.agents`.
 Before it scans anything, `detect` checks whether one of those legacy dirs already holds a COMPLETE bootstrap
-for this exact repo while `{{runtime_dir}}/` does not. If it finds one or more, it skips straight past
-scout/propose/generate and instead returns a list of candidates for YOU to present to the user (see Step 1).
-Adopting a candidate runs a single `adopt` spawn — which migrates it into `{{runtime_dir}}/` — instead of the
-scout → propose → generate chain:
+for this exact repo while `{{runtime_dir}}/` does not. If it finds one or more, it skips straight past scout,
+propose, and generate and instead returns a list of candidates for YOU to present to the user (see Step 1).
+Adopting a candidate runs a single `adopt` spawn, which migrates it into `{{runtime_dir}}/`, instead of the
+scout, propose, and generate chain:
 
 ```
 detect (1, finds candidates) → YOU present candidates, wait for pick → adopt (1)
@@ -32,25 +33,26 @@ detect (1, finds candidates) → YOU present candidates, wait for pick → adopt
 
 If the user declines every candidate (or none exist), the normal five-mode pipeline above runs.
 
-**Re-using existing skills.** The repo may already carry skills under `{{skills_dir}}/` (a prior init-kit run
-or hand-authored by the team). `detect` discovers them; `propose` marks each `status: existing` and defaults
-it to **reuse** (kept on disk, registered in the inventory, never regenerated), and folds any bespoke existing
-skill into the routing inventory too. At the approval gate you can override per skill to **regenerate** a stale
-one. Only skills you choose to (re)generate are fanned out in the generate step; reused skills flow straight to
-`generate-inventory`. Re-scans are therefore idempotent — your manual edits survive unless you ask to overwrite.
+**Re-using existing skills.** The repo may already carry skills under `{{skills_dir}}/` (from a prior init-kit
+run or hand-authored by the team). `detect` discovers them. `propose` marks each `status: existing` and
+defaults it to **reuse** (kept on disk, registered in the inventory, never regenerated), and adds any bespoke
+existing skill to the routing inventory too. At the approval gate you can override per skill to **regenerate**
+a stale one. Only skills you choose to generate or regenerate are fanned out in the generate step. Reused
+skills flow straight to `generate-inventory`. Re-scans are therefore idempotent: your manual edits survive
+unless you ask to overwrite.
 
-**Model per mode.** The `ultracode:initializer` defaults to the balanced harness model
-(`{{balanced_model}}`), but its modes differ in stakes, so set the `model` argument explicitly on every spawn
-below — the per-invocation argument outranks the agent default. Spawn `detect`, `scout`, `propose`, and
-`generate-inventory` on the balanced harness model; spawn every `generate-skill` agent on the advanced harness
-model (`{{advanced_model}}`) — skill authoring is the highest-value, quality-sensitive step, so it gets the
-strongest model. The model router hook leaves these spawns on the model you set: the initializer is
-deliberately absent from `models.byAgent`, and the hook keeps an initializer's own model rather than denying it
-the way it denies a missing pipeline route — so re-initializing an already-initialized repo works exactly like
-a first run.
+**Model per mode.** The `ultracode:initializer` defaults to the balanced harness model (`{{balanced_model}}`),
+but its modes differ in stakes, so set the `model` argument explicitly on every spawn below. The
+per-invocation argument outranks the agent default. Spawn `detect`, `scout`, `propose`, and
+`generate-inventory` on the balanced harness model. Spawn every `generate-skill` agent on the advanced harness
+model (`{{advanced_model}}`). Skill authoring is the highest-value, quality-sensitive step, so it gets the
+strongest model. The model router hook leaves these spawns on the model you set. The initializer is absent from
+`models.byAgent` on purpose, and the hook keeps an initializer's own model rather than denying it the way it
+denies a missing pipeline route, so re-initializing an already-initialized repo works exactly like a first
+run.
 
 **Passing data between stages.** Unlike a headless workflow, you (the main loop) can read files, so every
-hand-off flows through the session dir: each agent writes its output there and returns the path; you read that
+hand-off flows through the session dir. Each agent writes its output there and returns the path. You read that
 file to drive the next stage. The `propose` stage's machine twin `ultracode-proposal.json` is the structured
 source you read to build the approved skill set.
 
@@ -58,7 +60,7 @@ Extra user focus for this run (may be empty): `{{arguments}}`
 
 Follow these steps exactly.
 
-## Step 0 — Session directory + repo root + repo key
+## Step 0: Session directory, repo root, and repo key
 
 Create the scratch dir (every initializer agent writes its files there), and record the repo root and this
 repo's key:
@@ -75,19 +77,19 @@ echo "repo=$PWD"
 echo "repo_key=$REPO_KEY"
 ```
 
-Keep `$ULTRACODE_SESSION` (session dir), the repo root (`$PWD`, an absolute path) and `$REPO_KEY` for every
-spawn below. Every spawn carries `Primary repo root:`, `Repo root:`, `Session dir:`, and `Repo key:` — the hook validates the
-initializer mode's full parameter contract before any agent starts, and session state is always written under
-this primary repo's `$ULTRACODE_SESSION` even when a future workflow targets another work repo.
+Keep `$ULTRACODE_SESSION` (session dir), the repo root (`$PWD`, an absolute path), and `$REPO_KEY` for every
+spawn below. Every spawn carries `Primary repo root:`, `Repo root:`, `Session dir:`, and `Repo key:`. The hook
+validates the initializer mode's full parameter contract before any agent starts, and session state is always
+written under this primary repo's `$ULTRACODE_SESSION` even when a future workflow targets another work repo.
 
 **The path is derived, not generated.** The harness supplies {{session_id_names}}, which every agent inherits
-unchanged, so the formula yields the same path in every mode below from any working directory. Re-running it is
-a no-op, which keeps the five modes writing into and reading from one dir: `detect` writes the scout plan there,
-the parallel `scout` agents write their findings beside it, and `propose` reads all of them back. Never
-substitute a random suffix (`openssl rand`, `$RANDOM`, a timestamp) — a second dir mid-run would strand the
+unchanged, so the formula yields the same path in every mode below from any working directory. Re-running it
+is a no-op, which keeps the five modes writing into and reading from one dir: `detect` writes the scout plan
+there, the parallel `scout` agents write their findings beside it, and `propose` reads all of them back. Never
+substitute a random suffix (`openssl rand`, `$RANDOM`, a timestamp). A second dir mid-run would strand the
 scout findings where `propose` will not look for them.
 
-## Step 1 — DETECT (1 initializer)
+## Step 1: DETECT (1 initializer)
 
 Spawn ONE `ultracode:initializer` agent:
 
@@ -109,13 +111,13 @@ description) so propose can re-use it. Return the scout-plan path, the stack, th
 structured slice list (descriptor, paths, slug), and the count of existing skills discovered."
 ```
 
-**If detect returns `CROSS-HARNESS-CANDIDATES: {n}`** (n ≥ 1) instead of a scout plan, it found a legacy
-per-harness bootstrap and wrote `{ULTRACODE_SESSION}/ultracode-cross-harness-candidates.json` instead of
-scanning. {{tool_read}} that file and handle it before touching Steps 2–4:
+**If detect returns `CROSS-HARNESS-CANDIDATES: {n}`** (n is 1 or more) instead of a scout plan, it found a
+legacy per-harness bootstrap and wrote `{ULTRACODE_SESSION}/ultracode-cross-harness-candidates.json` instead
+of scanning. {{tool_read}} that file and handle it before touching Steps 2 to 4:
 
 - **Present every candidate** to the user: harness, its legacy `runtimeDir`, stack, skill count, and
   `generatedAt`. When `n > 1`, ask the user to pick exactly one (or decline all and run a full scan instead).
-  When `n == 1`, still show it and ask the user to confirm adopting it or to run a full scan instead — do not
+  When `n == 1`, still show it and ask the user to confirm adopting it or to run a full scan instead. Do not
   adopt silently. **STOP and wait for the user's decision.**
   - **If the user picks a candidate:** spawn ONE `ultracode:initializer` agent:
     ```
@@ -134,19 +136,19 @@ Repo root: {absolute repo root}.
     legacy source dir on disk. Return the report path, the source harness, the source runtime dir, and the
     list of skill names copied."
     ```
-    Then skip Steps 2–4 entirely and go straight to Step 5 — `adopt` writes the same
+    Then skip Steps 2 to 4 entirely and go straight to Step 5. `adopt` writes the same
     `ultracode-generate-report.md` the normal pipeline's Step 5 already reads.
-  - **If the user declines every candidate:** re-spawn `Mode: detect` with the same inputs PLUS `Skip
-    cross-harness check: yes`, then continue below with the scout plan it returns.
+  - **If the user declines every candidate:** re-spawn `Mode: detect` with the same inputs PLUS
+    `Skip cross-harness check: yes`, then continue below with the scout plan it returns.
 
-{{tool_read}} the returned scout plan (`{ULTRACODE_SESSION}/ultracode-scout-plan.md`). It carries the detected stack, the
-chosen `refs/<stack>.md`, the **Slices** table (each row: descriptor, slug, path(s)) that drives the scout
-fan-out, the candidate component types, and the **Existing Skills** table.
+{{tool_read}} the returned scout plan (`{ULTRACODE_SESSION}/ultracode-scout-plan.md`). It carries the detected
+stack, the chosen `refs/<stack>.md`, the **Slices** table (each row: descriptor, slug, path(s)) that drives the
+scout fan-out, the candidate component types, and the **Existing Skills** table.
 
-## Step 2 — SCOUT (N initializers, IN PARALLEL — read-only)
+## Step 2: SCOUT (N initializers, IN PARALLEL, read-only)
 
-For EACH slice in the scout plan's Slices table, spawn one `ultracode:initializer` agent — **send them all in a single
-message so they run concurrently** (scouts are read-only, so the parallel fan-out is safe):
+For EACH slice in the scout plan's Slices table, spawn one `ultracode:initializer` agent. **Send them all in a
+single message so they run concurrently.** Scouts are read-only, so the parallel fan-out is safe:
 
 ```
 {{agent_selector}}: ultracode:initializer
@@ -167,7 +169,7 @@ real exemplar + the invariants + a distilled template per type, and write your s
 
 Collect every returned scout-findings path.
 
-## Step 3 — PROPOSE (1 initializer) → user approval gate
+## Step 3: PROPOSE (1 initializer), then the user approval gate
 
 Spawn ONE `ultracode:initializer` agent:
 
@@ -190,38 +192,42 @@ componentType, count, sliceSpread, status, existingPath, recommend, rationale). 
 ultracode-proposal.json path, the recommended-new count, and the reuse count."
 ```
 
-{{tool_read}} `{ULTRACODE_SESSION}/ultracode-proposal.json` (its machine twin `ultracode-proposal.md` is the human
+{{tool_read}} `{ULTRACODE_SESSION}/ultracode-proposal.json` (its twin `ultracode-proposal.md` is the human
 version). If the file is missing or `skills[]` is empty, tell the user scouting found no recurring components
 and stop.
 
-**Present the proposal to the user** as a compact table — proposed skill name, kind, component type,
-occurrence count, slice spread, **status** (`new` or `existing`), and rationale — plus the detected commands
-and module map. Call out the existing skills explicitly: a skill with `status: existing` is **re-used as-is by
+**Present the proposal to the user** as a compact table: proposed skill name, kind, component type,
+occurrence count, slice spread, **status** (`new` or `existing`), and rationale, plus the detected commands and
+module map. Call out the existing skills explicitly: a skill with `status: existing` is **re-used as-is by
 default** (kept on disk and registered in the inventory, not regenerated), and a bespoke existing skill (kind
 `other`) is registered for routing only. Ask the user two things: (1) which `new` skills to generate (default:
 every `new` skill with `recommend: true`); (2) whether to **regenerate** any `existing` skill from the current
-code (default: none — reuse them all). Only a `creation`, `convention`, or `module-hub` existing skill can be
-regenerated; a bespoke `other` skill has no captured exemplar to regenerate from, so it can only be reused or
+code (default: none, reuse them all). Only a `creation`, `convention`, or `module-hub` existing skill can be
+regenerated. A bespoke `other` skill has no captured exemplar to regenerate from, so it can only be reused or
 dropped. **STOP and wait for the user's decision. Do not spawn the generate agents yet.**
 
-## Step 4 — GENERATE (N generate-skill in parallel → 1 generate-inventory)
+## Step 4: GENERATE (N generate-skill in parallel, then 1 generate-inventory)
 
-After the user approves (or edits) the list, build `approvedSkills` from `ultracode-proposal.json` — every
-skill that will appear in the final inventory, each as `{ name, kind, componentType, disposition, path }`:
+After the user approves (or edits) the list, build `approvedSkills` from `ultracode-proposal.json`: every skill
+that will appear in the final inventory, each as `{ name, kind, componentType, disposition, path }`:
 
-- `componentType`: the skill's component type, or `null` for the `convention`, `module-hub`, and bespoke (`other`) skills.
-- `disposition`: `generate` for an approved `new` skill; `reuse` for an `existing` skill the user kept (the default); `regenerate` for an `existing` skill the user chose to overwrite from current code.
-- `path`: the existing `SKILL.md` path (`existingPath` from the proposal JSON) for a `reuse` or `regenerate` skill; `null` for a `generate` skill.
+- `componentType`: the skill's component type, or `null` for the `convention`, `module-hub`, and bespoke
+  (`other`) skills.
+- `disposition`: `generate` for an approved `new` skill; `reuse` for an `existing` skill the user kept (the
+  default); `regenerate` for an `existing` skill the user chose to overwrite from current code.
+- `path`: the existing `SKILL.md` path (`existingPath` from the proposal JSON) for a `reuse` or `regenerate`
+  skill; `null` for a `generate` skill.
 
 Include EVERY existing skill the user did not drop (default: all of them) so each is registered in the
-inventory — the bespoke `other` skills included.
+inventory, the bespoke `other` skills included.
 
-### Step 4a — GENERATE-SKILL (one initializer per skill to (re)generate, IN PARALLEL)
+### Step 4a: GENERATE-SKILL (one initializer per skill to generate or regenerate, IN PARALLEL)
 
 For every skill in `approvedSkills` whose `disposition` is `generate` or `regenerate`, spawn one
-`ultracode:initializer` agent — **send them all in a single message so they run concurrently.** Each writes only its own
-`{{skills_dir}}/{name}/` directory (disjoint paths), so the parallel fan-out needs no worktree isolation. Skip
-skills whose `disposition` is `reuse` — they are left untouched on disk and passed straight to Step 4b.
+`ultracode:initializer` agent. **Send them all in a single message so they run concurrently.** Each writes only
+its own `{{skills_dir}}/{name}/` directory (disjoint paths), so the parallel fan-out needs no worktree
+isolation. Skip skills whose `disposition` is `reuse`. They are left untouched on disk and passed straight to
+Step 4b.
 
 ```
 {{agent_selector}}: ultracode:initializer
@@ -248,10 +254,10 @@ Wait for every generate-skill agent to return. Collect their `{name, kind, compo
 **Generated skills** list, and collect every `reuse` skill's `{name, kind, componentType, path}` (from
 `approvedSkills`) into a **Reused skills** list.
 
-### Step 4b — GENERATE-INVENTORY (1 initializer, AFTER every generate-skill returns)
+### Step 4b: GENERATE-INVENTORY (1 initializer, AFTER every generate-skill returns)
 
-Spawn ONE `ultracode:initializer` agent — this is a barrier, because the inventory must list every generated AND every
-reused skill:
+Spawn ONE `ultracode:initializer` agent. This is a barrier, because the inventory must list every generated AND
+every reused skill:
 
 ```
 {{agent_selector}}: ultracode:initializer
@@ -268,7 +274,7 @@ Repo key: {REPO_KEY}.
 {{tool_write}} {absolute repo root}/{{runtime_dir}}/INVENTORY.md and {absolute repo root}/{{runtime_dir}}/repo-profile.json.
 EVERY skill in Generated skills AND every skill in Reused skills MUST appear in both the Skills Inventory table
 and the profile skills[] array (mark each profile skills[] entry source: generated or reused). For each reused
-skill, read its existing SKILL.md front matter at its path to derive its routing row — do NOT regenerate it.
+skill, read its existing SKILL.md front matter at its path to derive its routing row. Do NOT regenerate it.
 Seed commands + Review Rule Set from the proposal (read the stack reference at the proposal's referencePath).
 Seed the repo-profile.json models block with the harness-neutral model routing from the output contract so the
 model-router hook can switch subagent models per repo and per phase: models.byAgent (explore, generate-spec,
@@ -280,23 +286,22 @@ files written."
 ```
 
 The `models` block this step seeds into `repo-profile.json` is what the **model-router hook** later applies to
-every pipeline subagent spawn — `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for
-`implement`/`write-test` by the plan phase's Complexity tier (default low/medium → fast, high → balanced). The
-orchestrator and the explicit commands pass no `model` argument; the hook resolves it, and denies a caller
-`model` that does not match the routed slug (Grok keeps the original spawn argument even after `updatedInput`).
-That is separate from the
-per-mode models you set on the spawns above (which are the initializer's own).
+every pipeline subagent spawn: `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for
+`implement` and `write-test` by the plan phase's Complexity tier (default low and medium use fast, high uses
+balanced). The orchestrator and the explicit commands pass no `model` argument. The hook resolves it, and denies
+a caller `model` that does not match the routed slug (Grok keeps the original spawn argument even after
+`updatedInput`). That is separate from the per-mode models you set on the spawns above, which are the
+initializer's own.
 
-## Step 5 — Report + reload
+## Step 5: Report and reload
 
-{{tool_read}} the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`) — the same file
+{{tool_read}} the generation report (`{ULTRACODE_SESSION}/ultracode-generate-report.md`). It is the same file
 whether it came from `generate-inventory` (normal pipeline) or `adopt` (cross-harness shortcut). Tell the user:
 1. Which files were written. For the normal pipeline: per-skill SKILL.md files, INVENTORY.md,
    repo-profile.json, which existing skills were reused (kept as-is and registered without regeneration), and
    any approved skill the report lists as skipped. For the cross-harness shortcut: which harness's legacy
    runtime dir it was migrated from, which skills were copied, and that the legacy dir is still on disk and
    safe to delete by hand.
-2. That newly generated skills register on the next session — advise {{reload_action}} so
-   `{{skills_dir}}/*` are discovered. (The INVENTORY.md routing works immediately because
-   agents read it as a file.)
+2. That newly generated skills register on the next session. Advise {{reload_action}} so `{{skills_dir}}/*`
+   are discovered. The INVENTORY.md routing works immediately because agents read it as a file.
 3. That subsequent work in this repo will now route through `{{runtime_dir}}/INVENTORY.md`.
