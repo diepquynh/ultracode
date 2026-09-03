@@ -19,7 +19,10 @@
       "shell",
       "search_text",
       "glob",
-      "skill"
+      "skill",
+      "memory_recall",
+      "memory",
+      "report"
     ],
     "timeout_seconds": 600,
     "context": "fork"

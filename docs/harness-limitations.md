@@ -22,6 +22,11 @@ xai-org/grok-build@main at 72a6125). Facts that changed since the previous measu
 - Leaf `PostToolUse` Bash events often omit `agent_type`. `build-streak.js` and `build-streak-gate.js`
   therefore cannot attribute failures inside a forked implement or write-test turn, even when the matching
   PreToolUse Bash call carried the actor.
+- An agent's explicit `tools:` front matter is an allowlist, and it drops every MCP tool it does not name
+  (measured 2026-09-03, CLI 2.1.258, session 11111111-2222-4333-8444-555555550001). An `ultracode:explore`
+  spawn whose list carried only native tools answered that `ultracode_memory_recall` was not in its tool
+  list. So every MCP tool an agent's prompt calls is declared as a capability and rendered as
+  `mcp__plugin_ultracode_ultracode-gate__<tool>` in that list (`definitions/tool-mapping.json`).
 
 ## Antigravity (live, 2026-08-22, CLI 1.1.18)
 
@@ -29,6 +34,10 @@ xai-org/grok-build@main at 72a6125). Facts that changed since the previous measu
 - A PostToolUse hook never sees what a tool or subagent returned, so recording from tool results is inert
   there. `hooks/agy-message-record.js` records fact-check verdicts instead.
 - Spawn calls arrive as a `toolCall.args.Subagents[]` list. Every spawn guard iterates the whole list.
+- Subagents inherit the session's MCP registry. An `ultracode-explore` spawn whose `tools` list named only
+  native tools called `ultracode_memory_recall` on the `ultracode-gate` server (measured 2026-09-03, CLI
+  1.1.25, conversation 676523eb, child 6cd5233e). Generated agents carry `inheritMcp: true`, and MCP
+  capabilities stay out of the native tools list.
 - The ask channel and the hub wake channel are described in their own sections below.
 
 ## Codex
@@ -136,6 +145,13 @@ Source references are to openai/codex@main.
   was never called. `model-router.js` (`hooks/lib/codex-spawn.js` `forkTurnsPin`) rewrites every ultracode
   spawn to `fork_turns: "none"`. The role TOML header and the orchestrate and hub-listen skills state the
   contract: `agent_type` plus a self-contained prompt, no fork option, and `close_agent` when done.
+- The generated "Harness Tool Policy" steers what a role believes it can call. With a policy that listed
+  only `exec_command`, `apply_patch`, `web_search`, an `ultracode_explore` role answered that
+  `ultracode_memory_recall` was unavailable and listed exactly those three names, while a generic
+  `spawn_agent` child in the same setup called the tool and got a result (measured 2026-09-03, codex 0.151.0,
+  threads 01a066d4 and 01a066d5). The thread had the registry, and the policy text alone kept the role from
+  using it. So every MCP tool a role's prompt calls is named in that policy list
+  (`definitions/tool-mapping.json`, `codex` values).
 
 ### Plugin install and runtime
 
@@ -255,6 +271,11 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
   `Repo key:` can be recovered from it is not verified. (corrected 2026-09-02.)
 - `factcheck-record.js` is not registered on grok, as on codex. The fact-check role records via the
   `ultracode_factcheck` MCP tool (the `{{#codex,grok}}` block in its prompt).
+- Subagents inherit the session's MCP registry even though their `tools:` front matter lists only native
+  tools. An `ultracode:explore` child (grok-4.5) reached `ultracode_memory_recall` in two calls: `search_tool`
+  found it under the name `ultracode-gate__ultracode_memory_recall`, then `use_tool` invoked it (measured
+  2026-09-03, grok 1.0.13, session 01a066d2, child 01a066d2-cdca). MCP capabilities therefore stay out of the
+  grok tools list, and a prompt may need to look the tool up before calling it.
 
 ### Runtime
 

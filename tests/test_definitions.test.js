@@ -666,7 +666,9 @@ test("tool mapping covers declared and referenced tools", () => {
       assert.ok(entry.codex);
       assert.ok(entry.grok);
       assert.ok(entry.antigravity);
-      declaredClaudeTools.add(entry.claude);
+      // A prose Claude mapping (contains a space) is a "no tool needed here" note and is
+      // filtered out of the generated `tools:` list, exactly like Grok and Antigravity prose.
+      if (!entry.claude.includes(" ")) declaredClaudeTools.add(entry.claude);
     }
   }
   const expectedDeclared = new Set();
@@ -685,6 +687,84 @@ test("tool mapping covers declared and referenced tools", () => {
   assert.equal(capabilities.delegate.antigravity, "invoke_subagent");
   assert.equal(capabilities.ask_user.antigravity, "ask_question");
   assert.equal(capabilities.plan.antigravity, "present the plan");
+});
+
+// MCP tools are granted where a prompt calls them and nowhere else. Both directions
+// matter: on Claude Code an explicit `tools:` list is an allowlist, so an MCP tool the
+// agent's prompt requires but its definition omits is simply absent from the subagent;
+// and a declared MCP capability no prompt mentions is a grant nothing needs.
+function mcpCapabilityIds() {
+  const byTool = new Map();
+  for (const [id, entry] of Object.entries(TOOL_MAPPING.capabilities)) {
+    if (/^ultracode_[a-z_]+$/.test(entry.codex)) byTool.set(entry.codex, id);
+  }
+  return byTool;
+}
+
+test("MCP capabilities are declared exactly where the agent prompt calls the tool", () => {
+  const byTool = mcpCapabilityIds();
+  assert.deepEqual(
+    new Set(byTool.values()),
+    new Set(["hub_wait", "report", "memory", "memory_recall", "factcheck"]),
+  );
+  const ids = new Set(byTool.values());
+  for (const [defPath, definition] of sourceDefinitions()) {
+    if (definition.kind !== "agent") continue;
+    const prompt = fs.readFileSync(path.join(path.dirname(defPath), definition.prompt), "utf-8");
+    const declared = new Set(definition.config.tools.filter((id) => ids.has(id)));
+    const referenced = new Set();
+    for (const [toolName, id] of byTool) {
+      if (new RegExp(`\\b${toolName}\\b`).test(prompt)) referenced.add(id);
+    }
+    assert.deepEqual(
+      declared,
+      referenced,
+      `${definition.name}: declared MCP capabilities must equal the ultracode_* tools its prompt calls`,
+    );
+  }
+});
+
+test("generated agents expose MCP tools the way each harness needs", () => {
+  // Claude: the full plugin-qualified name in the allowlist, and only for declared capabilities.
+  const [implementClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "implement.md"));
+  for (const tool of ["ultracode_memory_recall", "ultracode_memory", "ultracode_report"]) {
+    assert.ok(
+      implementClaude.tools.includes(`mcp__plugin_ultracode_ultracode-gate__${tool}`),
+      `claude implement declares ${tool}`,
+    );
+  }
+  const [factCheckClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "fact-check.md"));
+  assert.ok(
+    factCheckClaude.tools.every((tool) => !tool.startsWith("mcp__") && !tool.includes(" ")),
+    "claude fact-check needs no MCP tool: factcheck-record.js records its verdict",
+  );
+  const [planClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "plan.md"));
+  assert.ok(planClaude.tools.every((tool) => !tool.startsWith("mcp__")), "plan calls no MCP tool");
+
+  // Codex: role TOML has no allowlist, so the tool-vocabulary policy names the MCP tools.
+  const implementCodex = parseToml(
+    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implement.toml"), "utf-8"),
+  ).developer_instructions;
+  assert.match(
+    implementCodex,
+    /Limit direct tool use in this role to these Codex capabilities: (`[a-z_]+`, )*`ultracode_memory_recall`, `ultracode_memory`, `ultracode_report`\./,
+  );
+  assert.match(implementCodex, /are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities/);
+  const factCheckCodex = parseToml(
+    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "fact-check.toml"), "utf-8"),
+  ).developer_instructions;
+  assert.match(factCheckCodex, /Codex capabilities: (`[a-z_]+`, )*`ultracode_factcheck`\./);
+
+  // Grok and Antigravity: MCP tools are inherited from the session registry, so the prose
+  // mapping stays out of the native tools list.
+  const [implementGrok] = splitFrontmatter(path.join(GROK_PLUGIN_ROOT, "agents", "implement.md"));
+  assert.ok(implementGrok.tools.every((tool) => !/\s|ultracode/.test(tool)), implementGrok.tools.join(","));
+  const implementAgy = fs.readFileSync(
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "implement.md"),
+    "utf-8",
+  );
+  assert.match(implementAgy, /^inheritMcp: true$/m);
+  assert.doesNotMatch(implementAgy, /^    - .*(MCP| )/m, "no prose entry in the AGY tools list");
 });
 
 test("{{tool_*}} placeholders resolve to the correct harness-native name", () => {

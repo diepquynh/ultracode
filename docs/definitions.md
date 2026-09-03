@@ -44,6 +44,16 @@ instruction instead of a tool:
 - Claude's several file and search tools map to Codex's `exec_command` and `apply_patch`, to Grok's
   `read_file`, `search_replace`, `grep`, `list_dir`, and `run_terminal_command`, and to Antigravity's
   `view_file`, `replace_file_content`, `write_to_file`, `run_command`, `grep_search`, and `find_by_name`.
+- The plugin's own MCP tools are capabilities too: `hub_wait`, `report`, `memory`, `memory_recall`, and
+  `factcheck`. An agent declares one only when its prompt calls that tool, and a test holds the two in step,
+  so no agent is handed an MCP tool it never uses. Each harness needs a different shape. Claude Code treats
+  an explicit `tools:` list as an allowlist that drops every MCP tool not named, so the Claude value is the
+  full `mcp__plugin_ultracode_ultracode-gate__<tool>` name. Codex role files have no tool list, so the
+  generator writes the bare tool name into the tool-vocabulary policy. Without it the role reports the tool
+  as unavailable even though its thread has it. Grok Build and Antigravity subagents inherit the session's MCP
+  registry, so their values are prose that stays out of the native tools list (Antigravity agents also carry
+  `inheritMcp: true`). A prose value on any harness means "no tool needed here": `factcheck` is prose on Claude
+  and Antigravity because a hook records the fact-check verdict there.
 
 Harness-owned repo paths and session identifiers are defined in `definitions/harness-layout.json`. Every
 harness shares one runtime dir for inventory, profile, and session scratch: `.ultracode` at the project root,

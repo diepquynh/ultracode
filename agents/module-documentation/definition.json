@@ -18,7 +18,8 @@
       "write",
       "shell",
       "search_text",
-      "glob"
+      "glob",
+      "report"
     ],
     "timeout_seconds": 600,
     "context": "fork"

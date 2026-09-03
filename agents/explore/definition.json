@@ -19,7 +19,9 @@
       "search_text",
       "glob",
       "web_search",
-      "web_fetch"
+      "web_fetch",
+      "memory_recall",
+      "memory"
     ],
     "timeout_seconds": 600,
     "context": "fork"

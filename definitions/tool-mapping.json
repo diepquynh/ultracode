@@ -85,9 +85,44 @@
       "codex": "ultracode_msg_wait",
       "grok": "the ultracode_msg_wait MCP tool",
       "antigravity": "the ultracode_msg_wait MCP tool",
-      "codex_strategy": "`ultracode_msg_wait` is an MCP tool from the plugin's `ultracode-gate` server. Subagent threads receive the session's MCP tool registry, so call it by that name; there is no separate Codex capability for it.",
-      "grok_strategy": "`ultracode_msg_wait` is an MCP tool from the plugin's `ultracode-gate` server, inherited from the session's MCP registry rather than listed in the agent's tools. Call it by that name.",
-      "antigravity_strategy": "`ultracode_msg_wait` is an MCP tool from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call it by that name."
+      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
+      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool.",
+      "antigravity_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call each one by exactly that name."
+    },
+    "report": {
+      "claude": "mcp__plugin_ultracode_ultracode-gate__ultracode_report",
+      "codex": "ultracode_report",
+      "grok": "the ultracode_report MCP tool",
+      "antigravity": "the ultracode_report MCP tool",
+      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
+      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool.",
+      "antigravity_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call each one by exactly that name."
+    },
+    "memory": {
+      "claude": "mcp__plugin_ultracode_ultracode-gate__ultracode_memory",
+      "codex": "ultracode_memory",
+      "grok": "the ultracode_memory MCP tool",
+      "antigravity": "the ultracode_memory MCP tool",
+      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
+      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool.",
+      "antigravity_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call each one by exactly that name."
+    },
+    "memory_recall": {
+      "claude": "mcp__plugin_ultracode_ultracode-gate__ultracode_memory_recall",
+      "codex": "ultracode_memory_recall",
+      "grok": "the ultracode_memory_recall MCP tool",
+      "antigravity": "the ultracode_memory_recall MCP tool",
+      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
+      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool.",
+      "antigravity_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call each one by exactly that name."
+    },
+    "factcheck": {
+      "claude": "no tool on Claude Code: hooks/factcheck-record.js records the verdict from the fact-check agent's final message",
+      "codex": "ultracode_factcheck",
+      "grok": "the ultracode_factcheck MCP tool",
+      "antigravity": "no tool on Antigravity: hooks/agy-message-record.js records the verdict from the fact-check agent's return message",
+      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
+      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool."
     }
   }
 }

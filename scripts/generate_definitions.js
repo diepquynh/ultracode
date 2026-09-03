@@ -581,9 +581,16 @@ function claudeFrontmatter(definition, mapping, modelMapping) {
     ...foldedYaml("description", data.description),
   ];
   if (definition.data.kind === "agent") {
-    const translatedTools = data.config.tools.map(
-      (toolId) => mapping.capabilities[toolId].claude,
-    );
+    // An explicit `tools:` list is an allowlist on Claude Code, and it drops
+    // every MCP tool the agent does not name (measured 2026-09-03, CLI 2.1.258:
+    // a subagent whose list omitted `mcp__plugin_ultracode_ultracode-gate__*`
+    // saw no ultracode tools at all). So MCP capabilities map to the full
+    // `mcp__plugin_ultracode_ultracode-gate__<tool>` name here. A prose
+    // mapping (any value containing a space) is a harness-specific "no tool
+    // needed" note, as on Grok and Antigravity, and is left out of the list.
+    const translatedTools = data.config.tools
+      .map((toolId) => mapping.capabilities[toolId].claude)
+      .filter((tool) => tool && !tool.includes(" "));
     const model = modelMapping.tiers[data.config.model_tier].claude;
     lines.push(
       `model: ${model}`,
