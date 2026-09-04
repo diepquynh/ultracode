@@ -683,6 +683,7 @@ test("tool mapping covers declared and referenced tools", () => {
   // still match what that prose assumes.
   assert.equal(capabilities.delegate.claude, "Agent");
   assert.equal(capabilities.ask_user.claude, "AskUserQuestion");
+  assert.equal(capabilities.ask_user.grok, "ask_user_question");
   assert.equal(capabilities.plan.claude, "EnterPlanMode");
   assert.equal(capabilities.delegate.antigravity, "invoke_subagent");
   assert.equal(capabilities.ask_user.antigravity, "ask_question");
@@ -4787,7 +4788,9 @@ test("grok generation uses Claude-shaped files and grok layout", () => {
   assert.match(orchestrate, /spawn_subagent/);
   assert.match(orchestrate, /subagent_type/);
   assert.match(orchestrate, /# Grok Notes/);
-  assert.match(orchestrate, /There is no structured question tool/);
+  assert.match(orchestrate, /`ask_user_question` is a native tool/);
+  assert.match(orchestrate, /never report a result you did not receive/);
+  assert.match(orchestrate, /Subagents never have this tool/);
   assert.match(orchestrate, /default toolset has no skill tool/);
 
   const initKit = fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "commands", "init-kit.md"), "utf-8");

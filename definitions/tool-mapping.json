@@ -68,9 +68,9 @@
     "ask_user": {
       "claude": "AskUserQuestion",
       "codex": "request_user_input",
-      "grok": "ask the user",
+      "grok": "ask_user_question",
       "antigravity": "ask_question",
-      "grok_strategy": "There is no structured question tool. Ask the user in the conversation and wait for their reply."
+      "grok_strategy": "`ask_user_question` is a native tool: call it directly, never through `use_tool`. It takes `questions`, each one a `question` string plus `options` (`label`, `description`, optional single-select `preview`) and `multi_select`, and it adds the `Other` free-text choice itself. There is no header or tag field, so fold a question's tag into its text. The call blocks until the user answers, and an unanswered one is not an error: a dismissal, the 30-minute timeout, and a non-interactive `-p` run all return text telling you to continue on your own judgment, so read the result before you treat an option as chosen. Grok models often skip this call and write `Tool not available` or an answer of their own instead, so never report a result you did not receive: make the call, and if nothing comes back, ask the same question in the conversation with the options numbered and the recommended one marked. Subagents never have this tool, because grok disables it for every spawned agent, so a subagent puts its questions in its report and the primary session asks them."
     },
     "plan": {
       "claude": "EnterPlanMode",

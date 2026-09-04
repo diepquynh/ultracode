@@ -277,6 +277,45 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
   2026-09-03, grok 1.0.13, session 01a066d2, child 01a066d2-cdca). MCP capabilities therefore stay out of the
   grok tools list, and a prompt may need to look the tool up before calling it.
 
+### Asking the user
+
+- Grok has a structured question tool, `ask_user_question`
+  (`xai-grok-tools/src/implementations/grok_build/ask_user_question/`). Its input is
+  `questions: [{question, options: [{label, description, preview?}], multi_select?}]`. There is no header or
+  tag field, and duplicate question text is rejected as invalid arguments. The tool adds the `Other`
+  free-text choice itself, so a prompt that lists one duplicates it. (corrected 2026-09-04: the earlier
+  mapping said grok had no question tool at all.)
+- The call blocks on the answer for 30 minutes by default (`RESPONSE_TIMEOUT`, overridable through
+  `[toolset.ask_user_question]` or `GROK_ASK_USER_QUESTION_TIMEOUT_SECS`, and disarmable with
+  `timeout_enabled = false`). A dismissal and a timeout both return `CANCEL_TEXT`, and a non-interactive
+  session returns `NO_OPERATOR_TEXT`. Neither is a tool failure, so a model that assumes an answer arrived
+  will read a decline as a selection.
+- Subagents never get it. `build_subagent_spawn_context` hardcodes `ask_user_question_enabled: false` even
+  when the parent has it on (`mvp_agent/subagent_spawn.rs`, pinned by
+  `subagent_spawn_context_disables_ask_user_question_from_enabled_parent`), and the builder also drops every
+  `ToolKind::AskUser` tool for `PromptAudience::Subagent`. This matches how ultracode already routes
+  questions: subagents write question blocks into their reports and the primary session asks them.
+- The tool is registered, and the model still refuses to call it. Registration is proved by the
+  `use_tool` oracle: `use_tool{tool_name: "ask_user_question"}` returns "`ask_user_question` is a native
+  tool, not an MCP integration tool. Call `ask_user_question` directly", the same correction `todo_write`
+  gets, while an invented name gets "not a valid MCP tool name" instead
+  (`implementations/use_tool/mod.rs`, keyed on `EnabledNativeToolNames`). That set is built from the same
+  registry vector that feeds `tool_definitions_builtins_only`, which is the model's tool list;
+  `filter_cursor_tools_by_plan_mode` is a no-op in this build. Native tools are never hidden behind
+  `search_tool`: its BM25 index covers MCP tools only, which is why a live search reports
+  `total_hidden_tools: 19`, exactly the `ultracode-gate` count.
+- **Eleven scripted runs, zero invocations (measured 2026-09-04, grok 1.0.13, sessions 01a06db0 through
+  01a06dd8).** Every run ended with `response.has_tool_call=false` for the ask tool: the model answered in
+  prose, or printed the literal sentence `Tool not available` as though it were the tool's result. The runs
+  covered headless `-p` and a hand-written ACP stdio client that answers `x.ai/ask_user_question`; grok-4.5
+  and grok-4.6; effort low and high; direct orders and a natural ambiguous request; `--tools
+  ask_user_question` as the only native tool; `--permission-mode plan`; `GROK_ASK_USER_QUESTION=1`; a
+  session where `enter_plan_mode` ran first and its own result told the model to "use ask_user_question";
+  and a session where the `use_tool` correction told it to call the tool directly, in the same turn. Other
+  tools in those same turns executed normally. The interactive TUI with a human present is the one path not
+  measured. **Action:** name the tool in prompts and keep the prose fallback next to it, because the
+  observed failure is a fabricated answer, not an error.
+
 ### Runtime
 
 - Grok 1.0.13 `-p` does not expose user-config stdio MCP servers in untrusted directories. `grok mcp doctor`
