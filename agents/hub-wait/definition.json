@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "hub-wait",
-  "description": "Repo-agnostic hub-waiting subagent for ultracode. Spawned by an orchestrate or hub-listen session whenever that session must wait for something from the cross-harness hub: (1) a hub-listen worker has drained its task queue and is listening for the next task notice, (2) an orchestrator published a task to another harness and is waiting for its completion notice, (3) any session is waiting for a direct message or a yolo-mode notice. It is the ONLY place a session waits: it calls the ultracode_msg_wait MCP tool in a loop of finite timeouts that stay under every harness's tool-call duration cap, keeps the parent's hub registration alive, and returns the first non-empty result as one JSON object with the advanced cursor. The parent's single blocking call is this spawn, never a hub tool. It runs on the cheapest model tier because it decides nothing: it never claims, completes, replies, or interprets a message, and it never touches project source or the session dir.",
+  "description": "Blocks on the cross-harness hub and returns the first message, task notice, or completion notice as JSON with the advanced cursor. Spawn whenever an orchestrate or hub-listen session must wait: this spawn is the only place a session waits, and the parent never calls a hub tool directly. Decides nothing and touches no files.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "fast",

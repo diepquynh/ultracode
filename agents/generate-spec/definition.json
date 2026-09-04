@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "generate-spec",
-  "description": "Repo-agnostic specification-authoring subagent for ultracode. Spawned by the orchestrator whenever a code-changing request needs a plan: (1) the explore agent has written a criteria document and the requirements must be turned into a contract before planning, (2) a request spans several deliverables that must be built in a set order, (3) a request spans more than one repo and each side's requirements must be stated, (4) the user asks to write specs / do spec-driven development / produce an SDD breakdown. It reads the criteria document and the research document(s) and writes exactly ONE specification file into the session directory — never a split set, never an index. That single file states every requirement in EARS notation with Given/When/Then acceptance criteria, groups the requirements into ordered deliverables, and names every contract the work provides and consumes, so the plan agent can turn that one file into one implementation plan without reading anything else. It states WHAT the system must do, never HOW to build it, and it does NOT modify project source.",
+  "description": "Reads EVERY research document the request produced and writes exactly ONE spec file: requirements in EARS notation with Given/When/Then criteria, grouped into ordered deliverables, plus the contracts and an External Evidence table carrying each cited external fact forward. It derives the criteria itself and resolves conflicting documents toward the newest. Spawn once per request, after all exploration has finished, whenever a code-changing request needs a plan. States WHAT, never HOW. Read-only on project source.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "advanced",
@@ -18,7 +18,9 @@
       "edit",
       "shell",
       "search_text",
-      "glob"
+      "glob",
+      "web_search",
+      "web_fetch"
     ],
     "timeout_seconds": 600,
     "context": "fork"

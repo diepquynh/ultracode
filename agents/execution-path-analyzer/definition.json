@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "execution-path-analyzer",
-  "description": "Repo-agnostic execution-path analysis subagent for ultracode. Spawned by the orchestrator when the user has asked for tests — writing tests is optional and happens only on request, after every coding phase is implemented and reviewed — so: (1) the user accepted the orchestrator's closing-gate offer to write tests, (2) the user explicitly asks to analyze execution paths or to write tests. It reads the implement report to identify the changed source files, traces every execution path through each changed function/method (entry conditions, branches, early returns, error/exception paths, delegated helpers, empty/null and boundary cases), and writes a structured EPA report into the session directory for the write-test and code-reviewer agents to consume — one execution path per test. It is read-only on project source; the only file it writes is its report in the session dir.",
+  "description": "Traces every execution path through the functions an implement phase changed (branches, early returns, error paths, boundary cases) and writes an EPA report for write-test to consume, one path per test. Spawn only when the user has asked for tests, after every coding phase is implemented and reviewed, before write-test. Read-only on project source.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "balanced",

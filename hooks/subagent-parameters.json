@@ -157,6 +157,24 @@
         "plan"
       ]
     },
+    "source_check": {
+      "labels": [
+        "Source check"
+      ],
+      "type": "enum",
+      "values": [
+        "citations",
+        "refetch"
+      ],
+      "description": "How far a fact-check pass goes on external facts. \"citations\" checks that every claim traces to a retrieved page the spec cites. \"refetch\" additionally re-opens those pages, and is valid only on a spec target: the orchestrator decides it per spawn so a plan pass never repeats the check a spec pass already paid for."
+    },
+    "prior_findings": {
+      "labels": [
+        "Prior findings"
+      ],
+      "type": "text",
+      "description": "Findings the previous fact-check pass over this same artifact returned, or the literal word \"none\" on a first pass. Decides whether the pass checks the whole claim surface or only the prior findings plus changed text."
+    },
     "spec_file": {
       "labels": [
         "Spec file"
@@ -313,7 +331,10 @@
         "session_dir",
         "repo_key",
         "target",
-        "target_type"
+        "target_type",
+        "prior_findings",
+        "spec_file",
+        "source_check"
       ]
     },
     "plan": {

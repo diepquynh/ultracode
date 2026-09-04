@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "fact-check",
-  "description": "Repo-agnostic fact-checking subagent for ultracode. Spawned by the orchestrator after ultracode:generate-spec and after ultracode:plan return, before either is presented for approval: (1) every request that reaches a spec or a plan runs this agent against that artifact, mandatorily, (2) the user explicitly asks to fact-check a spec, plan, or research document. It verifies that every concrete claim the target file makes — a referenced file, function, API, or library capability — is actually true of this repo or is traceable to fetched documentation rather than recalled knowledge, and returns a single {verdict, target, findings} JSON object. A PASS verdict is required before the ultracode_gate MCP tool will record spec or plan approval, regardless of what the orchestrator or the user decides. It does NOT modify project source.",
+  "description": "Checks a spec or plan for claims that would break the implement agent, and for external facts that no longer trace to a cited page, returning one {verdict, target, findings} object. Mandatory after generate-spec and after plan, before either is shown for approval: ultracode_gate refuses approval without a recorded PASS. Its spawn sets how far it goes: `Prior findings:` scopes a re-pass to the previous findings plus changed text, and `Source check:` decides whether it re-opens cited pages. Read-only on project source.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "advanced",
@@ -18,6 +18,8 @@
       "shell",
       "search_text",
       "glob",
+      "web_search",
+      "web_fetch",
       "factcheck"
     ],
     "timeout_seconds": 600,

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "prompt-generation",
-  "description": "Repo-agnostic prompt-authoring subagent for ultracode. Spawned when: (1) creating or editing an AI/LLM system prompt, (2) creating or editing a SKILL.md skill file, (3) creating or editing a subagent markdown file, (4) reviewing prompt quality or debugging ambiguous-instruction failures, (5) the user asks to write or improve any instruction prompt. It applies the meta-author standard (15 Laws, Chain-of-Thought, self-review) and writes or edits files directly.",
+  "description": "Writes or edits instruction files (LLM system prompts, SKILL.md skills, subagent definitions) to the meta-author standard. Spawn when creating or improving any prompt or skill, or when debugging ambiguous-instruction failures.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "advanced",

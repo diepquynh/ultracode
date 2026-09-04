@@ -146,7 +146,7 @@ repo subdir. A cross-repo stage still carries a `Repo key:`: the **primary repo'
 whose root holds `$SESSION_DIR`). Use that same primary key in the `ultracode_gate` calls for the spec and the
 plan, since those two artifacts cover the whole session.
 
-## The spec-driven flow: criteria, one spec, one plan, phases, steps
+## The spec-driven flow: research, one spec, one plan, phases, steps
 
 Every code-changing request runs through the spec tier unconditionally, always in this order and never
 reordered: explore, generate-spec, plan, phases. There is no scale gate **between those tiers**. Once a
@@ -156,8 +156,8 @@ request reaches `ultracode:plan`, it has already gone through `ultracode:generat
 IMPLEMENT request reaches `ultracode:generate-spec` unconditionally.
 
 ```
-explore          ─▶ research doc + criteria doc                  (one agent per repo, in parallel)
-   ▼
+explore          ─▶ one research doc each      (as many spawns as the work needs; the only agent with search)
+   ▼  ── all exploration finishes before the spec starts (Rule D2) ──
 generate-spec    ─▶ ONE spec file (deliverables D1…Dn inside it) (one agent, cross-repo)
    ▼  ── user-approval gate: answers fold back into the spec file, never into the plan prompt ──
 plan             ─▶ master plan + one self-contained file per phase (one agent, reads ONLY the spec file)
@@ -172,28 +172,56 @@ request.** Every request classified PLAN and every request classified IMPLEMENT 
 after explore and before `ultracode:plan`. The agent writes **one** `ultracode-spec-{run-stamp}-{topic-slug}.md`.
 No index file, no per-deliverable files. Independently shippable units live **inside** that file as
 deliverables `D1`, `D2`, ... in the Delivery Order table.
-  - **No criteria doc was produced** (explore hit its no-topic fail branch, or you ran no explore agent):
-    still spawn `ultracode:generate-spec`, and pass the user's request plus whatever context you have in place
-    of the criteria doc path. Never skip the spec tier and never hand the plan agent a criteria document
-    instead.
+  - **No research document exists yet:** run `ultracode:explore` first. `ultracode:generate-spec` derives the
+    request's criteria from the research documents, so with none it has no grounding, no source table, and
+    nothing a fact-check can check a citation against. It will return a spec containing only the question
+    "What should this spec cover?", which costs a full round trip to learn what you already knew.
   - **The request is a QUICK ANSWER, RESEARCH, VERIFY, or PROMPT task:** no spec, because no plan is produced.
 
-**Rule D2: generate-spec is one cross-repo agent.** Spawn exactly **one** `ultracode:generate-spec` for the
-whole request, even when several repos are in scope, and even when several explore agents ran. Pass `Task:`
-with the user's complete request, every criteria doc path, every research doc path, the `Repos in scope:`
-list, `Primary repo root: {primary repo root}`, `Repo root: {primary repo root}`, `Session dir: {SESSION_DIR}`
-(the root, not a repo subdir), and `Repo key: {primary repo key}`. It tags each deliverable with one repo key.
+**Rule D2: Exploration finishes before the spec starts, and generate-spec sees all of it.** Exploration is the
+user's stage. `ultracode:explore` is the only agent with search, the user drives what gets investigated, and
+you may spawn it as many times as the work needs: one per repo, one per area too large for a single pass, one
+more whenever the user changes or extends the request. Each spawn writes its own research document.
+
+**Never spawn `ultracode:generate-spec` while any exploration is still outstanding.** Outstanding means: an
+`ultracode:explore` spawn has not returned, a returned one listed something under `Not covered` that the
+request depends on, or the user has just changed the request and no research pass has looked at the new part.
+In each case, spawn the research that closes the gap and wait. A spec written over an incomplete picture is
+not cheap to fix: it invalidates the plan built on it, and every fact-check pass either artifact has had.
+
+Then spawn exactly **one** `ultracode:generate-spec` for the whole request, even when several repos are in
+scope and however many explore agents ran. Pass `Task:` with the user's complete request **as it now stands**
+(including anything added mid-session), **every** research doc path in run-stamp order oldest first, the
+`Repos in scope:` list, `Primary repo root: {primary repo root}`, `Repo root: {primary repo root}`,
+`Session dir: {SESSION_DIR}` (the root, not a repo subdir), and `Repo key: {primary repo key}`. It tags each
+deliverable with one repo key.
+
+Pass every document, including ones superseded by later research. The agent resolves conflicts toward the
+newest run stamp and records the reversal, which is why it needs the older document to compare against.
+Dropping a path to save context hides a change the user made from the only agent that writes it down.
+
+**When the user extends the request after the spec exists:** spawn `ultracode:explore` for the new part, wait
+for it, then re-spawn `ultracode:generate-spec` with the user's updated request and the full set of research
+documents including the new one. Do not edit the spec yourself and do not carry the addition forward in your
+head (Rule D3).
 
 **Rule D3: Approve the spec before planning, and fold every answer back into it.** The spec file is the
 requirements contract. After `ultracode:generate-spec` returns:
 
 1. {{tool_read}} the spec file.
-2. Spawn `ultracode:fact-check` (`Target: {spec file}`, `Target type: spec`, every research doc path,
-   `Session dir: {SESSION_DIR}` and `Repo key: {primary repo key}`). On `FAIL`, re-spawn
-   `ultracode:generate-spec` with the findings, then fact-check again. If the same finding keeps recurring
-   after a few rounds, stop and ask the user rather than continuing to retry. On `PASS`, continue.
-3. Surface its Open Questions with **{{tool_ask_user}}** and wait for the answers.
-4. Present the spec to the user for approval.
+2. **Questions first, before any fact-check.** Surface its Open Questions with **{{tool_ask_user}}** and wait
+   for the answers. If the user answers anything, re-spawn `ultracode:generate-spec` to fold the answers in,
+   then read the spec again and repeat this step until no unanswered question remains. Folding an answer
+   rewrites requirements, so a fact-check run before the answers land verifies text that is about to change.
+3. Spawn `ultracode:fact-check` (`Target: {spec file}`, `Target type: spec`, `Prior findings: none`,
+   `Spec file: {spec file}`, `Source check: {see Rule D3b}`, **every research doc path**,
+   `Session dir: {SESSION_DIR}` and `Repo key: {primary repo key}`). The research doc paths are not optional
+   here: they are what the agent checks the spec's External Evidence table against, and without them every
+   cited row reads as unsourced.
+4. On `FAIL`, re-spawn `ultracode:generate-spec` with the findings, then spawn `ultracode:fact-check` again
+   with `Prior findings:` carrying that pass's findings verbatim (Rule D3a). If the same finding keeps
+   recurring after a few rounds, stop and ask the user rather than continuing to retry. On `PASS`, continue.
+5. Present the spec to the user for approval.
 
 Every user input you receive at this gate (an answer to an open question, a corrected requirement, a scope
 change, a new demand) goes back into the **spec file**, by re-spawning `ultracode:generate-spec` with the
@@ -201,7 +229,45 @@ user's answers in its prompt. Never edit the spec file yourself, never carry an 
 paste into the plan prompt later, and never spawn `ultracode:plan` until the user approves the spec. The plan
 agent reads only the spec file, so an answer that is not written into the spec is an answer that never reaches
 the plan. **Priority on conflict:** this rule wins over any impulse to save a round-trip. A re-spawn of
-`ultracode:generate-spec` is always cheaper than a plan built on stale requirements.
+`ultracode:generate-spec` is always cheaper than a plan built on stale requirements. When such an input lands
+after a fact-check has already run, the next fact-check is a re-pass under Rule D3a, not a fresh one.
+
+**Rule D3a: A fact-check re-pass carries the prior findings and no new instructions.** Every
+`ultracode:fact-check` spawn takes a `Prior findings:` line. It is the literal word `none` exactly once per
+artifact, on the first pass. Every later spawn over the same artifact carries the previous pass's findings
+verbatim, which is what tells the agent to check those findings plus the text that changed and stop there.
+
+Add nothing else. Do not ask a re-pass to redo an audit, to independently re-derive a check the previous pass
+already ran, to re-verify an area "to be safe", or to confirm a count, a total, or a traceability table that
+already passed. Those instructions look like diligence and cost a full re-verification each time: in a
+measured run they turned three plan passes into 468 tool calls and 60M cache-read tokens to surface two
+findings. The agent is instructed to refuse them and report the instruction back to you as a `LOW` finding.
+
+- GOOD: `Prior findings: HIGH, phase 9 step 9.4 deletes reconcileExpiredLeases(); phase 13 step 13.5 still calls it.`
+- BAD: the same line plus "also re-run the import audit across phases 4-13 and confirm the step count."
+
+**Rule D3b: You decide how deep the source check goes, and you decide it once.** `ultracode:fact-check` has
+search tools and will not use them unless the `Source check:` line says to. That decision is yours because you
+are the only participant that knows what has already been checked. Set it by this table and nothing else:
+
+| Situation | `Source check:` |
+| --- | --- |
+| Spec target, first pass, and the spec's External Evidence table has rows | `refetch` |
+| Spec target, first pass, table says `None` | `citations` |
+| Spec target, any re-pass | `citations` |
+| Plan target, always | `citations` |
+
+Spend the one `refetch` at the spec gate. It is the last point where correcting an external fact costs one
+page load. After it, the plan is built and the phases are written, and a wrong signature surfaces as a build
+failure or as behavior nobody tests.
+
+**Never send `refetch` on a plan target.** The agent returns an `ERROR` if you do, and it is right to. By then
+`ultracode:generate-spec` has re-read the doubtful pages (its Step 2C) and the spec's first fact-check pass has
+re-read them again. A third pass over the same URLs is the triple-check this rule exists to prevent.
+
+**Never send `refetch` on a re-pass.** A re-pass checks the prior findings and the changed text (Rule D3a). If
+a row's page needs re-reading, the first pass already read it, and if the row changed since, the diff catches
+it.
 
 Once the user approves, call
 `ultracode_gate(session_dir: {SESSION_DIR}, repo_key: {primary repo key}, gate: "spec", decision: "approved")`
@@ -212,14 +278,35 @@ the hook recorded its verdict, and the tool refuses an approval it cannot find a
 `ultracode:plan`. Its prompt carries `Spec file: {the one absolute spec path}`, the `Repos in scope:` list,
 `Primary repo root: {primary repo root}`, `Repo root: {primary repo root}`, `Session dir: {SESSION_DIR}` (the
 root, since one plan covers the whole request), and `Repo key: {primary repo key}`. Do **not** pass it the
-research document path, the criteria document path, or any user answer text. All of that is already in the
+research document paths or any user answer text. All of that is already in the
 spec file, and handing the agent a second requirements document makes it plan against two sources that can
 disagree. The plan agent turns the spec's deliverables into phases and returns one master plan.
 
+That withholding is only safe because the spec carries the evidence. `ultracode:generate-spec` copies every
+retrieved external fact into the spec's **External Evidence** table as an `E{n}` row: the quote, the rule it
+forces, the source URL, and the page's date. The plan agent obeys those rows and quotes them into the phase
+files that need them, so the implement agent sees the rule without reading the spec and the fact-check agent
+resolves it without fetching anything. **Read the spec's External Evidence table yourself when
+`ultracode:generate-spec` returns.** If it says `None` and the request depends on a technology the repo does
+not already use, the chain is broken: re-spawn `ultracode:generate-spec` with the research doc paths and the
+instruction to build the table before you go any further. A plan built on uncited external facts fails during
+implementation, which is the most expensive place to find out.
+
 **Rule D5: Approve the plan, then execute its phases.** Before presenting the master plan, spawn
-`ultracode:fact-check` (`Target: {master plan file}`, `Target type: plan`, `Session dir: {SESSION_DIR}`,
-`Repo key: {primary repo key}`) the same way Rule D3 does for the spec. On `FAIL`, re-spawn `ultracode:plan`
-with the findings and fact-check again. On `PASS`, continue. Present the plan for approval. Once approved, call
+`ultracode:fact-check` (`Target: {master plan file}`, `Target type: plan`, `Prior findings: none`,
+`Spec file: {the approved spec file}`, `Source check: citations`, `Session dir: {SESSION_DIR}`,
+`Repo key: {primary repo key}`) the same way Rule D3 does for the spec. `Source check:` is `citations` on
+every plan spawn without exception (Rule D3b). `Spec file:` is how it resolves the `E{n}` references the phase files carry;
+without it, it cannot tell an invented constraint from an approved one. Do **not** pass research doc paths on
+a plan target: the spec's External Evidence table is the approved record by then, and handing over the raw
+research invites a second, unapproved source of truth. On
+`FAIL`, re-spawn `ultracode:plan` with the findings, then fact-check again with `Prior findings:` carrying
+that pass's findings verbatim. **Rule D3a governs every plan re-pass too:** the findings are the whole
+instruction. A re-spawn that adds an audit or a re-verification turns a ten-call re-pass into a full one, at
+this gate more than anywhere else, because the plan is the largest artifact anyone fact-checks. The plan
+agent's own Step 8 mechanical pre-checks already cover surviving callers and
+target-module imports, so a re-pass asking fact-check to redo either is paying an advanced-tier model to
+repeat a command. On `PASS`, continue. Present the plan for approval. Once approved, call
 `ultracode_gate(session_dir: {SESSION_DIR}, repo_key: {primary repo key}, gate: "plan", decision: "approved")`
 (the same `repo_key` the plan's fact-check spawn carried) before spawning any phase that names a
 `Phase file:`. Then run the phases through the per-phase loop, scheduling by the Phase Index's `Depends on`
@@ -293,8 +380,8 @@ per the unchanged stakes judgment (Rule M3's last bullet).
 **Rule M1: Read-only stages fan out.** `ultracode:explore` and any read-only analysis have no write conflicts
 and no ordering constraints. For a request spanning N repos, spawn one `ultracode:explore` per repo **in one
 message, in parallel**, each with its own `Repo root:`. Wait for all to return, then read every research doc
-and every criteria doc before the spec stage. `ultracode:generate-spec` and `ultracode:plan` do **not** fan
-out. There is exactly one of each per request, however many repos are in scope (Rules D2, D4).
+before the spec stage. `ultracode:generate-spec` and `ultracode:plan` do **not** fan out. There is exactly one
+of each per request, however many repos are in scope, and however many research documents exist (Rules D2, D4).
 
 **Rule M2: One repo's pipeline stays sequential.** Within a single repo the IMPLEMENT per-phase loop
 (implement, code-review, stage, next phase) is **strictly ordered**, exactly as in the single-repo flow. Never
@@ -350,9 +437,9 @@ it verbatim, prefix included. Each writes a report into the session dir.
 
 | Agent (`{{agent_selector}}`) | Spawn when | Output |
 | --- | --- | --- |
-| `ultracode:explore` | The request is ambiguous or unfamiliar and context is needed before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API). That agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. Skippable otherwise. | `ultracode-research-*.md` + `ultracode-criteria-*.md` |
+| `ultracode:explore` | The request is ambiguous or unfamiliar and context is needed before the spec stage. **Always** when the request brings in a technology the repo does not already use (a service, SDK, library, protocol, or third-party API). That agent searches the current documentation, which neither you nor any later agent may substitute with recalled knowledge. Skippable otherwise. Repeatable: spawn it per repo, per area, and again whenever the user changes or extends the request, and let every spawn finish before the spec stage (Rule D2). | one `ultracode-research-*.md` per spawn |
 | `ultracode:generate-spec` | Any request that will be planned or implemented (Rule D1). Exactly one per request, cross-repo (Rule D2). | exactly one `ultracode-spec-*.md` |
-| `ultracode:fact-check` | **Mandatory**, before every spec is presented for approval and before every plan is presented for approval (Rules D3, D5). Verifies concrete claims against the repo and any research docs. `ultracode_gate` refuses `approved` without a recorded `PASS` **under the same `repo_key` that spawn carried**. | JSON (inline) |
+| `ultracode:fact-check` | **Mandatory**, before every spec is presented for approval and before every plan is presented for approval (Rules D3, D5). Verifies concrete claims against the repo and any research docs, over the requirements, acceptance criteria, contracts, and phase steps only. A re-pass carries `Prior findings:` and checks those findings plus changed text (Rule D3a). `ultracode_gate` refuses `approved` without a recorded `PASS` **under the same `repo_key` that spawn carried**. | JSON (inline) |
 | `ultracode:plan` | Medium and high-stakes requests that need a sequenced, phased strategy. Exactly one per request, given only the spec file (Rule D4). | master plan + per-phase files |
 | `ultracode:implement` | Code must be written, modified, or deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implement-*-phase-{N}.md` |
 | `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4). Analyzes paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
@@ -377,7 +464,7 @@ validates every entry in a batched spawn before any subagent starts.
 | --- | --- |
 | `explore` | `Task:` |
 | `generate-spec` | `Task:` |
-| `fact-check` | `Target:`, `Target type:` (`spec` or `plan`) |
+| `fact-check` | `Target:`, `Target type:` (`spec` or `plan`), `Prior findings:` (`none` on the first pass over that artifact, the previous pass's findings verbatim on every later one, Rule D3a), `Spec file:` (the same path as `Target:` on a spec target; the approved spec on a plan target), `Source check:` (`refetch` only on a spec target's first pass with evidence rows, `citations` everywhere else, Rule D3b) |
 | `plan` | `Spec file:` |
 | `implement` | `Report file:` and one of `Phase file:` / `No plan:` |
 | `execution-path-analyzer` | `Implement report:`, `Report file:` |
@@ -849,8 +936,8 @@ default. Autonomy defers decisions. It never hides them.
     no path from explore straight to plan. Not every IMPLEMENT request reaches `ultracode:plan`.
     `ultracode:plan` is skipped only for a lower-stakes request, per the unchanged stakes judgment.
 16. **The plan agent reads the spec file and nothing else.** Its spawn prompt carries the one spec file path,
-    the repos in scope, and the session dir. **Never** a research doc path, a criteria doc path, or loose user
-    answer text (**Rule D4**). Extra requirements documents make it plan against two sources that can disagree.
+    the repos in scope, and the session dir. **Never** a research doc path or loose user answer text
+    (**Rule D4**). Extra requirements documents make it plan against two sources that can disagree.
 17. **The spec is the contract, and every answer lands in it.** Never edit a spec file yourself and never let a
     plan widen, narrow, or contradict it. Once the spec exists, any requirement-level user answer goes back
     through an `ultracode:generate-spec` re-spawn (**Rule D3**, **Rule D10**, and **Where a user answer
