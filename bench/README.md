@@ -10,7 +10,7 @@ change to the plugin be checked against real history instead of intuition.
 node bench/ultracode-bench.js                        # measure and print
 node bench/ultracode-bench.js --save base.json       # record a baseline
 node bench/ultracode-bench.js --baseline base.json   # compare against it
-node bench/ultracode-bench.js --agent implement      # one agent only
+node bench/ultracode-bench.js --agent implementer    # one agent only
 node bench/ultracode-bench.js --since 2026-08-01     # recent sessions only
 node bench/ultracode-bench.js --baseline base.json --fail-on-regression   # CI gate
 ```
@@ -31,6 +31,12 @@ attributed 800 of 1158 runs to an agent that does not exist.
 
 Runs whose `subagent_type` is not `ultracode:*` are skipped. Other agents working in the same repo are not
 this pipeline's cost, and including them dilutes every ratio.
+
+Renamed agents are folded into one bucket. A run carries whatever name it was spawned under, so the corpus
+holds both `ultracode:implement` and `ultracode:implementer` for the same role. `RENAMED_AGENTS` in
+`lib/transcripts.js` maps the old name to the current one before anything is grouped, and `--agent` accepts
+either spelling. Add a row there whenever an agent is renamed. Skip it and the rename alone halves the run
+count and takes every median over the wrong sample.
 
 ## The metrics, and why each one
 

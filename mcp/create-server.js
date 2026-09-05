@@ -45,7 +45,7 @@ function missingRuntimeDirError() {
 // conversation; there is no artifact recording that the user actually said
 // yes. This MCP tool gives the orchestrator an explicit, hook-observable way
 // to record that decision, so hooks/pipeline-gate.js can refuse to spawn
-// ultracode:plan or a plan-driven ultracode:implement until it has happened —
+// ultracode:plan or a plan-driven ultracode:implementer until it has happened —
 // converting "the orchestrator should remember it got approval" into "the
 // orchestrator's next spawn is mechanically refused otherwise."
 function registerCoreTools(server, deps = defaultDeps) {
@@ -117,7 +117,7 @@ function registerCoreTools(server, deps = defaultDeps) {
               '"billing-service::InvoiceCalculator" for a large multi-module repo.',
           ),
         lesson: z.string().describe("The one-line lesson."),
-        source: z.string().describe('Which agent recorded this, e.g. "ultracode:implement".'),
+        source: z.string().describe('Which agent recorded this, e.g. "ultracode:implementer".'),
         session_dir: z
           .string()
           .optional()
@@ -166,7 +166,7 @@ function registerCoreTools(server, deps = defaultDeps) {
           .describe("The exact Session dir: value from your prompt."),
         agent: z
           .string()
-          .describe('Your own agent name, e.g. "ultracode:implement" (the prefix is optional).'),
+          .describe('Your own agent name, e.g. "ultracode:implementer" (the prefix is optional).'),
         content: z.string().describe("The complete markdown body of the report."),
         unrecorded_lesson_reason: z
           .string()

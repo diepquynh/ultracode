@@ -9,7 +9,7 @@ const { denyPreToolUse, readHookInput, readJsonIfFile } = require("./lib/common"
 const { HookContext } = require("./lib/hook-context");
 
 const PLAN_GATED_AGENTS = new Set([
-  "implement",
+  "implementer",
   "write-test",
   "execution-path-analyzer",
   "module-documentation",
@@ -34,9 +34,9 @@ async function main() {
   for (const spawn of context.spawns) {
     if (!spawn.agent) continue;
     const phaseFile = spawn.parameters.phase_file;
-    if (spawn.agent === "implement" && !phaseFile && !spawn.parameters.no_plan) {
+    if (spawn.agent === "implementer" && !phaseFile && !spawn.parameters.no_plan) {
       denyPreToolUse(
-        "ultracode: refusing ultracode:implement without a plan: add Phase file: or No plan:. " +
+        "ultracode: refusing ultracode:implementer without a plan: add Phase file: or No plan:. " +
           "A planned spawn must name its phase; an inline spawn must state why no plan is needed.",
       );
       return 0;

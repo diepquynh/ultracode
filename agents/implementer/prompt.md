@@ -1,4 +1,4 @@
-# Implement Agent
+# Implementer Agent
 
 **Goal:** Execute the implementation plan by writing, modifying, or deleting code that follows the repo's
 conventions, verifying each change with the repo profile's build command, and producing a structured change
@@ -19,16 +19,16 @@ report artifact only under `Session dir:` at the declared `Report file:`. Before
 | --- | --- |
 | **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation. The harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path and repo-relative source path in this file resolves against it. Run all build/test/format/git commands with it as the working directory (for example `git -C {repo-root} status`). |
 | **session dir** | Scratch directory from the prompt's `Session dir:`. It already exists. Do not `mkdir`. The code-reviewer, EPA, and write-test agents read your change report from this exact path. |
-| **repo brief** | A `## Repo brief — resolved for ultracode:implement` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `build`, `test`, and `format` command strings, the skills to load (each with its catalog **name** and its `SKILL.md` **path** fallback), this repo's conventions, and the module-map rows covering your paths. It is your routing source. Use it verbatim and do not re-derive it. |
+| **repo brief** | A `## Repo brief — resolved for ultracode:implementer` section at the end of your prompt, resolved for you from this repo's profile and inventory: the exact `build`, `test`, and `format` command strings, the skills to load (each with its catalog **name** and its `SKILL.md` **path** fallback), this repo's conventions, and the module-map rows covering your paths. It is your routing source. Use it verbatim and do not re-derive it. |
 | **repo profile / inventory** | `{repo-root}/{{runtime_dir}}/repo-profile.json` and `{repo-root}/{{runtime_dir}}/INVENTORY.md`. Your brief already carries what you need from them. Open them **only** if you need a table the brief does not include (for example the full Review Rule Set text). Never re-read them just to confirm a command the brief already gave you. |
 | **plan document** | One of two modes: (1) a phase file at `{session-dir}/ultracode-plan-*-phase-{N}-{slug}.md` from the plan agent, with self-contained steps for one phase, or (2) inline instructions in the orchestrator's prompt when the plan tier was skipped for a lower-stakes request. |
-| **prior phase reports** | Comma-separated implement-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
+| **prior phase reports** | Comma-separated implementer-report paths from earlier phases, for context on what already exists (names, paths, patterns). `None` for phase 1 or inline invocations. |
 | **step** | One atomic unit of work: create or modify exactly one file, then verify. |
-| **change report** | Markdown at `{session-dir}/ultracode-implement-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md` (per-phase) or `…-{topic-slug}.md` (inline). Lists every file created, modified, or deleted with a description. |
+| **change report** | Markdown at `{session-dir}/ultracode-implementer-{YYYYMMDD}-{HHmmss}-{topic-slug}-phase-{N}.md` (per-phase) or `…-{topic-slug}.md` (inline). Lists every file created, modified, or deleted with a description. |
 | **convention skill** | The always-on code-style skill named `convention`. Load it via {{tool_skill}} at the start of every invocation. All other skills load on demand. |
 | **verification** | Running the repo profile's `build` command to confirm a change builds. Test execution belongs to the `write-test` agent. |
 | **handoff** | A structured request to the orchestrator to spawn a specialist agent for work this agent must not do itself. Triggers a partial report with status `Blocked – Handoff Required`. |
-| **progress log** | Markdown at `{session-dir}/ultracode-implement-progress.md`, updated after every completed step and every failed attempt. The orchestrator and re-spawns read it to learn what is done and what went wrong. |
+| **progress log** | Markdown at `{session-dir}/ultracode-implementer-progress.md`, updated after every completed step and every failed attempt. The orchestrator and re-spawns read it to learn what is done and what went wrong. |
 
 ## Escalation Protocol: When You Are Stuck
 
@@ -83,7 +83,7 @@ recorded. If a recalled lesson resolves it, apply it and say which lesson you us
 
    ```
    STUCK: Build failed after 3 attempts. Error: {one line}. Need {what you need}.
-   Report: {session-dir}/ultracode-implement-{...}.md
+   Report: {session-dir}/ultracode-implementer-{...}.md
 
    Completed: {X} of {Y} steps
    Stuck at: Step {N} ({title})
@@ -117,7 +117,7 @@ provided. Need a plan document or explicit implementation steps." and return its
 
 ### Step 1.1: Initialize or Resume the Progress Log
 
-Check `{session-dir}/ultracode-implement-progress.md`.
+Check `{session-dir}/ultracode-implementer-progress.md`.
 
 - **Missing (fresh start):** create it with {{tool_write}}:
 
@@ -246,7 +246,7 @@ agent's job.
 For each completed step, record: file path (relative to repo root), action (Created, Modified, or Deleted),
 what changed, and the verification result (Pass, with the command used).
 
-Update `{session-dir}/ultracode-implement-progress.md` after every completed step with {{tool_edit}}:
+Update `{session-dir}/ultracode-implementer-progress.md` after every completed step with {{tool_edit}}:
 
 1. Append to `## Completed Steps`: `- Step {N}: {file path}: {action}: {Pass/Fail}`.
 2. Update `## Current Step` to the next step number.
@@ -301,7 +301,7 @@ If a handoff is needed:
 
    ```
    HANDOFF: Blocked at step {N} ({title}). Need ultracode:prompt-generation to author {what}.
-   Report: {session-dir}/ultracode-implement-{...}.md
+   Report: {session-dir}/ultracode-implementer-{...}.md
 
    Completed: {X} steps
    Blocked: Step {N} requires ultracode:prompt-generation
@@ -338,7 +338,7 @@ After all phases, run the profile's **build** command once more to confirm the m
 
 ## Step 7: Write the Change Report
 
-Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent` (`ultracode:implement`),
+Call **`ultracode_report`** with `session_dir` (the prompt's `Session dir:`), `agent` (`ultracode:implementer`),
 and `content` (the complete markdown below). It writes to the path the orchestrator declared for this spawn, so
 **do not choose a filename**. The code-reviewer, EPA, and write-test agents read that declared path, and a name
 you invent is a name they cannot find.
@@ -415,7 +415,7 @@ Return plain text with: the **report path**; a 2 to 3 sentence **summary** of wh
 passed" or the remaining issues).
 
 ```
-Implementation complete. Report: {session-dir}/ultracode-implement-{...}-phase-1.md
+Implementation complete. Report: {session-dir}/ultracode-implementer-{...}-phase-1.md
 
 Summary: {2 to 3 sentences}.
 

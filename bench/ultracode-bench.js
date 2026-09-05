@@ -12,7 +12,7 @@
 //   node bench/ultracode-bench.js --json out.json        # also write machine output
 //   node bench/ultracode-bench.js --baseline base.json   # compare against a saved run
 //   node bench/ultracode-bench.js --save base.json       # write a new baseline
-//   node bench/ultracode-bench.js --agent implement      # restrict to one agent
+//   node bench/ultracode-bench.js --agent implementer    # restrict to one agent
 //   node bench/ultracode-bench.js --since 2026-08-01     # only sessions modified since
 //   node bench/ultracode-bench.js --claude-root DIR      # non-default transcript root
 //
@@ -26,6 +26,7 @@ const path = require("node:path");
 const {
   claudeTranscripts,
   linkSpawns,
+  canonicalAgent,
   agentIdOf,
   parentSessionOf,
 } = require("./lib/transcripts");
@@ -241,6 +242,15 @@ async function main() {
     });
   }
 
+  // Canonicalized once, so `--agent implement`, `--agent implementer` and either
+  // with the `ultracode:` prefix all select the same runs, whichever name the
+  // transcript was recorded under.
+  const wantedAgent = options.agent
+    ? canonicalAgent(
+        options.agent.startsWith("ultracode:") ? options.agent : `ultracode:${options.agent}`,
+      )
+    : null;
+
   const runs = [];
   let scanned = 0;
   for (const file of subagentFiles) {
@@ -249,7 +259,7 @@ async function main() {
     // Only ultracode's own subagents — other agents in the same repo are not
     // this pipeline's cost and would dilute every ratio.
     if (!type || !type.startsWith("ultracode:")) continue;
-    if (options.agent && type !== `ultracode:${options.agent}` && type !== options.agent) continue;
+    if (wantedAgent && canonicalAgent(type) !== wantedAgent) continue;
     scanned += 1;
     if (scanned % 200 === 0) process.stderr.write(`  measured ${scanned} runs\n`);
     const run = await measureRun(file, {

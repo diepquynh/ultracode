@@ -279,7 +279,7 @@ Seed commands + Review Rule Set from the proposal (read the stack reference at t
 Seed the repo-profile.json models block with the harness-neutral model routing from the output contract so the
 model-router hook can switch subagent models per repo and per phase: models.byAgent (explore, generate-spec,
 plan and fact-check = advanced; code-reviewer/execution-path-analyzer = balanced; module-documentation/prompt-generation =
-advanced) and models.byPhaseComplexity (implement and write-test each low = fast, medium = fast, high =
+advanced) and models.byPhaseComplexity (implementer and write-test each low = fast, medium = fast, high =
 balanced).
 Self-review for consistency, then write the generation report. Return the report path and the full list of
 files written."
@@ -287,7 +287,7 @@ files written."
 
 The `models` block this step seeds into `repo-profile.json` is what the **model-router hook** later applies to
 every pipeline subagent spawn: `models.byAgent` for the fixed-model stages and `models.byPhaseComplexity` for
-`implement` and `write-test` by the plan phase's Complexity tier (default low and medium use fast, high uses
+`implementer` and `write-test` by the plan phase's Complexity tier (default low and medium use fast, high uses
 balanced). The orchestrator and the explicit commands pass no `model` argument. The hook resolves it, and denies
 a caller `model` that does not match the routed slug (Grok keeps the original spawn argument even after
 `updatedInput`). That is separate from the per-mode models you set on the spawns above, which are the

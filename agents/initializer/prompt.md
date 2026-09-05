@@ -519,14 +519,14 @@ The repo's skill set is `Generated skills` PLUS `Reused skills`. EVERY skill in 
 models are switched per repo and per phase (see the `models` schema and defaults in
 `{{plugin_root}}/refs/inventory-and-profile.md`):
 - `models.byAgent`: `explore`, `generate-spec`, `plan`, `fact-check` = `advanced`; `code-reviewer`, `execution-path-analyzer` = `balanced`; `module-documentation`, `prompt-generation` = `advanced`.
-- `models.byPhaseComplexity`: `implement` and `write-test` each `{ "low": "fast", "medium": "fast", "high": "balanced" }`.
+- `models.byPhaseComplexity`: `implementer` and `write-test` each `{ "low": "fast", "medium": "fast", "high": "balanced" }`.
 
 Every applicable route must be present. Once this profile exists, an omitted agent breaks that stage outright.
 
 Every key in both maps is the agent's **bare** name. Never write an `ultracode:`-prefixed key (write `explore`,
 NOT `ultracode:explore`). A prefixed key would never match.
 
-Do not add `implement`, `write-test`, `initializer`, or `hub-wait` to `byAgent`. The first two are
+Do not add `implementer`, `write-test`, `initializer`, or `hub-wait` to `byAgent`. The first two are
 tier-driven. The initializer is spawned by the /init-kit command, which sets its model per mode, so leaving it
 out does not break re-initialization. `hub-wait` is pinned to the `fast` tier by the hook and ignores the
 profile. A route may be `"default"` to use the agent definition's neutral default or
@@ -535,7 +535,7 @@ fallback. Keep the seeded tier defaults otherwise.
 
 ### Step GI4: Self-review
 
-Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (all eight static agents, including `fact-check`) and `byPhaseComplexity` (`implement` and `write-test`, each low/medium/high) seeded to the contract defaults; every `models` key is a bare agent name with no `ultracode:` prefix; and `implement`, `write-test`, `initializer`, and `hub-wait` are absent from `byAgent`. Fix any mismatch by
+Verify: the INVENTORY Skills Inventory lists every skill in `Generated skills` AND every skill in `Reused skills`; the profile `skills` array mirrors it 1:1 with a `source` of `generated` or `reused` on each entry; `commands` match the proposal; the Module/Area map mirrors the proposal's module map; the `models` block is present with `byAgent` (all eight static agents, including `fact-check`) and `byPhaseComplexity` (`implementer` and `write-test`, each low/medium/high) seeded to the contract defaults; every `models` key is a bare agent name with no `ultracode:` prefix; and `implementer`, `write-test`, `initializer`, and `hub-wait` are absent from `byAgent`. Fix any mismatch by
 editing.
 
 ### Step GI5: {{tool_write}} the generation report

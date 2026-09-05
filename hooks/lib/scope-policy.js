@@ -9,15 +9,15 @@
 // directory, plus OS-temp scratch outside every governed root — the shell is a
 // first-class way to produce a session artifact, not a loophole around the
 // write tool. initializer and module-documentation get one extra named subtree
-// each, matching the exact paths their prompt.md documents. implement,
+// each, matching the exact paths their prompt.md documents. implementer,
 // prompt-generation, and write-test keep full work-repo-root write access beyond
 // that — their jobs genuinely require writing anywhere in the checkout, and a
 // phase file's path list is only a hint (plans miss skill-required companions
 // such as DTOs, enums, wiring). hooks/spawn-scope.js still records those paths
 // for observability; this policy does not deny writes for leaving that set.
-// implement additionally may never touch a path that looks like a test file —
-// agents/implement/prompt.md Constraint 6 — which is enforced here rather than
-// only in the implement agent's own prompt so a weaker or misled model cannot
+// implementer additionally may never touch a path that looks like a test file —
+// agents/implementer/prompt.md Constraint 6 — which is enforced here rather than
+// only in the implementer agent's own prompt so a weaker or misled model cannot
 // talk its way around it.
 
 "use strict";
@@ -105,7 +105,7 @@ function scopeRecordFor(state, { agent, repoKey = "", repoRoot = "", targetPath 
     if (repoKey && scopes[repoKey]) return scopes[repoKey];
     const records = Object.values(scopes).filter((record) => record && typeof record === "object");
     // Prefer the spawn whose recorded work-repo contains the write target. Cross-repo
-    // sessions keep several implement/write-test scopes under one spawn-scope.json; a
+    // sessions keep several implementer/write-test scopes under one spawn-scope.json; a
     // blank actor.repoKey used to fall through to the first/primary record and confine
     // a secondary-repo spawn to the wrong phase file.
     if (targetPath) {
@@ -152,11 +152,11 @@ function resolveWriteScope(state, actor, targetPath) {
 function checkScope(agent, targetPath, ctx) {
   const { repoRoot, sessionDir, info } = ctx;
 
-  if (agent === "implement" && isTestPath(targetPath)) {
+  if (agent === "implementer" && isTestPath(targetPath)) {
     return {
       allowed: false,
       reason:
-        "a test file/directory path — agents/implement/prompt.md Constraint 6 prohibits ultracode:implement " +
+        "a test file/directory path — agents/implementer/prompt.md Constraint 6 prohibits ultracode:implementer " +
         "from writing or fixing tests, absolutely, with no override; tests are ultracode:write-test's job, " +
         "only after the user requests them at the closing gate",
     };
@@ -171,7 +171,7 @@ function checkScope(agent, targetPath, ctx) {
     // they sit (ledger-policy.js). Denying it forced generate-spec, verifying
     // its own artifact (`sort … > /tmp/got.txt`), to contort shell work into
     // pipes or route every intermediate file through the write tool. Repo-
-    // writing agents (implement, write-test, …) keep strict confinement.
+    // writing agents (implementer, write-test, …) keep strict confinement.
     if (
       SESSION_ONLY_AGENTS.has(agent) &&
       (isInside(os.tmpdir(), targetPath) || isInside("/tmp", targetPath))
@@ -200,7 +200,7 @@ function checkScope(agent, targetPath, ctx) {
     };
   }
 
-  // Phase-declared paths are a hint for implement/write-test, not a write
+  // Phase-declared paths are a hint for implementer/write-test, not a write
   // allowlist. spawn-scope.js still records them; confining to that set blocked
   // skill-driven companions the plan omitted. Repo-root / session-only /
   // subtree / test-path rules above remain the hard boundaries.

@@ -3,7 +3,7 @@
     "code-reviewer": {
       "frontmatter": {
         "name": "code-reviewer",
-        "description": "Reviews the uncommitted working-tree changes against the repo's Review Rule Set and returns findings as one JSON object. Also runs a non-waivable security scan on every changed file, raising BLOCKER findings no instruction can override. Spawn after an implement or write-test agent finishes, or when the user asks to review current changes. Read-only on project source.",
+        "description": "Reviews the uncommitted working-tree changes against the repo's Review Rule Set and returns findings as one JSON object. Also runs a non-waivable security scan on every changed file, raising BLOCKER findings no instruction can override. Spawn after an implementer or write-test agent finishes, or when the user asks to review current changes. Read-only on project source.",
         "model": "sonnet",
         "effort": "high",
         "tools": [
@@ -15,12 +15,12 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "06dbb20261aaa017c4f5e04f0b816b46f5a0df09a49adb6bd4cd8d63d3adff36"
+      "body_sha256": "70042c0a2e5b51bb3631e9e807c622baa5fcef253ee7a3cf8f69a0dcb7238b69"
     },
     "execution-path-analyzer": {
       "frontmatter": {
         "name": "execution-path-analyzer",
-        "description": "Traces every execution path through the functions an implement phase changed (branches, early returns, error paths, boundary cases) and writes an EPA report for write-test to consume, one path per test. Spawn only when the user has asked for tests, after every coding phase is implemented and reviewed, before write-test. Read-only on project source.",
+        "description": "Traces every execution path through the functions an implementer phase changed (branches, early returns, error paths, boundary cases) and writes an EPA report for write-test to consume, one path per test. Spawn only when the user has asked for tests, after every coding phase is implemented and reviewed, before write-test. Read-only on project source.",
         "model": "sonnet",
         "effort": "high",
         "tools": [
@@ -34,7 +34,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "e15867ee2a6fbd9d26f63162133cd2bf2084e31c7773e9f45c797039a8d3ca96"
+      "body_sha256": "c203369f25d6e5494a130a388305a4e6f4c073f3b9141dba3e1a2b42841d7276"
     },
     "explore": {
       "frontmatter": {
@@ -61,7 +61,7 @@
     "fact-check": {
       "frontmatter": {
         "name": "fact-check",
-        "description": "Checks a spec or plan for claims that would break the implement agent, and for external facts that no longer trace to a cited page, returning one {verdict, target, findings} object. Mandatory after generate-spec and after plan, before either is shown for approval: ultracode_gate refuses approval without a recorded PASS. Its spawn sets how far it goes: `Prior findings:` scopes a re-pass to the previous findings plus changed text, and `Source check:` decides whether it re-opens cited pages. Read-only on project source.",
+        "description": "Checks a spec or plan for claims that would break the implementer agent, and for external facts that no longer trace to a cited page, returning one {verdict, target, findings} object. Mandatory after generate-spec and after plan, before either is shown for approval: ultracode_gate refuses approval without a recorded PASS. Its spawn sets how far it goes: `Prior findings:` scopes a re-pass to the previous findings plus changed text, and `Source check:` decides whether it re-opens cited pages. Read-only on project source.",
         "model": "opus",
         "effort": "high",
         "tools": [
@@ -76,7 +76,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "ba564d8b898256d709e794b018b9afee31766bdc98865af1769780bfc9670c11"
+      "body_sha256": "99fa8506d419c6c68ac9a5ba5b597c9c385e434d0ca563f0721c5cb0caa86713"
     },
     "generate-spec": {
       "frontmatter": {
@@ -97,7 +97,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "a24406c4402dc9ba679a0b9fdcf3bbfb53ff69f480b3e5713f25f944af1aefaa"
+      "body_sha256": "a5fb3045b488d2ae7c89a5fb77dbabc212c29a395cbbc80a5c344a20dcb1cc43"
     },
     "hub-wait": {
       "frontmatter": {
@@ -114,9 +114,9 @@
       },
       "body_sha256": "9ea627f4a4987e80db27586502d11c5afde38d93903014f683e40386ba3d367b"
     },
-    "implement": {
+    "implementer": {
       "frontmatter": {
-        "name": "implement",
+        "name": "implementer",
         "description": "Writes the code for one plan phase: loads the skills the orchestrator names, follows the repo's convention skill, verifies each step with the profile's build command, and reports what changed. Spawn when code must be created, modified, or deleted, or to fix code-reviewer findings or a verification failure. Does all coding itself and never delegates back.",
         "model": "sonnet",
         "effort": "medium",
@@ -135,7 +135,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "c38b9b6adca33d140cea1ca8fbad6dbb62bf25589e046fb0c6ff4ba2c1df8ac0"
+      "body_sha256": "14e4d4715ffc1465f01515e211ec163f0a5e0b6cf1fb69d21353a0e8efc05509"
     },
     "initializer": {
       "frontmatter": {
@@ -154,12 +154,12 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "066176777066b4535f715909b0ee0fd89224ed65af542ae3549c09a8e48f30ab"
+      "body_sha256": "684617b6ed18259bab376b305f2ae0280d052bef92d8bc04abe433f404b53b75"
     },
     "module-documentation": {
       "frontmatter": {
         "name": "module-documentation",
-        "description": "Creates or updates the module-hub area references under `.claude/skills/module-hub/references/` from what the implement phases actually changed, grounding every documented name in real source. Optional final step: spawn only when the user asks for documentation, after every phase has passed review. Edits only the references directory.",
+        "description": "Creates or updates the module-hub area references under `.claude/skills/module-hub/references/` from what the implementer phases actually changed, grounding every documented name in real source. Optional final step: spawn only when the user asks for documentation, after every phase has passed review. Edits only the references directory.",
         "model": "opus",
         "effort": "high",
         "tools": [
@@ -174,7 +174,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "caab4c2e3afef4bc8ec65fd7f7ae9053c3de4bc1c931c4e0fa789be9051c20db"
+      "body_sha256": "2127d63357d55b4db4f61b8581c86d6ccc050151dbcf8af00e4f75bf5b442f7a"
     },
     "plan": {
       "frontmatter": {
@@ -191,7 +191,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "425403a95e83ed61807af8bd812bcd5cddcb05d84fe2efe1bb8eb650ea8b4d6e"
+      "body_sha256": "4a5117d1fe758a7b97d45fd8a045c0cb5adeab2a1d4d91af22b644c8b677b5eb"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -234,14 +234,14 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "0d8855926926295d32292a43b6d9c710a244f65744378472e7fad4d432c35741"
+      "body_sha256": "016211298e0e198aedc6ef4aabc50e463d2a4cf8de65bb35a4eab29ac52af13a"
     }
   },
   "skills": {
     "meta-author": {
       "frontmatter": {
         "name": "meta-author",
-        "description": "Authoring standard for any instruction file — SKILL.md skills, subagent markdown files, and LLM system prompts. ACTIVATE when creating or editing a skill, an agent definition, or an AI prompt. Encodes the 15 Writing Laws, Chain-of-Thought structure, and a mandatory self-review checklist so the output is executable by any model on the first pass without re-reading or guessing."
+        "description": "Authoring standard for instruction files: SKILL.md skills, agent definitions, and LLM system prompts. ACTIVATE when creating or editing any of those."
       },
       "body_sha256": "92e4cf75f16e7cfe9b06fc245b530eab8a9c83794c6a6c9e31a8af4665bcb022"
     }

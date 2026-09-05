@@ -26,8 +26,8 @@ repository initialization:
     "prompt-generation": "advanced"
   },
   "byPhaseComplexity": {
-    "implement":  { "low": "fast", "medium": "fast", "high": "balanced" },
-    "write-test": { "low": "fast", "medium": "fast", "high": "balanced" }
+    "implementer": { "low": "fast", "medium": "fast", "high": "balanced" },
+    "write-test":  { "low": "fast", "medium": "fast", "high": "balanced" }
   }
 }
 ```
@@ -35,7 +35,7 @@ repository initialization:
 Routing works in two ways:
 
 - **By agent.** For subagents that always run on one model.
-- **By phase complexity.** For `implement` and `write-test`, whose model is chosen per plan phase by that
+- **By phase complexity.** For `implementer` and `write-test`, whose model is chosen per plan phase by that
   phase's complexity tier.
 - **Pinned.** `hub-wait` always runs on the `fast` tier. It relays hub messages and decides nothing, so the
   router ignores the profile for it: it is never denied for a missing route, and a `byAgent` entry for it has

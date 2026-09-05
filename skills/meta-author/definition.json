@@ -2,6 +2,6 @@
   "schema_version": 1,
   "kind": "skill",
   "name": "meta-author",
-  "description": "Authoring standard for any instruction file — SKILL.md skills, subagent markdown files, and LLM system prompts. ACTIVATE when creating or editing a skill, an agent definition, or an AI prompt. Encodes the 15 Writing Laws, Chain-of-Thought structure, and a mandatory self-review checklist so the output is executable by any model on the first pass without re-reading or guessing.",
+  "description": "Authoring standard for instruction files: SKILL.md skills, agent definitions, and LLM system prompts. ACTIVATE when creating or editing any of those.",
   "prompt": "prompt.md"
 }

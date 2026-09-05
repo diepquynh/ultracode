@@ -199,15 +199,15 @@
       ],
       "type": "absolute-path"
     },
-    "implement_report": {
+    "implementer_report": {
       "labels": [
-        "Implement report"
+        "Implementer report"
       ],
       "type": "path"
     },
-    "implement_reports": {
+    "implementer_reports": {
       "labels": [
-        "Implement reports"
+        "Implementer reports"
       ],
       "type": "text"
     },
@@ -346,7 +346,7 @@
         "spec_file"
       ]
     },
-    "implement": {
+    "implementer": {
       "required": [
         "primary_repo_root",
         "repo_root",
@@ -367,7 +367,7 @@
         "repo_root",
         "session_dir",
         "repo_key",
-        "implement_report",
+        "implementer_report",
         "report_file"
       ]
     },
@@ -377,7 +377,7 @@
         "repo_root",
         "session_dir",
         "repo_key",
-        "implement_report",
+        "implementer_report",
         "epa_report",
         "report_file"
       ]
@@ -409,7 +409,7 @@
         "repo_root",
         "session_dir",
         "repo_key",
-        "implement_reports",
+        "implementer_reports",
         "report_file"
       ]
     },

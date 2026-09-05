@@ -63,7 +63,7 @@ follows your conventions instead of a framework's defaults:
 | `explore` | Fact-checks your requirements against the repo and adds suggestions from its own research. Anything the repo does not already use is looked up on the web and cited, never recalled from memory. |
 | `generate-spec` · `plan` | Turn the request into one spec, then into a phased plan the implementers follow. |
 | `fact-check` | Finds hallucinations in specs and plans before either reaches you for approval, so nobody downstream gets false instructions. Its `PASS` is what unlocks the approval gate. |
-| `implement` · `write-test` | Build your requirements and cover them with tests. |
+| `implementer` · `write-test` | Build your requirements and cover them with tests. |
 | `code-reviewer` | Checks that the implementers did the right thing and stops them going off track. Loops until clean. |
 | `execution-path-analyzer` | Enumerates the branches first, so tests are written against real paths instead of guesses. |
 | `module-documentation` | Writes a short description of how each area works, refreshed as the final step. |
@@ -74,7 +74,7 @@ only on request. The full picture, with what enforces each gate, is in [Architec
 
 ```mermaid
 flowchart LR
-    E["explore"] --> S["generate-spec"] --> F1["fact-check"] --> A1{"spec<br/>approval"} --> P["plan"] --> F2["fact-check"] --> A2{"plan<br/>approval"} --> I["implement<br/>(per phase)"]
+    E["explore"] --> S["generate-spec"] --> F1["fact-check"] --> A1{"spec<br/>approval"} --> P["plan"] --> F2["fact-check"] --> A2{"plan<br/>approval"} --> I["implementer<br/>(per phase)"]
     I <-- "loops until clean" --> R["code-reviewer"]
     R --> C{"closing gate<br/>(opt-in)"}
     C -- tests --> X["execution-path-analyzer"] --> W["write-test"] <--> R2["code-reviewer"]

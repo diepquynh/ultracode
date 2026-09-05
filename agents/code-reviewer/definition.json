@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "code-reviewer",
-  "description": "Reviews the uncommitted working-tree changes against the repo's Review Rule Set and returns findings as one JSON object. Also runs a non-waivable security scan on every changed file, raising BLOCKER findings no instruction can override. Spawn after an implement or write-test agent finishes, or when the user asks to review current changes. Read-only on project source.",
+  "description": "Reviews the uncommitted working-tree changes against the repo's Review Rule Set and returns findings as one JSON object. Also runs a non-waivable security scan on every changed file, raising BLOCKER findings no instruction can override. Spawn after an implementer or write-test agent finishes, or when the user asks to review current changes. Read-only on project source.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "balanced",

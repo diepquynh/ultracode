@@ -20,7 +20,7 @@ xai-org/grok-build@main at 72a6125). Facts that changed since the previous measu
   (`matcher: ^ultracode:fact-check$`) and records the verdict from `last_assistant_message` plus the leaf
   transcript's spawn prompt.
 - Leaf `PostToolUse` Bash events often omit `agent_type`. `build-streak.js` and `build-streak-gate.js`
-  therefore cannot attribute failures inside a forked implement or write-test turn, even when the matching
+  therefore cannot attribute failures inside a forked implementer or write-test turn, even when the matching
   PreToolUse Bash call carried the actor.
 - An agent's explicit `tools:` front matter is an allowlist, and it drops every MCP tool it does not name
   (measured 2026-09-03, CLI 2.1.258, session 11111111-2222-4333-8444-555555550001). An `ultracode:explore`
@@ -120,7 +120,7 @@ Source references are to openai/codex@main.
   `scripts/register_codex_agents.js` in a managed block. Codex names are `ultracode_<name>` because `:` is
   not allowed.
 - Subagents inherit the spawner's model unless something sets one (measured 2026-08-30: a `gpt-5.6-sol`
-  orchestrator ran `implement` leaves on sol, paying the advanced price for balanced work, and a luna parent
+  orchestrator ran `implementer` leaves on sol, paying the advanced price for balanced work, and a luna parent
   ran them on luna). Precedence, confirmed in source: role `config_file` model, then per-call `model`
   argument, then `[agents].default_subagent_model`, then inherit. `core/src/tools/handlers/multi_agents_common.rs`
   `apply_requested_spawn_agent_model_overrides` uses the argument or the default. `multi_agents_v2/spawn.rs`

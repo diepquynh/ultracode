@@ -61,7 +61,7 @@ const HOOK_OWNED = [
 
 // Written by mcp/gate-server.js itself, in-process, so denying every tool-issued
 // write costs the pipeline nothing. gates.json is the file hooks/pipeline-gate.js
-// reads to decide whether ultracode:plan or a phase-driven ultracode:implement
+// reads to decide whether ultracode:plan or a phase-driven ultracode:implementer
 // may be spawned at all — hand-writing it approves your own spec or plan and
 // skips the fact-check requirement mcp/lib/gate.js enforces on the real call.
 const TOOL_OWNED = [
@@ -70,7 +70,7 @@ const TOOL_OWNED = [
     writer: "the ultracode_gate MCP tool (mcp/gate-server.js), from a decision it accepted",
     stakes:
       "hooks/pipeline-gate.js reads it to decide whether ultracode:plan and a phase-driven " +
-      "ultracode:implement may be spawned, and the tool records an approval only once " +
+      "ultracode:implementer may be spawned, and the tool records an approval only once " +
       "ultracode:fact-check has returned PASS",
   },
   {
@@ -85,7 +85,7 @@ const TOOL_OWNED = [
 const AGENT_OWNED = [
   {
     pattern: /^ultracode-review-ledger(-[\w.-]+)?\.md$/,
-    owners: ["code-reviewer", "implement", "write-test"],
+    owners: ["code-reviewer", "implementer", "write-test"],
     stakes: "hooks/review-cap.js counts its iterations to cap the review loop",
   },
   {
@@ -95,8 +95,8 @@ const AGENT_OWNED = [
       "it records unwaivable BLOCKER findings, and review-cap.js honors it to keep a blocked review alive",
   },
   {
-    pattern: /^ultracode-implement-progress(-[\w.-]+)?\.md$/,
-    owners: ["implement"],
+    pattern: /^ultracode-implementer-progress(-[\w.-]+)?\.md$/,
+    owners: ["implementer"],
     stakes: "re-spawns read it to learn which steps already succeeded",
   },
 ];

@@ -727,11 +727,11 @@ test("MCP capabilities are declared exactly where the agent prompt calls the too
 
 test("generated agents expose MCP tools the way each harness needs", () => {
   // Claude: the full plugin-qualified name in the allowlist, and only for declared capabilities.
-  const [implementClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "implement.md"));
+  const [implementerClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "implementer.md"));
   for (const tool of ["ultracode_memory_recall", "ultracode_memory", "ultracode_report"]) {
     assert.ok(
-      implementClaude.tools.includes(`mcp__plugin_ultracode_ultracode-gate__${tool}`),
-      `claude implement declares ${tool}`,
+      implementerClaude.tools.includes(`mcp__plugin_ultracode_ultracode-gate__${tool}`),
+      `claude implementer declares ${tool}`,
     );
   }
   const [factCheckClaude] = splitFrontmatter(path.join(CLAUDE_PLUGIN_ROOT, "agents", "fact-check.md"));
@@ -743,14 +743,14 @@ test("generated agents expose MCP tools the way each harness needs", () => {
   assert.ok(planClaude.tools.every((tool) => !tool.startsWith("mcp__")), "plan calls no MCP tool");
 
   // Codex: role TOML has no allowlist, so the tool-vocabulary policy names the MCP tools.
-  const implementCodex = parseToml(
-    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implement.toml"), "utf-8"),
+  const implementerCodex = parseToml(
+    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implementer.toml"), "utf-8"),
   ).developer_instructions;
   assert.match(
-    implementCodex,
+    implementerCodex,
     /Limit direct tool use in this role to these Codex capabilities: (`[a-z_]+`, )*`ultracode_memory_recall`, `ultracode_memory`, `ultracode_report`\./,
   );
-  assert.match(implementCodex, /are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities/);
+  assert.match(implementerCodex, /are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities/);
   const factCheckCodex = parseToml(
     fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "fact-check.toml"), "utf-8"),
   ).developer_instructions;
@@ -758,14 +758,14 @@ test("generated agents expose MCP tools the way each harness needs", () => {
 
   // Grok and Antigravity: MCP tools are inherited from the session registry, so the prose
   // mapping stays out of the native tools list.
-  const [implementGrok] = splitFrontmatter(path.join(GROK_PLUGIN_ROOT, "agents", "implement.md"));
-  assert.ok(implementGrok.tools.every((tool) => !/\s|ultracode/.test(tool)), implementGrok.tools.join(","));
-  const implementAgy = fs.readFileSync(
-    path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "implement.md"),
+  const [implementerGrok] = splitFrontmatter(path.join(GROK_PLUGIN_ROOT, "agents", "implementer.md"));
+  assert.ok(implementerGrok.tools.every((tool) => !/\s|ultracode/.test(tool)), implementerGrok.tools.join(","));
+  const implementerAgy = fs.readFileSync(
+    path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", "implementer.md"),
     "utf-8",
   );
-  assert.match(implementAgy, /^inheritMcp: true$/m);
-  assert.doesNotMatch(implementAgy, /^    - .*(MCP| )/m, "no prose entry in the AGY tools list");
+  assert.match(implementerAgy, /^inheritMcp: true$/m);
+  assert.doesNotMatch(implementerAgy, /^    - .*(MCP| )/m, "no prose entry in the AGY tools list");
 });
 
 test("{{tool_*}} placeholders resolve to the correct harness-native name", () => {
@@ -786,17 +786,17 @@ test("codex and grok load skills by reading SKILL.md, not a Skill tool", () => {
   assert.match(skill.codex_strategy, /Codex has no tool for local skills/);
   assert.match(skill.grok_strategy, /default toolset has no skill tool/);
 
-  const implementGrok = fs.readFileSync(
-    path.join(GROK_PLUGIN_ROOT, "agents", "implement.md"),
+  const implementerGrok = fs.readFileSync(
+    path.join(GROK_PLUGIN_ROOT, "agents", "implementer.md"),
     "utf-8",
   );
-  assert.match(implementGrok, /SUBAGENTS receive no catalog/);
-  assert.match(implementGrok, /read_file on the skill's SKILL.md/);
-  assert.match(implementGrok, /\.grok\/skills\/\{name\}\/SKILL\.md/);
-  assert.doesNotMatch(implementGrok, /NEVER read a skill's `SKILL\.md`/);
-  assert.match(implementGrok, /Load a per-repo skill by NAME/);
+  assert.match(implementerGrok, /SUBAGENTS receive no catalog/);
+  assert.match(implementerGrok, /read_file on the skill's SKILL.md/);
+  assert.match(implementerGrok, /\.grok\/skills\/\{name\}\/SKILL\.md/);
+  assert.doesNotMatch(implementerGrok, /NEVER read a skill's `SKILL\.md`/);
+  assert.match(implementerGrok, /Load a per-repo skill by NAME/);
   assert.match(
-    implementGrok,
+    implementerGrok,
     /^tools: read_file, search_replace, search_replace, run_terminal_command, grep, list_dir$/m,
   );
 
@@ -807,16 +807,16 @@ test("codex and grok load skills by reading SKILL.md, not a Skill tool", () => {
   assert.match(writeTestGrok, /read_file on the skill's SKILL.md/);
   assert.doesNotMatch(writeTestGrok, /never use read_file on a SKILL.md file directly/i);
 
-  const implementCodex = parseToml(
-    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implement.toml"), "utf-8"),
+  const implementerCodex = parseToml(
+    fs.readFileSync(path.join(CODEX_PLUGIN_ROOT, "agents", "implementer.toml"), "utf-8"),
   ).developer_instructions;
-  assert.match(implementCodex, /Codex has no tool for local skills/);
-  assert.match(implementCodex, /exec_command on the skill's SKILL.md/);
-  assert.match(implementCodex, /\.agents\/skills\/\{name\}\/SKILL\.md/);
-  assert.doesNotMatch(implementCodex, /NEVER read a skill's `SKILL\.md`/);
-  assert.match(implementCodex, /Load a per-repo skill by NAME/);
+  assert.match(implementerCodex, /Codex has no tool for local skills/);
+  assert.match(implementerCodex, /exec_command on the skill's SKILL.md/);
+  assert.match(implementerCodex, /\.agents\/skills\/\{name\}\/SKILL\.md/);
+  assert.doesNotMatch(implementerCodex, /NEVER read a skill's `SKILL\.md`/);
+  assert.match(implementerCodex, /Load a per-repo skill by NAME/);
   assert.match(
-    implementCodex,
+    implementerCodex,
     /Limit direct tool use in this role to these Codex capabilities: `exec_command`, `apply_patch`/,
   );
 });
@@ -1861,7 +1861,7 @@ function sessionGuardTest(target) {
       cwd: repo,
       session_id: "testsess",
       tool_input: {
-        subagent_type: "ultracode:implement",
+        subagent_type: "ultracode:implementer",
         prompt:
           `Repo root: ${workRepo}.\nSession dir: ${path.join(expectedDir, "backend")}.\nRepo key: backend.` +
           `\nNo plan: cross-repo fix.\nReport file: ${path.join(expectedDir, "backend", "report.md")}.`,
@@ -1870,7 +1870,7 @@ function sessionGuardTest(target) {
     { PLUGIN_ROOT: pluginRoot },
   );
   const sharedScope = JSON.parse(fs.readFileSync(path.join(expectedDir, "spawn-scope.json"), "utf-8"));
-  assert.equal(sharedScope.scopes.implement.backend.repoRoot, workRepo);
+  assert.equal(sharedScope.scopes.implementer.backend.repoRoot, workRepo);
   assert.equal(
     fs.existsSync(path.join(workRepo, runtimeDir, "session", "ultracode-session-testsess", "spawn-scope.json")),
     false,
@@ -1937,7 +1937,7 @@ function bashGuardTest(target) {
   }
 
   assert.equal(run("npm test"), "");
-  assert.equal(run("sleep 5", "ultracode:implement"), "");
+  assert.equal(run("sleep 5", "ultracode:implementer"), "");
 }
 
 test("bash-guard denies orchestrator wait/sleep but exempts subagents", () => {
@@ -1993,7 +1993,7 @@ function monitorGuardTest(target) {
     /Hard rule 19/,
   );
 
-  assert.equal(run("sleep 600", "ultracode:implement"), "");
+  assert.equal(run("sleep 600", "ultracode:implementer"), "");
 }
 
 test("monitor-guard keeps grok's monitor tool inside Hard rule 19, minus the hub wake loop", () => {
@@ -2066,7 +2066,7 @@ function artifactGuardTest(target) {
   // Hook-owned: no model-issued write is ever legitimate. factcheck.json is the
   // sharp case — mcp/gate-server.js honors an "approved" decision only when this
   // file already carries a fact-check PASS, so a hand-written value forges the gate.
-  for (const writer of [undefined, "ultracode:fact-check", "ultracode:implement"]) {
+  for (const writer of [undefined, "ultracode:fact-check", "ultracode:implementer"]) {
     assert.match(ledgerDenied("factcheck.json", writer), /never written by hand/);
     assert.match(ledgerDenied("progress.json", writer), /never written by hand/);
     assert.match(ledgerDenied("build-streak.json", writer), /never written by hand/);
@@ -2075,27 +2075,27 @@ function artifactGuardTest(target) {
   // Agent-owned: only the role that did the work may write its ledger.
   assert.match(ledgerDenied("ultracode-review-ledger.md"), /not the orchestrator/);
   ledgerAllowed("ultracode-review-ledger.md", "ultracode:code-reviewer");
-  ledgerAllowed("ultracode-review-ledger.md", "ultracode:implement");
+  ledgerAllowed("ultracode-review-ledger.md", "ultracode:implementer");
   ledgerAllowed("ultracode-review-ledger-phase-12.md", "ultracode:write-test");
   assert.match(ledgerDenied("ultracode-review-ledger.md", "ultracode:explore"), /not ultracode:explore/);
 
   assert.match(ledgerDenied("ultracode-security-block.json"), /not the orchestrator/);
   ledgerAllowed("ultracode-security-block.json", "ultracode:code-reviewer");
   assert.match(
-    ledgerDenied("ultracode-security-block.json", "ultracode:implement"),
-    /not ultracode:implement/,
+    ledgerDenied("ultracode-security-block.json", "ultracode:implementer"),
+    /not ultracode:implementer/,
   );
 
-  assert.match(ledgerDenied("ultracode-implement-progress.md"), /not the orchestrator/);
-  ledgerAllowed("ultracode-implement-progress.md", "ultracode:implement");
+  assert.match(ledgerDenied("ultracode-implementer-progress.md"), /not the orchestrator/);
+  ledgerAllowed("ultracode-implementer-progress.md", "ultracode:implementer");
   assert.match(
-    ledgerDenied("ultracode-implement-progress.md", "ultracode:write-test"),
+    ledgerDenied("ultracode-implementer-progress.md", "ultracode:write-test"),
     /not ultracode:write-test/,
   );
 
   // A ledger is protected by name wherever it sits, and ordinary reports are not.
   assert.notEqual(run("/tmp/elsewhere/factcheck.json"), "");
-  ledgerAllowed("ultracode-implement-phase-3.md", "ultracode:implement");
+  ledgerAllowed("ultracode-implementer-phase-3.md", "ultracode:implementer");
 }
 
 test("artifact-guard denies orchestrator edits to pipeline artifacts but exempts subagents", () => {
@@ -2222,7 +2222,7 @@ function pluginGuardTest(target) {
     pickPattern(target, /read-only/, /read-only|inside ultracode's inst/),
   );
   assert.equal(write(path.join(repo, "src", "App.ts")), "");
-  assert.equal(write(path.join(session, "ultracode-implement-phase-1.md")), "");
+  assert.equal(write(path.join(session, "ultracode-implementer-phase-1.md")), "");
 }
 
 test("plugin-guard denies running, loading, or patching ultracode's own code", () => {
@@ -2248,7 +2248,7 @@ function agentResolutionTest(target) {
     // Canonical name in whichever field carries it, including only-Role spawns.
     [{ Subagents: [{ Role: "ultracode-fact-check" }] }, "fact-check"],
     [{ Subagents: [{ TypeName: "ultracode-plan" }] }, "plan"],
-    [{ subagent_type: "ultracode:implement" }, "implement"],
+    [{ subagent_type: "ultracode:implementer" }, "implementer"],
     [{ agent_type: "ultracode-code-reviewer" }, "code-reviewer"],
     [{ agent_type: "fact_check" }, "fact-check"],
     [{ agent_name: "fact_check" }, "fact-check"],
@@ -2652,13 +2652,13 @@ test("agy-message-record completes progress.json from the subagent's message", (
     progressPath,
     JSON.stringify({
       schemaVersion: 1,
-      records: [{ ts: "2026-08-20T20:00:00.000Z", agent: "implement", phase: "phase-3", status: "ok", summary: "" }],
+      records: [{ ts: "2026-08-20T20:00:00.000Z", agent: "implementer", phase: "phase-3", status: "ok", summary: "" }],
     }),
     "utf-8",
   );
   fs.writeFileSync(
     transcriptPath,
-    transcript("ultracode-implement", "11111111-1111-1111-1111-111111111111", 20, "Implemented phase 3: added the tracker service.\nAll steps verified."),
+    transcript("ultracode-implementer", "11111111-1111-1111-1111-111111111111", 20, "Implemented phase 3: added the tracker service.\nAll steps verified."),
     "utf-8",
   );
   run();
@@ -2678,13 +2678,13 @@ test("agy-message-record completes progress.json from the subagent's message", (
     progressPath,
     JSON.stringify({
       schemaVersion: 1,
-      records: [{ ts: "2026-08-20T20:05:00.000Z", agent: "implement", phase: null, status: "ok", summary: "" }],
+      records: [{ ts: "2026-08-20T20:05:00.000Z", agent: "implementer", phase: null, status: "ok", summary: "" }],
     }),
     "utf-8",
   );
   fs.writeFileSync(
     transcriptPath,
-    transcript("ultracode-implement", "22222222-2222-2222-2222-222222222222", 40, "STUCK: the build fails on a dependency I cannot resolve from this phase."),
+    transcript("ultracode-implementer", "22222222-2222-2222-2222-222222222222", 40, "STUCK: the build fails on a dependency I cannot resolve from this phase."),
     "utf-8",
   );
   const stuck = JSON.parse(run());
@@ -2745,7 +2745,7 @@ test("build-streak counts AGY failures from CommandLine, error, and the transcri
       {
         cwd: repo,
         conversationId: "testsess",
-        agent_type: "ultracode-implement",
+        agent_type: "ultracode-implementer",
         transcriptPath,
         stepIdx: step,
         ...(error ? { error } : {}),
@@ -2754,7 +2754,7 @@ test("build-streak counts AGY failures from CommandLine, error, and the transcri
       env,
     );
   };
-  const streak = () => JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implement;
+  const streak = () => JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implementer;
 
   const failure =
     "The command exited with code 1.\nOutput:\n[ERROR] /r/src/main/java/Foo.java:[11,2] cannot find symbol";
@@ -2787,7 +2787,7 @@ test("build-streak counts AGY failures from CommandLine, error, and the transcri
       {
         cwd: repo,
         conversationId: "testsess",
-        agent_type: "ultracode-implement",
+        agent_type: "ultracode-implementer",
         toolCall: { name: "run_command", args: { CommandLine: "./mvnw -q compile", Cwd: repo } },
       },
       env,
@@ -2815,7 +2815,7 @@ test("AGY spawns are stamped with the agent identity its own hooks read back", (
     JSON.stringify({
       schemaVersion: 1,
       commands: { build: "./mvnw -q compile" },
-      models: { byAgent: {}, byPhaseComplexity: { implement: { low: "balanced" } } },
+      models: { byAgent: {}, byPhaseComplexity: { implementer: { low: "balanced" } } },
     }),
     "utf-8",
   );
@@ -2832,7 +2832,7 @@ test("AGY spawns are stamped with the agent identity its own hooks read back", (
           name: "invoke_subagent",
           args: {
             Subagents: [
-              { Role: "Implementer", TypeName: "ultracode-implement", Model: "inherit", Prompt: prompt },
+              { Role: "Implementer", TypeName: "ultracode-implementer", Model: "inherit", Prompt: prompt },
             ],
           },
         },
@@ -2841,7 +2841,7 @@ test("AGY spawns are stamped with the agent identity its own hooks read back", (
     ),
   );
   const stamped = routed.overwrite.Subagents[0].Prompt;
-  assert.match(stamped, /^Ultracode agent: implement$/m);
+  assert.match(stamped, /^Ultracode agent: implementer$/m);
   assert.ok(stamped.startsWith(prompt.trimEnd()) || stamped.includes("No plan: identity test."));
 
   // A subagent conversation's own transcript begins with that prompt, which is all
@@ -2880,7 +2880,7 @@ test("AGY spawns are stamped with the agent identity its own hooks read back", (
   post();
   const streakPath = path.join(sessionDir, "build-streak.json");
   assert.ok(fs.existsSync(streakPath), "the streak is recorded in the session dir the spawn declared");
-  assert.equal(JSON.parse(fs.readFileSync(streakPath, "utf-8")).streaks.implement.consecutiveFailures, 1);
+  assert.equal(JSON.parse(fs.readFileSync(streakPath, "utf-8")).streaks.implementer.consecutiveFailures, 1);
 
   // An unstamped prompt (a spawn the router never saw) stays inert rather than
   // guessing an agent.
@@ -2905,7 +2905,7 @@ test("gates.json and the memory store are tool-owned ledgers", () => {
   // whether ultracode:plan may be spawned — was protected by nothing: only
   // mcp/lib/gate.js ever wrote it, so a plain `>` redirect could approve a spec
   // that no fact-check had passed.
-  for (const writer of ["", "fact-check", "implement", "code-reviewer"]) {
+  for (const writer of ["", "fact-check", "implementer", "code-reviewer"]) {
     const gates = checkLedger(writer, "/repo/.ultracode/session/x/gates.json");
     assert.equal(gates.allowed, false, writer || "orchestrator");
     assert.match(gates.reason, /ultracode_gate MCP tool/);
@@ -2966,7 +2966,7 @@ function buildStreakTest(target) {
   const statePath = path.join(sessionDir, "build-streak.json");
   const base = { cwd: repo, session_id: sessionId, sessionId };
 
-  const post = (command, result, agentType = "ultracode:implement", extra = {}) =>
+  const post = (command, result, agentType = "ultracode:implementer", extra = {}) =>
     runHook(
       counter,
       {
@@ -2978,7 +2978,7 @@ function buildStreakTest(target) {
       },
       env,
     );
-  const pre = (command, agentType = "ultracode:implement") =>
+  const pre = (command, agentType = "ultracode:implementer") =>
     runHook(
       gate,
       {
@@ -3000,7 +3000,7 @@ function buildStreakTest(target) {
   for (let attempt = 1; attempt <= 4; attempt += 1) {
     assert.equal(pre("./mvnw -q -T1C compile"), "", `${target}: attempt ${attempt} must be allowed`);
     const out = post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
-    assert.equal(streakOf("implement"), attempt, `${target}: streak after ${attempt}`);
+    assert.equal(streakOf("implementer"), attempt, `${target}: streak after ${attempt}`);
     if (attempt < 3) {
       // Below the warn threshold the hook is silent unless this repo has a
       // recorded lesson for the diagnostic — this fixture has none.
@@ -3016,7 +3016,7 @@ function buildStreakTest(target) {
   // The fifth failure reaches the deny threshold; the sixth build call is refused.
   assert.equal(pre("./mvnw -q -T1C compile"), "");
   post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
-  assert.equal(streakOf("implement"), 5);
+  assert.equal(streakOf("implementer"), 5);
   const denied = JSON.parse(pre("./mvnw -q -T1C compile"));
   assertDenied(denied, /5 consecutive build\/test failures/);
   assert.match(denyReason(denied), /STUCK: /);
@@ -3030,9 +3030,9 @@ function buildStreakTest(target) {
   // A pass clears the streak, re-opens the gate, and records the recovery for
   // the failure-lesson stage to convert into a durable lesson.
   post("./mvnw -q -T1C compile", "BUILD SUCCESS");
-  assert.equal(streakOf("implement"), 0);
+  assert.equal(streakOf("implementer"), 0);
   assert.equal(pre("./mvnw -q -T1C compile"), "");
-  const recovered = JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implement
+  const recovered = JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks.implementer
     .recoveredSignatures;
   assert.equal(recovered.length, 1);
   assert.match(recovered[0].signature, /cannot find symbol/);
@@ -3042,18 +3042,18 @@ function buildStreakTest(target) {
   // An interrupted call is not evidence either way: it must not count, and must
   // not clear an existing streak.
   post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT);
-  assert.equal(streakOf("implement"), 1);
+  assert.equal(streakOf("implementer"), 1);
   post("./mvnw -q -T1C compile", "", { interrupted: true });
-  assert.equal(streakOf("implement"), 1, `${target}: interrupted must not change the streak`);
+  assert.equal(streakOf("implementer"), 1, `${target}: interrupted must not change the streak`);
 
   // Streaks are per agent, and the orchestrator is exempt entirely — escalation
   // means handing back to the orchestrator, which it cannot do to itself.
   post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT, "ultracode:write-test");
   assert.equal(streakOf("write-test"), 1);
-  assert.equal(streakOf("implement"), 1);
+  assert.equal(streakOf("implementer"), 1);
   assert.equal(post("./mvnw -q -T1C compile", BUILD_FAIL_OUTPUT, null), "");
   const streaks = JSON.parse(fs.readFileSync(statePath, "utf-8")).streaks;
-  assert.deepEqual(Object.keys(streaks).sort(), ["implement", "write-test"]);
+  assert.deepEqual(Object.keys(streaks).sort(), ["implementer", "write-test"]);
   assert.equal(pre("./mvnw -q -T1C compile", null), "");
 }
 
@@ -3084,7 +3084,7 @@ function failureLessonTest(target) {
     area: "core",
     lesson:
       "AutoConfigureTestDatabase lives at org.springframework.boot.test.autoconfigure.jdbc, not under boot.data.jpa.*",
-    source: "ultracode:implement",
+    source: "ultracode:implementer",
   });
 
   const failure = [
@@ -3098,7 +3098,7 @@ function failureLessonTest(target) {
         cwd: repo,
         session_id: sessionId,
         sessionId,
-        agent_type: "ultracode:implement",
+        agent_type: "ultracode:implementer",
         tool_name: "Bash",
         tool_input: { command: "./mvnw -q compile" },
         tool_response: { result, stdout: result, stderr: "", interrupted: false },
@@ -3122,7 +3122,7 @@ function failureLessonTest(target) {
   assert.match(recovery, /that passed after 3 consecutive failures/);
   assert.match(recovery, /ultracode_memory/);
   const recovered = JSON.parse(fs.readFileSync(path.join(sessionDir, "build-streak.json"), "utf-8"))
-    .streaks.implement.recoveredSignatures;
+    .streaks.implementer.recoveredSignatures;
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0].lessonRecorded, false);
   assert.match(recovered[0].signature, /AutoConfigureTestDatabase does not exist/);
@@ -3131,7 +3131,7 @@ function failureLessonTest(target) {
   // a lesson to record.
   post("BUILD SUCCESS");
   assert.equal(
-    JSON.parse(fs.readFileSync(path.join(sessionDir, "build-streak.json"), "utf-8")).streaks.implement
+    JSON.parse(fs.readFileSync(path.join(sessionDir, "build-streak.json"), "utf-8")).streaks.implementer
       .recoveredSignatures.length,
     1,
     `${target}: a plain success records no lesson`,
@@ -3161,16 +3161,16 @@ function reportToolTest(target) {
   const { writeReport, pendingLessons, markLessonsRecorded } = require(
     path.join(pluginRoot, "mcp", "lib", "report.js"),
   );
-  const reportPath = path.join(sessionDir, "ultracode-implement-phase-3.md");
+  const reportPath = path.join(sessionDir, "ultracode-implementer-phase-3.md");
   const spawnHook = (prompt) =>
     runHook(
       path.join(pluginRoot, "hooks", "spawn-scope.js"),
-      { cwd: repo, session_id: sessionId, sessionId, tool_input: { subagent_type: "ultracode:implement", prompt } },
+      { cwd: repo, session_id: sessionId, sessionId, tool_input: { subagent_type: "ultracode:implementer", prompt } },
       env,
     );
 
   // Without a declared path the tool refuses rather than inventing a name.
-  const undeclared = writeReport(sessionDir, "ultracode:implement", "# Report");
+  const undeclared = writeReport(sessionDir, "ultracode:implementer", "# Report");
   assert.equal(undeclared.ok, false);
   assert.match(undeclared.message, /no report path was declared/);
 
@@ -3179,24 +3179,24 @@ function reportToolTest(target) {
   );
   const recorded = JSON.parse(
     fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"),
-  ).scopes.implement.backend;
+  ).scopes.implementer.backend;
   assert.equal(recorded.reportFile, reportPath);
 
-  const written = writeReport(sessionDir, "ultracode:implement", "# Change Report\nDid the thing.");
+  const written = writeReport(sessionDir, "ultracode:implementer", "# Change Report\nDid the thing.");
   assert.equal(written.ok, true);
   assert.equal(written.path, reportPath);
   assert.match(fs.readFileSync(reportPath, "utf-8"), /Did the thing/);
-  assert.equal(writeReport(sessionDir, "ultracode:implement", "   ").ok, false, `${target}: empty refused`);
+  assert.equal(writeReport(sessionDir, "ultracode:implementer", "   ").ok, false, `${target}: empty refused`);
 
   // The declared path is orchestrator-supplied but the tool writes with the MCP
   // server's own privileges, so it is confined to the session dir regardless.
   const state = JSON.parse(fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"));
-  state.scopes.implement.backend.reportFile = path.join(os.tmpdir(), "ultracode-escape.md");
+  state.scopes.implementer.backend.reportFile = path.join(os.tmpdir(), "ultracode-escape.md");
   fs.writeFileSync(path.join(sessionDir, "spawn-scope.json"), JSON.stringify(state), "utf-8");
-  const escaped = writeReport(sessionDir, "ultracode:implement", "x");
+  const escaped = writeReport(sessionDir, "ultracode:implementer", "x");
   assert.equal(escaped.ok, false);
   assert.match(escaped.message, /outside the session dir/);
-  state.scopes.implement.backend.reportFile = reportPath;
+  state.scopes.implementer.backend.reportFile = reportPath;
   fs.writeFileSync(path.join(sessionDir, "spawn-scope.json"), JSON.stringify(state), "utf-8");
 
   // A verified failure→recovery that was never turned into a lesson blocks the
@@ -3209,7 +3209,7 @@ function reportToolTest(target) {
         cwd: repo,
         session_id: sessionId,
         sessionId,
-        agent_type: "ultracode:implement",
+        agent_type: "ultracode:implementer",
         tool_name: "Bash",
         tool_input: { command: "./mvnw compile" },
         tool_response: { result, stdout: result, stderr: "", interrupted: false },
@@ -3218,22 +3218,22 @@ function reportToolTest(target) {
     );
   for (let i = 0; i < 3; i += 1) build(failure);
   build("BUILD SUCCESS");
-  assert.equal(pendingLessons(sessionDir, "implement").length, 1);
-  const blocked = writeReport(sessionDir, "ultracode:implement", "# Report");
+  assert.equal(pendingLessons(sessionDir, "implementer").length, 1);
+  const blocked = writeReport(sessionDir, "ultracode:implementer", "# Report");
   assert.equal(blocked.ok, false);
   assert.match(blocked.message, /ultracode_memory/);
   assert.match(blocked.message, /cannot find symbol/);
 
   // Recording the lesson clears it. The flag is cleared by a lesson landing in
   // the store, never by an agent asserting it recorded one.
-  assert.equal(markLessonsRecorded(sessionDir, "implement"), 1);
-  assert.equal(writeReport(sessionDir, "ultracode:implement", "# Report\nfinal").ok, true);
+  assert.equal(markLessonsRecorded(sessionDir, "implementer"), 1);
+  assert.equal(writeReport(sessionDir, "ultracode:implementer", "# Report\nfinal").ok, true);
 
   // An explicitly stated reason overrides, and the override is surfaced rather
   // than silently honored.
   for (let i = 0; i < 3; i += 1) build(failure);
   build("BUILD SUCCESS");
-  const forced = writeReport(sessionDir, "ultracode:implement", "# Report", {
+  const forced = writeReport(sessionDir, "ultracode:implementer", "# Report", {
     allowUnrecordedLesson: true,
   });
   assert.equal(forced.ok, true);
@@ -3263,7 +3263,7 @@ function handWrittenReportTest(target) {
     "utf-8",
   );
   const agy = target === "antigravity";
-  const reportPath = path.join(sessionDir, "ultracode-implement-phase-3.md");
+  const reportPath = path.join(sessionDir, "ultracode-implementer-phase-3.md");
   const base = agy
     ? { cwd: repo, conversationId: sessionId }
     : { cwd: repo, session_id: sessionId, sessionId };
@@ -3280,10 +3280,10 @@ function handWrittenReportTest(target) {
           ...base,
           toolCall: {
             name: "invoke_subagent",
-            args: { Subagents: [{ TypeName: "ultracode-implement", Prompt: prompt }] },
+            args: { Subagents: [{ TypeName: "ultracode-implementer", Prompt: prompt }] },
           },
         }
-      : { ...base, tool_input: { subagent_type: "ultracode:implement", prompt } };
+      : { ...base, tool_input: { subagent_type: "ultracode:implementer", prompt } };
   const writePayload = (filePath, actor) =>
     agy
       ? { ...base, agent_type: actor, toolCall: { name: "write_to_file", args: { TargetFile: filePath } } }
@@ -3306,9 +3306,9 @@ function handWrittenReportTest(target) {
     env,
   );
 
-  const write = (filePath, actor = "ultracode:implement") =>
+  const write = (filePath, actor = "ultracode:implementer") =>
     reasonOf(runHook(hook("scope-guard.js"), writePayload(filePath, agent(actor)), env));
-  const bash = (command, actor = "ultracode:implement") =>
+  const bash = (command, actor = "ultracode:implementer") =>
     reasonOf(runHook(hook("bash-scope-guard.js"), bashPayload(command, agent(actor)), env));
 
   // The declared path is writable by whichever mechanism the agent reaches for.
@@ -3325,21 +3325,21 @@ function handWrittenReportTest(target) {
   );
 
   // A name the agent invented is not, whichever mechanism writes it.
-  const invented = path.join(sessionDir, "ultracode-implement-credentials-uri.md");
+  const invented = path.join(sessionDir, "ultracode-implementer-credentials-uri.md");
   const declaredPat = pickPattern(target, /declared for this spawn/, /declared report path/);
   assert.match(write(invented), declaredPat, `${target}: invented name refused (write)`);
   assert.match(bash(`echo x > ${invented}`), declaredPat, `${target}: invented name refused (shell)`);
   // Nor is the right basename in the wrong repo-key subdirectory: the next stage
   // reads the declared path, directory included.
   assert.match(
-    write(path.join(sessionDir, "frontend", "ultracode-implement-phase-3.md")),
+    write(path.join(sessionDir, "frontend", "ultracode-implementer-phase-3.md")),
     declaredPat,
     `${target}: the declared directory is part of the path`,
   );
 
   // Its own ledgers keep their own ownership rules, and non-artifact scratch is
   // untouched by this policy.
-  assert.equal(write(path.join(sessionDir, "ultracode-implement-progress.md")), null);
+  assert.equal(write(path.join(sessionDir, "ultracode-implementer-progress.md")), null);
   assert.equal(write(path.join(sessionDir, "notes.txt")), null);
   // Another agent's ledger is still ledger-policy's call, not this one's.
   assert.match(
@@ -3351,7 +3351,7 @@ function handWrittenReportTest(target) {
   // A second repo key's spawn in the same session declares its own report path.
   // Both are accepted: a leaf tool call whose `Repo key:` did not survive the
   // payload must not have its own report read as another repo's invented name.
-  const frontendReport = path.join(sessionDir, "frontend", "ultracode-implement-phase-4.md");
+  const frontendReport = path.join(sessionDir, "frontend", "ultracode-implementer-phase-4.md");
   runHook(
     hook("spawn-scope.js"),
     spawnPayload(
@@ -3373,7 +3373,7 @@ function handWrittenReportTest(target) {
     if (!agy) {
       return runHook(hook("build-streak.js"), {
         ...base,
-        agent_type: "ultracode:implement",
+        agent_type: "ultracode:implementer",
         tool_name: "Bash",
         tool_input: { command: "./mvnw compile" },
         tool_response: { result: output, stdout: output, stderr: "", interrupted: false },
@@ -3387,7 +3387,7 @@ function handWrittenReportTest(target) {
     );
     return runHook(hook("build-streak.js"), {
       ...base,
-      agent_type: "ultracode-implement",
+      agent_type: "ultracode-implementer",
       transcriptPath,
       stepIdx: step,
       ...(failed ? { error: "exit status 1" } : {}),
@@ -3406,7 +3406,7 @@ function handWrittenReportTest(target) {
   assert.match(bash(`cat > "${reportPath}" <<'EOF'\nx\nEOF`), /cannot find symbol/);
 
   const { markLessonsRecorded } = require(path.join(pluginRoot, "hooks", "lib", "report-policy.js"));
-  assert.equal(markLessonsRecorded(sessionDir, "implement"), 1);
+  assert.equal(markLessonsRecorded(sessionDir, "implementer"), 1);
   assert.equal(write(reportPath), null, `${target}: recording the lesson unblocks the hand-written report`);
 
   // An agent whose report path the orchestrator never declared is unaffected: its
@@ -3457,7 +3457,7 @@ function phaseScopeTest(target) {
       "# Phase 3 — order service",
       "Modify `core/src/main/java/com/example/order/OrderService.java` to add cancellation.",
       "Create `core/src/main/java/com/example/order/CancelOrderCommand.java`.",
-      "Record state in ultracode-implement-progress.md and read INVENTORY.md if needed.",
+      "Record state in ultracode-implementer-progress.md and read INVENTORY.md if needed.",
     ].join("\n\n"),
     "utf-8",
   );
@@ -3465,24 +3465,24 @@ function phaseScopeTest(target) {
   const hook = (name) => path.join(pluginRoot, "hooks", name);
   const reasonOf = (out) => (out.trim() ? denyReason(JSON.parse(out)) : null);
 
-  // An implement spawn must declare a plan one way or the other.
+  // An implementer spawn must declare a plan one way or the other.
   const bare = reasonOf(
     runHook(hook("pipeline-gate.js"), {
       ...base,
       tool_input: {
-        subagent_type: "ultracode:implement",
+        subagent_type: "ultracode:implementer",
         prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nDo the thing.`,
       },
     }, env),
   );
-  assert.match(bare, /without a plan/, `${target}: bare implement spawn is refused`);
+  assert.match(bare, /without a plan/, `${target}: bare implementer spawn is refused`);
   assert.match(bare, /No plan:/);
   assert.equal(
     reasonOf(
       runHook(hook("pipeline-gate.js"), {
         ...base,
         tool_input: {
-          subagent_type: "ultracode:implement",
+          subagent_type: "ultracode:implementer",
           prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nNo plan: one-line typo fix.`,
         },
       }, env),
@@ -3495,27 +3495,27 @@ function phaseScopeTest(target) {
   runHook(hook("spawn-scope.js"), {
     ...base,
     tool_input: {
-      subagent_type: "ultracode:implement",
+      subagent_type: "ultracode:implementer",
       prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nRepo key: backend\nPhase file: ${phaseFile}`,
     },
   }, env);
   const recorded = JSON.parse(
     fs.readFileSync(path.join(sessionDir, "spawn-scope.json"), "utf-8"),
-  ).scopes.implement.backend;
+  ).scopes.implementer.backend;
   assert.equal(recorded.phaseFileFound, true);
   assert.deepEqual(recorded.files.sort(), [
     "core/src/main/java/com/example/order/CancelOrderCommand.java",
     "core/src/main/java/com/example/order/OrderService.java",
   ]);
   // ultracode's own artifacts are governed by ledger-policy, not by this scope.
-  assert.ok(!JSON.stringify(recorded).includes("implement-progress"));
+  assert.ok(!JSON.stringify(recorded).includes("implementer-progress"));
   assert.ok(!JSON.stringify(recorded).includes("INVENTORY"));
 
   const write = (filePath) =>
     reasonOf(
       runHook(hook("scope-guard.js"), {
         ...base,
-        agent_type: "ultracode:implement",
+        agent_type: "ultracode:implementer",
         tool_input: { file_path: filePath },
       }, env),
     );
@@ -3529,14 +3529,14 @@ function phaseScopeTest(target) {
     `${target}: phase path list does not block other work-repo paths`,
   );
   // Its own session report stays writable.
-  assert.equal(write(path.join(sessionDir, "ultracode-implement-phase-3.md")), null);
+  assert.equal(write(path.join(sessionDir, "ultracode-implementer-phase-3.md")), null);
 
   // Shell writes follow the same root rules, not the phase path list.
   const bash = (command) =>
     reasonOf(
       runHook(hook("bash-scope-guard.js"), {
         ...base,
-        agent_type: "ultracode:implement",
+        agent_type: "ultracode:implementer",
         tool_input: { command },
       }, env),
     );
@@ -3548,7 +3548,7 @@ function phaseScopeTest(target) {
   runHook(hook("spawn-scope.js"), {
     ...base,
     tool_input: {
-      subagent_type: "ultracode:implement",
+      subagent_type: "ultracode:implementer",
       prompt: `Repo root: ${repo}\nSession dir: ${sessionDir}\nRepo key: backend\nNo plan: tiny fix.`,
     },
   }, env);
@@ -3557,8 +3557,8 @@ function phaseScopeTest(target) {
   // And Constraint 6 still outranks all of it.
   assert.match(
     write(path.join(repo, "core/src/test/java/com/example/order/OrderServiceTest.java")),
-    pickPattern(target, /test file/, /refusing to let ultracode:implement write/),
-    `${target}: implement still cannot write tests`,
+    pickPattern(target, /test file/, /refusing to let ultracode:implementer write/),
+    `${target}: implementer still cannot write tests`,
   );
 }
 
@@ -3568,7 +3568,7 @@ test("spawn-scope records phase path hints without confining work-repo writes", 
   phaseScopeTest("grok");
 });
 
-// Cross-repo implement safeguards two roots: reports under the primary session
+// Cross-repo implementer safeguards two roots: reports under the primary session
 // dir, code under the work-repo checkout named by Repo root: / spawn-scope.
 function crossRepoScopeTest(target) {
   const { pluginRoot, runtimeDir, sessionId, repo: primary, sessionDir, env } = scopeGuardFixture(
@@ -3621,7 +3621,7 @@ function crossRepoScopeTest(target) {
     {
       ...base,
       tool_input: {
-        subagent_type: "ultracode:implement",
+        subagent_type: "ultracode:implementer",
         prompt: `Primary repo root: ${primary}\nRepo root: ${primary}\nSession dir: ${sessionDir}/backend\nRepo key: backend\nPhase file: ${backendPhase}`,
       },
     },
@@ -3632,7 +3632,7 @@ function crossRepoScopeTest(target) {
     {
       ...base,
       tool_input: {
-        subagent_type: "ultracode:implement",
+        subagent_type: "ultracode:implementer",
         prompt: `Primary repo root: ${primary}\nRepo root: ${work}\nSession dir: ${workSessionDir}\nRepo key: ai-lambda\nPhase file: ${phaseFile}`,
       },
     },
@@ -3645,7 +3645,7 @@ function crossRepoScopeTest(target) {
         hook("scope-guard.js"),
         {
           ...base,
-          agent_type: "ultracode:implement",
+          agent_type: "ultracode:implementer",
           tool_input: { file_path: filePath },
           ...extra,
         },
@@ -3658,7 +3658,7 @@ function crossRepoScopeTest(target) {
         hook("bash-scope-guard.js"),
         {
           ...base,
-          agent_type: "ultracode:implement",
+          agent_type: "ultracode:implementer",
           tool_input: { command },
           ...extra,
         },
@@ -3669,7 +3669,7 @@ function crossRepoScopeTest(target) {
   // Absolute work-repo path: pick the ai-lambda spawn-scope by target, even when
   // the harness payload only knows the primary cwd/agent_type.
   assert.equal(write(path.join(work, "src/pallet_ai_lambda/registry/prompt_const.py")), null);
-  assert.equal(write(path.join(workSessionDir, "ultracode-implement-phase-6.md")), null);
+  assert.equal(write(path.join(workSessionDir, "ultracode-implementer-phase-6.md")), null);
   // Phase path list is a hint — undeclared paths under the work repo stay writable.
   assert.equal(write(path.join(work, "src", "other.py")), null);
   assert.equal(bash(`echo x > ${path.join(work, "src/pallet_ai_lambda/registry/user_prompts.py")}`), null);
@@ -3709,7 +3709,7 @@ function crossRepoScopeTest(target) {
     null,
   );
   assert.equal(
-    write(path.join(workSessionDir, "ultracode-implement-progress.md"), {
+    write(path.join(workSessionDir, "ultracode-implementer-progress.md"), {
       transcript_path: transcriptPath,
     }),
     null,
@@ -3804,11 +3804,11 @@ function scopeGuardTest(target) {
   );
   deny(path.join(repo, "src", "App.ts"), "ultracode:module-documentation", /allowed scope/);
 
-  // implement: anywhere in the repo root, except a path that looks like a test (Constraint 6).
-  allow(path.join(repo, "src", "App.ts"), "ultracode:implement");
+  // implementer: anywhere in the repo root, except a path that looks like a test (Constraint 6).
+  allow(path.join(repo, "src", "App.ts"), "ultracode:implementer");
   deny(
     path.join(repo, "src", "App.test.ts"),
-    "ultracode:implement",
+    "ultracode:implementer",
     pickPattern(target, /Constraint 6/, /a test file\/directory path/),
   );
 
@@ -3841,7 +3841,7 @@ function bashScopeGuardTest(target) {
 
   // Ordinary read commands never trip the guard.
   assert.equal(run("git status", "ultracode:code-reviewer"), "");
-  assert.equal(run("npm test", "ultracode:implement"), "");
+  assert.equal(run("npm test", "ultracode:implementer"), "");
 
   // A session-only agent writing its own report inside its session dir is fine...
   assert.equal(
@@ -3867,7 +3867,7 @@ function bashScopeGuardTest(target) {
   );
   // ...but repo-writing agents keep strict confinement, temp included.
   assertDenied(
-    JSON.parse(run("echo x > /tmp/ultracode-test-scratch.log", "ultracode:implement")),
+    JSON.parse(run("echo x > /tmp/ultracode-test-scratch.log", "ultracode:implementer")),
     /outside the repo root/,
   );
   // ...but writing project source through Bash instead of Write/Edit is still denied.
@@ -3876,10 +3876,10 @@ function bashScopeGuardTest(target) {
     /never modifies project source/,
   );
 
-  // implement cannot write a test file through a Bash heredoc either.
+  // implementer cannot write a test file through a Bash heredoc either.
   assertDenied(
     JSON.parse(
-      run(`cat <<'EOF' > ${path.join(repo, "src", "App.test.ts")}\nhi\nEOF`, "ultracode:implement"),
+      run(`cat <<'EOF' > ${path.join(repo, "src", "App.test.ts")}\nhi\nEOF`, "ultracode:implementer"),
     ),
     /Constraint 6/,
   );
@@ -3934,22 +3934,22 @@ function pipelineGateTest(target) {
   );
   assert.equal(run("plan"), "");
 
-  // An inline no-plan implement spawn is still exempt from the PLAN gate, but it
+  // An inline no-plan implementer spawn is still exempt from the PLAN gate, but it
   // must now say it is one. Omitting Phase file: used to be a silent exemption,
-  // and 96% of recorded implement spawns took it — so a bare spawn is refused and
+  // and 96% of recorded implementer spawns took it — so a bare spawn is refused and
   // an explicit "No plan:" is what carries the exemption.
-  assertDenied(JSON.parse(run("implement")), /without a plan/);
-  assert.equal(run("implement", "\nNo plan: one-line typo fix."), "");
+  assertDenied(JSON.parse(run("implementer")), /without a plan/);
+  assert.equal(run("implementer", "\nNo plan: one-line typo fix."), "");
 
   const phaseLine = `\nPhase file: ${path.join(sessionDir, "phase-1.md")}.`;
-  assertDenied(JSON.parse(run("implement", phaseLine)), /plan has not been recorded as approved/);
+  assertDenied(JSON.parse(run("implementer", phaseLine)), /plan has not been recorded as approved/);
 
   fs.writeFileSync(
     path.join(sessionDir, "gates.json"),
     JSON.stringify({ spec: { decision: "approved" }, plan: { decision: "approved" } }),
     "utf-8",
   );
-  assert.equal(run("implement", phaseLine), "");
+  assert.equal(run("implementer", phaseLine), "");
 
   // The approval is session-level, so a phase spawn scoped to its repo's own
   // subdirectory reads the same one. Resolving gates.json relative to whichever
@@ -3957,10 +3957,10 @@ function pipelineGateTest(target) {
   // for a plan the user had approved.
   const repoSubdir = path.join(sessionDir, "backend");
   fs.mkdirSync(repoSubdir, { recursive: true });
-  assert.equal(run("implement", phaseLine, repoSubdir), "");
+  assert.equal(run("implementer", phaseLine, repoSubdir), "");
 }
 
-test("pipeline-gate denies plan/implement spawns without a recorded approval", () => {
+test("pipeline-gate denies plan/implementer spawns without a recorded approval", () => {
   pipelineGateTest("claude");
   pipelineGateTest("codex");
   pipelineGateTest("grok");
@@ -4001,8 +4001,8 @@ function securityBlockTest(target) {
   );
   assertDenied(JSON.parse(run("module-documentation", base)), /unresolved BLOCKER security finding/);
 
-  // implement/write-test spawns (the fix loop) stay unaffected by the module-documentation gate.
-  assert.equal(run("implement", base), "");
+  // implementer/write-test spawns (the fix loop) stay unaffected by the module-documentation gate.
+  assert.equal(run("implementer", base), "");
 
   // Once cleared, module-documentation is allowed again.
   fs.writeFileSync(
@@ -4137,7 +4137,7 @@ function factcheckRecordTest(target) {
     {
       cwd: repo,
       session_id: "testsess",
-      tool_input: { subagent_type: "ultracode:implement", prompt },
+      tool_input: { subagent_type: "ultracode:implementer", prompt },
       tool_response: JSON.stringify({ verdict: "PASS", target: "plan" }),
     },
     { PLUGIN_ROOT: pluginRoot },
@@ -4251,7 +4251,7 @@ function progressTrackerTest(target) {
     {
       cwd: repo,
       session_id: "testsess",
-      tool_input: { subagent_type: "ultracode:implement", prompt },
+      tool_input: { subagent_type: "ultracode:implementer", prompt },
       tool_response: "STUCK: cannot resolve merge conflict",
     },
     { PLUGIN_ROOT: pluginRoot },
@@ -4260,7 +4260,7 @@ function progressTrackerTest(target) {
   const progress = JSON.parse(fs.readFileSync(path.join(sessionDir, "progress.json"), "utf-8"));
   assert.equal(progress.schemaVersion, 1);
   assert.equal(progress.records.length, 1);
-  assert.equal(progress.records[0].agent, "implement");
+  assert.equal(progress.records[0].agent, "implementer");
   assert.equal(progress.records[0].phase, "phase-2");
   assert.equal(progress.records[0].status, "stuck");
 
@@ -4421,17 +4421,17 @@ test("mcp/lib/memory recall scopes by area (with sub-scopes) and ranks by text r
   recordLesson(dbPath, {
     area: "auth",
     lesson: "Token expiry causes flaky login integration tests",
-    source: "implement",
+    source: "implementer",
   });
   recordLesson(dbPath, {
     area: "billing-service::InvoiceCalculator",
     lesson: "Null total when currency conversion rate missing",
-    source: "implement",
+    source: "implementer",
   });
   recordLesson(dbPath, {
     area: "build",
     lesson: "Maven module order matters for parallel builds",
-    source: "implement",
+    source: "implementer",
   });
 
   const byQuery = recallLessons(dbPath, { query: "flaky login test" });
@@ -5002,7 +5002,7 @@ test("antigravity agents ship as natively invocable subagents", () => {
   // ultracode-fact-check not found or not allowed to be invoked", and the model's
   // way around that was `define_subagent` with a prompt it wrote itself — a
   // different agent under the shipped agent's name.
-  for (const name of ["fact-check", "plan", "implement", "code-reviewer"]) {
+  for (const name of ["fact-check", "plan", "implementer", "code-reviewer"]) {
     const text = fs.readFileSync(
       path.join(ANTIGRAVITY_PLUGIN_ROOT, "agents", `${name}.md`),
       "utf-8",

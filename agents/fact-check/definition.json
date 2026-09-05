@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "fact-check",
-  "description": "Checks a spec or plan for claims that would break the implement agent, and for external facts that no longer trace to a cited page, returning one {verdict, target, findings} object. Mandatory after generate-spec and after plan, before either is shown for approval: ultracode_gate refuses approval without a recorded PASS. Its spawn sets how far it goes: `Prior findings:` scopes a re-pass to the previous findings plus changed text, and `Source check:` decides whether it re-opens cited pages. Read-only on project source.",
+  "description": "Checks a spec or plan for claims that would break the implementer agent, and for external facts that no longer trace to a cited page, returning one {verdict, target, findings} object. Mandatory after generate-spec and after plan, before either is shown for approval: ultracode_gate refuses approval without a recorded PASS. Its spawn sets how far it goes: `Prior findings:` scopes a re-pass to the previous findings plus changed text, and `Source check:` decides whether it re-opens cited pages. Read-only on project source.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "advanced",

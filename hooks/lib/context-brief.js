@@ -53,7 +53,7 @@ const MAX_MODULE_ROWS = 10;
 // Which sections each agent gets. An agent that never compiles does not need the
 // build command; an agent that never edits code does not need the conventions.
 const SECTIONS_BY_AGENT = {
-  implement: ["commands", "skills", "conventions", "modules"],
+  implementer: ["commands", "skills", "conventions", "modules"],
   "write-test": ["commands", "testing", "skills", "conventions", "modules"],
   "code-reviewer": ["commands", "review", "conventions", "skills"],
   "execution-path-analyzer": ["testing", "modules"],

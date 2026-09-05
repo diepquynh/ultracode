@@ -30,7 +30,7 @@ function profileRoute(profile, spawn) {
   const { agent } = spawn;
   const models = profile && profile.models;
   if (!models || typeof models !== "object") return [false, null];
-  if (agent === "implement" || agent === "write-test") {
+  if (agent === "implementer" || agent === "write-test") {
     const routes = models.byPhaseComplexity && models.byPhaseComplexity[agent];
     const tier = phaseTier(spawn.parameters.phase_file);
     if (!routes || typeof routes !== "object" || !(tier in routes)) return [false, null];

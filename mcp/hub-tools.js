@@ -82,7 +82,7 @@ function registerHubTools(server, hub) {
         capabilities: z
           .array(z.string())
           .optional()
-          .describe('What kinds of tasks this session will claim, e.g. ["implement", "review"].'),
+          .describe('What kinds of tasks this session will claim, e.g. ["implementer", "review"].'),
         native_channel: z
           .enum(["codex-queue", "claude-uds", "none"])
           .optional()
@@ -299,7 +299,7 @@ function registerHubTools(server, hub) {
         target_harness: HARNESS_ENUM.optional().describe(
           "Only for a user-directed delegation with no profile route; omit when repo-profile.json routes this stage — the hub resolves that itself, fresh, and refuses a contradicting value.",
         ),
-        capability: z.string().optional().describe('Required worker capability, e.g. "implement".'),
+        capability: z.string().optional().describe('Required worker capability, e.g. "implementer".'),
         payload: z
           .object({
             agent_hint: z.string().optional().describe("Which ultracode agent role fits this task."),

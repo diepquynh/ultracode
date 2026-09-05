@@ -6,7 +6,7 @@
 // — 1.6% of all runs — hit a streak of 4+ consecutive build failures and together
 // burned 315M cache-read tokens, 10.7% of the entire corpus's spend. The worst
 // single run hit a 14-failure streak over 237 tool calls and kept going for 27
-// more calls afterwards. Every one of those runs was ultracode:implement or
+// more calls afterwards. Every one of those runs was ultracode:implementer or
 // ultracode:write-test. Nothing in the pipeline noticed.
 //
 // Reads a PostToolUse hook payload (matcher: Bash) from stdin. PostToolUse cannot

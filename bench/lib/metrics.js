@@ -16,11 +16,13 @@
 "use strict";
 
 const path = require("node:path");
-const { eachJsonLine, resultText } = require("./transcripts");
+const { canonicalAgent, eachJsonLine, resultText } = require("./transcripts");
 
 // Files that are ultracode's own scaffolding rather than the repo's code. Reads
 // of these are overhead: necessary, but the pipeline controls how much it costs.
 const ROUTING_FILE = /(INVENTORY\.md|repo-profile\.json|SKILL\.md|CLAUDE\.md|AGENTS\.md|[\\/]skills[\\/])/;
+// `implement` (not `implementer`) so runs recorded before the agent was renamed
+// still classify: the shorter stem matches both artifact prefixes.
 const SESSION_DOC = /ultracode-(spec|plan|phase|research|criteria|implement|epa|review|scout|write|module|findings)/i;
 const MUTATION_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SEARCH_TOOLS = new Set(["Grep", "Glob"]);
@@ -80,7 +82,9 @@ function classifyError(toolName, text) {
 async function measureRun(file, spawn) {
   const run = emptyRun();
   run.file = file;
-  run.agent = spawn && spawn.subagentType ? spawn.subagentType : null;
+  // Canonical, not raw: summarize() groups on this, and a renamed agent must
+  // roll up with its own older runs.
+  run.agent = spawn && spawn.subagentType ? canonicalAgent(spawn.subagentType) : null;
   run.parentSession = spawn ? spawn.parentSession : null;
   run.spawnPromptChars = spawn ? spawn.promptChars : 0;
 
@@ -248,8 +252,8 @@ function sum(values) {
 }
 
 // Rolls per-run records into the report shape. Grouped by agent because the
-// levers differ per role: implement's cost is preamble and build loops, explore's
-// is search volume, code-reviewer's is re-reading what implement already read.
+// levers differ per role: implementer's cost is preamble and build loops, explore's
+// is search volume, code-reviewer's is re-reading what implementer already read.
 function summarize(runs) {
   const byAgent = new Map();
   for (const run of runs) {

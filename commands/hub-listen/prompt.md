@@ -75,7 +75,7 @@ Call `ultracode_task_claim` (it filters to this harness and your capabilities au
 `agent_hint`, and `source` paths. Adopt `source.session_dir` (Step 2, with the user's go-ahead) if you have
 not already, then execute the task through the **normal ultracode pipeline**: read
 `{repo_root}/{{runtime_dir}}/INVENTORY.md` and `repo-profile.json` first, then route the work exactly as the
-orchestrator procedure routes it. An `agent_hint` of `implement` means spawn `ultracode:implement`, and the
+orchestrator procedure routes it. An `agent_hint` of `implementer` means spawn `ultracode:implementer`, and the
 review loop that follows it still applies.
 
 **YOLO mode follows the session, not the harness.** Before executing your first claimed task for a session,
@@ -251,7 +251,7 @@ sit in the hub regardless. Sending any message releases them.
 ## Hard rules
 
 1. **You are a worker, not a second orchestrator.** Claimed work runs through the normal pipeline (spawn the
-   pipeline agents; never implement by hand what `ultracode:implement` should do), but you do not publish
+   pipeline agents; never implement by hand what `ultracode:implementer` should do), but you do not publish
    tasks, re-delegate to other sessions, or steer the publisher's pipeline beyond your completion report. The
    repo profile's `harnesses` section is the **publisher's** routing input, not yours. Never read it to hand a
    claimed task onward. A task the hub let you claim is yours to execute here, whatever that section says.

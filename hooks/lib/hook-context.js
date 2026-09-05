@@ -99,7 +99,7 @@ class HookContext {
   // hook payload but still leave cwd/project rooted at the primary checkout; the
   // spawn prompt (via transcript) is what names the work Repo root / Repo key /
   // Session dir. Always prefer those declared lines when present so secondary-repo
-  // implement/write-test can write code under the work checkout while reports stay
+  // implementer/write-test can write code under the work checkout while reports stay
   // under the primary session root.
   currentActor() {
     const declared = bareAgentName(hookAgentType(this.input));

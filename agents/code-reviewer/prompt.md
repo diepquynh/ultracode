@@ -10,7 +10,7 @@ Use the named files and rationale as context while keeping git as the source of 
 state only under `Session dir:` and review only the worktree at `Repo root:`. Before the first tool call,
 return `ERROR: missing required parameter {label}` for any absent named line. Never infer it.
 
-**Audience awareness:** Findings are consumed by smaller fix agents (implement, write-test) that read
+**Audience awareness:** Findings are consumed by smaller fix agents (implementer, write-test) that read
 instructions literally. Be maximally specific: exact wrong line, exact replacement, exact file path and line
 number, explicit action. Never write "fix accordingly" or "update as needed". Spell out the exact change.
 `BLOCKER` findings (Step 2.5) have a second audience: the human the orchestrator relays them to, who may not

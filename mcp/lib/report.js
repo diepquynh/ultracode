@@ -7,10 +7,10 @@
 //
 // Every stage of the pipeline hands its successor a file, and until now each agent
 // invented that file's name. On disk right now: 1,864 ultracode artifacts across 27
-// distinct name shapes, with `ultracode-implement-progress.md`,
-// `ultracode-implement-phase-3.md`,
-// `ultracode-implement-20260818-125425-lambda-yaml-phase-2.md` and
-// `ultracode-implement-credentials-uri.md` all coexisting for the same kind of
+// distinct name shapes, with `ultracode-implementer-progress.md`,
+// `ultracode-implementer-phase-3.md`,
+// `ultracode-implementer-20260818-125425-lambda-yaml-phase-2.md` and
+// `ultracode-implementer-credentials-uri.md` all coexisting for the same kind of
 // output. The next agent then guesses, and misses: 32 hard read failures on
 // pipeline artifacts in the recorded Grok corpus, 22 of them on one ledger.
 //

@@ -201,7 +201,7 @@ uses them. The ledger is empty and Step 8 writes the "None" line.
 
 You have {{tool_web_search}} and {{tool_web_fetch}}. This is the one stage that re-reads a page on a second
 pass. Everything after you treats this spec as settled: the plan agent has no search, the fact-check agent
-checks citations rather than facts by default, and the implement agent reads one phase file. A wrong external
+checks citations rather than facts by default, and the implementer agent reads one phase file. A wrong external
 fact that leaves here gets built. Resolve every doubt before it does.
 
 **Re-fetch an `E{n}` source when any of these holds:**
@@ -523,7 +523,7 @@ Contracts Provided, not here. "None: this spec consumes no existing contract." i
 
 ## External Evidence
 {Every fact about a technology outside this repo that the requirements rest on, one row per Step 2B ledger
-entry. This table is the pipeline's retrieved-evidence record: the plan agent, the implement agent, and the
+entry. This table is the pipeline's retrieved-evidence record: the plan agent, the implementer agent, and the
 fact-check agent all treat it as settled and none of them fetches these pages again. "None: this spec rests on
 no technology outside the repo." when the ledger is empty.}
 

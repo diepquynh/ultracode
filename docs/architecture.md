@@ -186,7 +186,7 @@ flowchart TD
     FC2 --> G2{"plan approval gate<br/>opens only on PASS"}
     G2 -- approved --> IMPL
     subgraph PHASELOOP["per phase: one review loop, then the loop ends"]
-        IMPL["implement writes change report<br/>(its Changed Files list = what to trace and cover)"]
+        IMPL["implementer writes change report<br/>(its Changed Files list = what to trace and cover)"]
         IMPL <-- "review ledger,<br/>loops until clean" --> CR1["code-reviewer (impl)"]
     end
     PHASELOOP --> FORMAT["after all phases: format"]
@@ -232,7 +232,7 @@ channels are structured rather than prose:
 
 - **Review ledger.** One review loop per phase's implementation and per requested phase's tests, each in its
   own file (`ultracode-review-ledger-phase-{N}.md`, `…-phase-{N}-tests.md`) named by the `Phase:` the spawn
-  carries. `code-reviewer` logs findings (`F1`, `F2`, ...). `implement` or `write-test` responds `FIXED` or
+  carries. `code-reviewer` logs findings (`F1`, `F2`, ...). `implementer` or `write-test` responds `FIXED` or
   `WONTFIX` with a rationale. The reviewer re-raises or closes on the next pass. The loop is capped per loop,
   so an exhausted loop never caps the next one. At the cap the next spawn is offered to the user
   (`review-cap.js` asks rather than denies), so a 4th pass runs only on request. Under **YOLO mode**
@@ -242,7 +242,7 @@ channels are structured rather than prose:
 - **JSON findings.** `code-reviewer` returns one machine-parseable object so the orchestrator can split
   findings by severity and rule ID. **Auto-fixable** findings carry an exact replacement the orchestrator
   applies directly, skipping a fix-agent round trip.
-- **Progress log.** `implement` checkpoints after every step, so a re-spawn resumes instead of redoing work.
+- **Progress log.** `implementer` checkpoints after every step, so a re-spawn resumes instead of redoing work.
 - **`HANDOFF:` and `STUCK:` escalation.** A leaf agent cannot spawn help, so it escalates upward with a text
   prefix. `HANDOFF:` asks the orchestrator to spawn a specialist (for example `prompt-generation` for a
   `SKILL.md` or prompt file) and then resume the original agent. `STUCK:` asks for rescue context or a user
@@ -263,7 +263,7 @@ approved skill set. A user-approval gate sits between scouting and generation.
   were generalized from production agent kits and grounded against real Java/Spring, TypeScript, and Go
   codebases.
 - **Model tiers, per repo and per phase.** The `models` block of `repo-profile.json` decides which model each
-  subagent spawn runs on: a static tier per agent, and a per-phase-complexity tier for `implement` and
+  subagent spawn runs on: a static tier per agent, and a per-phase-complexity tier for `implementer` and
   `write-test`. `hooks/model-router.js` applies it as a `PreToolUse` hook on every spawn, translates it for the
   active harness, and denies any spawn it cannot resolve. `/init-kit` seeds defaults. Edit the block to
   override. See [Model routing](model-routing.md) for the value forms, the denial cases, and the two exempt
@@ -293,7 +293,7 @@ approved skill set. A user-approval gate sits between scouting and generation.
     dir (reports and state only) and the work `Repo root:` (source). A phase file's path list is recorded in
     `spawn-scope.json` as a hint for implementers, since skills may require companion files the plan omitted.
     It is not a write allowlist. `currentActor()` prefers the transcript's `Repo root:`, `Repo key:`, and
-    `Session dir:` over the harness cwd, so a Claude secondary-repo implement is not confined to the primary
+    `Session dir:` over the harness cwd, so a Claude secondary-repo implementer is not confined to the primary
     checkout.
   - What each harness does not dispatch or honor (which spawn hooks reach it, which output shapes it discards,
     and whether a hook can hand a decision to the user at all) is measured per CLI in

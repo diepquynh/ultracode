@@ -202,8 +202,8 @@ publishing a hub task.
 
 ```json
 "harnesses": {
-  "byAgent": { "implement": "codex", "write-test": "codex" },
-  "byPhaseComplexity": { "implement": { "low": "codex", "medium": "codex", "high": "claude" } }
+  "byAgent": { "implementer": "codex", "write-test": "codex" },
+  "byPhaseComplexity": { "implementer": { "low": "codex", "medium": "codex", "high": "claude" } }
 }
 ```
 

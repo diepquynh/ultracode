@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "kind": "agent",
-  "name": "implement",
+  "name": "implementer",
   "description": "Writes the code for one plan phase: loads the skills the orchestrator names, follows the repo's convention skill, verifies each step with the profile's build command, and reports what changed. Spawn when code must be created, modified, or deleted, or to fix code-reviewer findings or a verification failure. Does all coding itself and never delegates back.",
   "prompt": "prompt.md",
   "config": {

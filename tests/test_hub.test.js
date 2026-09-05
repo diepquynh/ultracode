@@ -47,7 +47,7 @@ function registerDefault(state, fixture, overrides = {}) {
     display_name: "orchestrator",
     repo_roots: [fixture.repoRoot],
     session_dir: fixture.sessionDir,
-    capabilities: ["implement"],
+    capabilities: ["implementer"],
     ...overrides,
   });
 }
@@ -283,7 +283,7 @@ test("hub: re-registration cursor does not skip queued direct messages", (t) => 
 
 function validPayload(fixture, overrides = {}) {
   return {
-    agent_hint: "implement",
+    agent_hint: "implementer",
     task: "Implement phase 2 of the payments plan.",
     repo_root: fixture.repoRoot,
     repo_key: "repo",
@@ -334,7 +334,7 @@ test("hub: task publish/claim/complete lifecycle notifies the publisher", (t) =>
   });
   assert.equal(second.task, null);
 
-  const reportFile = path.join(workerDir, "ultracode-implement-phase-2.md");
+  const reportFile = path.join(workerDir, "ultracode-implementer-phase-2.md");
   const completion = state.completeTask({
     session_key: worker.session_key,
     session_secret: worker.session_secret,
@@ -457,34 +457,34 @@ test("hub: publish resolves the harness route from the CURRENT repo-profile.json
     });
 
   // byAgent route is applied when the caller omits target_harness.
-  writeProfile({ byAgent: { implement: "codex" } });
+  writeProfile({ byAgent: { implementer: "codex" } });
   const routed = publish();
   assert.equal(routed.target_harness, "codex");
   assert.equal(routed.routed_by, "profile");
 
   // A caller value contradicting the current profile is refused, naming the route.
-  assert.throws(() => publish({ target_harness: "grok" }), /routes 'implement' to 'codex'/);
+  assert.throws(() => publish({ target_harness: "grok" }), /routes 'implementer' to 'codex'/);
 
   // Mid-session profile edit wins on the very next publish (re-read, not cached).
-  writeProfile({ byAgent: { implement: "grok" } });
+  writeProfile({ byAgent: { implementer: "grok" } });
   assert.equal(publish().target_harness, "grok");
 
   // byPhaseComplexity (from the phase file's **Complexity:** line) wins over byAgent.
   const phaseFile = path.join(fixture.sessionDir, "ultracode-plan-x-phase-2.md");
   fs.writeFileSync(phaseFile, "# Phase 2\n\n**Complexity:** high\n");
   writeProfile({
-    byAgent: { implement: "codex" },
-    byPhaseComplexity: { implement: { low: "codex", medium: "codex", high: "antigravity" } },
+    byAgent: { implementer: "codex" },
+    byPhaseComplexity: { implementer: { low: "codex", medium: "codex", high: "antigravity" } },
   });
   assert.equal(publish().target_harness, "antigravity");
 
   // A route naming the publisher's own harness is "not meant to leave" — an
   // explicit caller target is honored instead of refused.
-  writeProfile({ byAgent: { implement: "claude" } });
+  writeProfile({ byAgent: { implementer: "claude" } });
   assert.equal(publish({ target_harness: "codex" }).target_harness, "codex");
 
   // Invalid route value: warned, treated as absent, defaults to the publisher's harness.
-  writeProfile({ byAgent: { implement: "local" } });
+  writeProfile({ byAgent: { implementer: "local" } });
   const warned = publish();
   assert.equal(warned.target_harness, "claude");
   assert.equal(warned.routed_by, "default-current-harness");
@@ -993,7 +993,7 @@ test("hub: a worker may complete a task with a report inside its adopted session
     })
     .then(() => {
       // A report in the PUBLISHER's (adopted) session dir is now allowed...
-      const reportInShared = path.join(fixture.sessionDir, "repo", "ultracode-implement-phase-2.md");
+      const reportInShared = path.join(fixture.sessionDir, "repo", "ultracode-implementer-phase-2.md");
       const done = state.completeTask({
         session_key: worker.session_key,
         session_secret: worker.session_secret,
@@ -1209,7 +1209,7 @@ test("hub: task contract rejects missing addresses, relative paths, and escapes"
 
   function validPayloadFor(fx, overrides = {}) {
     return {
-      agent_hint: "implement",
+      agent_hint: "implementer",
       task: "Do the thing.",
       repo_root: fx.repoRoot,
       repo_key: "repo",
@@ -1340,7 +1340,7 @@ test("hub daemon: msg_wait long-poll resolves when a concurrent send lands", asy
     from_session_key: alice.session_key,
     from_secret: alice.session_secret,
     to_session_key: bob.session_key,
-    body: "report ready at ultracode-implement-phase-1.md",
+    body: "report ready at ultracode-implementer-phase-1.md",
   });
   assert.equal(sent.pushed, true);
   assert.equal(sent.channel, "long-poll");
@@ -1348,7 +1348,7 @@ test("hub daemon: msg_wait long-poll resolves when a concurrent send lands", asy
   assert.ok(Date.now() - started < 5000, "long-poll should resolve promptly, not at timeout");
   assert.equal(waited.timed_out, false);
   assert.equal(waited.messages.length, 1);
-  assert.equal(waited.messages[0].body, "report ready at ultracode-implement-phase-1.md");
+  assert.equal(waited.messages[0].body, "report ready at ultracode-implementer-phase-1.md");
 });
 
 test("hub daemon: yolo set/status round-trips over REST and lands in machine state", async (t) => {
@@ -1606,14 +1606,14 @@ test("hub guards: session-guard accepts an adopted shared session dir, rejects a
     `Session dir: ${sharedDir}.`,
     `Repo key: live.`,
     `Phase file: ${path.join(fixture.repoRoot, ".ultracode/session/ultracode-session-PUB/live/ultracode-plan-x-phase-2.md")}.`,
-    `Report file: ${path.join(sharedDir, "ultracode-implement-phase-2.md")}.`,
+    `Report file: ${path.join(sharedDir, "ultracode-implementer-phase-2.md")}.`,
     `Task: implement phase 2.`,
   ].join("\n");
   const payload = JSON.stringify({
     session_id: "WORKER",
     cwd: fixture.repoRoot,
     tool_name: "Task",
-    tool_input: { subagent_type: "ultracode:implement", prompt },
+    tool_input: { subagent_type: "ultracode:implementer", prompt },
   });
 
   const runGuard = () =>

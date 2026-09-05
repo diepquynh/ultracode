@@ -43,7 +43,7 @@ and the extra pass runs only if you say so.
 
 | Rule | Enforced by |
 | --- | --- |
-| The spec is approved before `plan` runs. The plan is approved before `implement` runs | `pipeline-gate.js` |
+| The spec is approved before `plan` runs. The plan is approved before `implementer` runs | `pipeline-gate.js` |
 | No approval is recorded without a `fact-check` `PASS` | the `ultracode_gate` MCP tool |
 | A `BLOCKER` security finding cannot be waived, by the orchestrator or by you | `security-block.js` |
 | Each leaf agent writes only inside its work `Repo root:` plus the primary session dir for reports. Phase path lists are hints, not allowlists | `spawn-scope.js` records the work repo and phase hints. `scope-guard.js` and `bash-scope-guard.js` hold the roots |
@@ -56,7 +56,7 @@ or more consecutive build failures. Together those 15 burned 315M cache-read tok
 whole corpus's spend. The worst failed 14 times in a row over 237 tool calls, then kept going for 27 more.
 Nothing in the pipeline noticed at the time. A loop nobody is counting spends your tokens on nothing.
 
-This is also what makes the cheap tiers usable. The weaker the model you route `implement` to, the less of
+This is also what makes the cheap tiers usable. The weaker the model you route `implementer` to, the less of
 the process can survive inside its prompt. So the process lives outside the prompt, and the model's job
 narrows to the part it is good at. Because every handoff is a file in the session directory, what each agent
 was told and what it returned stays open to inspection afterwards.

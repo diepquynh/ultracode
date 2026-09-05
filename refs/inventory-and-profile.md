@@ -139,17 +139,17 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
       "prompt-generation": "advanced"
     },
     "byPhaseComplexity": {
-      "implement":  { "low": "fast", "medium": "fast", "high": "balanced" },
-      "write-test": { "low": "fast", "medium": "fast", "high": "balanced" }
+      "implementer": { "low": "fast", "medium": "fast", "high": "balanced" },
+      "write-test":  { "low": "fast", "medium": "fast", "high": "balanced" }
     }
   },
   "harnesses": {
     "byAgent": {
-      "implement": "codex",
+      "implementer": "codex",
       "write-test": "codex"
     },
     "byPhaseComplexity": {
-      "implement": { "low": "codex", "medium": "codex", "high": "claude" }
+      "implementer": { "low": "codex", "medium": "codex", "high": "claude" }
     }
   }
 }
@@ -180,7 +180,7 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
     `ultracode:` prefix). Defaults: `explore`, `generate-spec`, `plan`, `fact-check` = `advanced`;
     `code-reviewer`, `execution-path-analyzer` = `balanced`; `module-documentation`, `prompt-generation` =
     `advanced`.
-  - `models.byPhaseComplexity` is the **dynamic** tier for `implement` and `write-test`. Each carries its own
+  - `models.byPhaseComplexity` is the **dynamic** tier for `implementer` and `write-test`. Each carries its own
     `{ low, medium, high }` map keyed by the plan phase's complexity tier. An inline no-plan task counts as
     `low`. Defaults: `low` = `fast`, `medium` = `fast`, `high` = `balanced` for each.
   - **Keys stay bare; spawns stay prefixed.** Every key in both maps is the agent's unprefixed name. The hook

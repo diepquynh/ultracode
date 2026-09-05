@@ -116,6 +116,25 @@ async function linkSpawns(mainFiles) {
   return map;
 }
 
+// Agents that have been renamed since some of the recorded corpus was produced.
+// The bench measures history, so a run always carries whatever name it was
+// spawned under. Without this map the same role lands in two buckets: run counts
+// halve, medians are taken over the wrong sample, and `--agent implementer`
+// silently drops every run from before the rename.
+const RENAMED_AGENTS = new Map([["implement", "implementer"]]);
+
+// The name the pipeline uses today for a recorded subagent type. Accepts either
+// spelling with or without the `ultracode:` prefix, and preserves the prefix so
+// report and baseline keys keep their existing shape.
+function canonicalAgent(name) {
+  const value = String(name || "").trim();
+  if (!value) return value;
+  const prefixed = value.startsWith("ultracode:");
+  const bare = prefixed ? value.slice("ultracode:".length) : value;
+  const current = RENAMED_AGENTS.get(bare) || bare;
+  return prefixed ? `ultracode:${current}` : current;
+}
+
 function agentIdOf(subagentFile) {
   return path.basename(subagentFile, ".jsonl").replace(/^agent-/, "");
 }
@@ -133,6 +152,8 @@ module.exports = {
   eachJsonLine,
   resultText,
   linkSpawns,
+  RENAMED_AGENTS,
+  canonicalAgent,
   agentIdOf,
   parentSessionOf,
 };

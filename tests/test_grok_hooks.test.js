@@ -53,7 +53,7 @@ test("fitGrokReason keeps short reasons verbatim and refits long ones around the
   assert.equal(fitGrokReason("short and sweet."), "short and sweet.");
   assert.equal(fitGrokReason(null), null);
 
-  const head = "ultracode: refusing ultracode:implement because its required parameter contract is incomplete: missing Repo root, missing Session dir, missing Repo key, missing Task, and several other labels this harness would otherwise truncate away entirely.";
+  const head = "ultracode: refusing ultracode:implementer because its required parameter contract is incomplete: missing Repo root, missing Session dir, missing Repo key, missing Task, and several other labels this harness would otherwise truncate away entirely.";
   const tail = "Add the named `Label: value` lines and re-spawn.";
   const fitted = fitGrokReason(`${head} Every Ultracode spawn is self-contained. ${tail}`);
   assert.ok(fitted.length <= GROK_REASON_MAX, `fitted length ${fitted.length}`);
@@ -123,7 +123,7 @@ test("grok checkpoint rides PreCompact marker + PreToolUse additionalContext", (
     path.join(sessionDir, "progress.json"),
     JSON.stringify({
       records: [
-        { ts: "2026-08-30T00:00:00Z", agent: "implement", phase: "phase-1", status: "ok", summary: "landed phase 1" },
+        { ts: "2026-08-30T00:00:00Z", agent: "implementer", phase: "phase-1", status: "ok", summary: "landed phase 1" },
       ],
     }),
   );
@@ -151,7 +151,7 @@ test("grok checkpoint rides PreCompact marker + PreToolUse additionalContext", (
   const injected = JSON.parse(runHook(hook, preToolPayload, env));
   assert.equal(injected.hookSpecificOutput.permissionDecision, "allow");
   assert.match(injected.hookSpecificOutput.additionalContext, /resuming after compaction/);
-  assert.match(injected.hookSpecificOutput.additionalContext, /implement phase-1 \[ok\]/);
+  assert.match(injected.hookSpecificOutput.additionalContext, /implementer phase-1 \[ok\]/);
 
   // Second PreToolUse: marker consumed, hook silent.
   assert.equal(runHook(hook, preToolPayload, env), "");

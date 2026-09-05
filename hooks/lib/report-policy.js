@@ -41,7 +41,7 @@ const BUILD_STREAK_FILE = "build-streak.json";
 // agent names its own session artifacts from the pattern in its prompt.md, so
 // there is no declared path to hold it to.
 const DECLARED_REPORT_AGENTS = new Set([
-  "implement",
+  "implementer",
   "write-test",
   "execution-path-analyzer",
   "module-documentation",
@@ -114,7 +114,7 @@ function declaredReportPaths(state, agent) {
 }
 
 // A ledger this agent is the documented writer of (ultracode-review-ledger-*.md,
-// ultracode-implement-progress-*.md). Those are session artifacts it writes by
+// ultracode-implementer-progress-*.md). Those are session artifacts it writes by
 // hand today; ledger-policy.js already decides who may touch them.
 function ownsLedger(agent, base) {
   return AGENT_OWNED.some((entry) => entry.pattern.test(base) && entry.owners.includes(agent));

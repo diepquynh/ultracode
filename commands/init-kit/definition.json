@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "command",
   "name": "init-kit",
-  "description": "Scout this repo for common coding patterns, propose a skill set for approval, then generate per-repo skills + a routing inventory — fanned out with parallel subagent spawns.",
+  "description": "Scouts a repo for its recurring code patterns, then generates the per-repo skills and routing inventory the pipeline reads. Invoke on a repo ultracode has not been initialized for, or to refresh one after the stack changes.",
   "prompt": "prompt.md",
   "config": {
     "argument_hint": "[optional: focus area, module glob, or 're-scan']"

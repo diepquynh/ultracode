@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "agent",
   "name": "module-documentation",
-  "description": "Creates or updates the module-hub area references under `{{skills_dir}}/module-hub/references/` from what the implement phases actually changed, grounding every documented name in real source. Optional final step: spawn only when the user asks for documentation, after every phase has passed review. Edits only the references directory.",
+  "description": "Creates or updates the module-hub area references under `{{skills_dir}}/module-hub/references/` from what the implementer phases actually changed, grounding every documented name in real source. Optional final step: spawn only when the user asks for documentation, after every phase has passed review. Edits only the references directory.",
   "prompt": "prompt.md",
   "config": {
     "model_tier": "advanced",
