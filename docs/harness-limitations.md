@@ -265,6 +265,11 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
 - The spawn tool defaults `run_in_background` to true (`TaskToolInput`, `default_true`), and a foreground spawn
   auto-backgrounds when the wait budget expires (`grok_build/task/mod.rs`). PostToolUse usually carries only
   a launch ack.
+- **That wait budget is 45 seconds** (`CoordinatorConfig::foreground_budget`, `task/coordinator_state.rs`,
+  source-read 2026-09-05 at `72a6125`). Past it the coordinator replaces the caller with `Backgrounded` and
+  returns a task id, so a "foreground" spawn is only foreground for 45 s. This is why no ultracode stage on
+  grok may depend on a spawn call blocking for its child's result, and why `ultracode:hub-wait`, whose whole
+  job is to block for up to 55 minutes, cannot work here at all.
 - SubagentStop carries `phase`, `subagentId`, `subagentType`, `stopHookActive`, and `lastAssistantMessage`,
   but no spawn prompt. The envelope's `transcriptPath` is the emitting session's own transcript, so a child's
   SubagentStop may carry the child transcript path when the file exists. Whether `Session dir:` and
@@ -322,9 +327,35 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
   reported the shim healthy with 13 tools, while a `-p` run from an untrusted `/tmp` project saw only
   plugin-bundled servers and reported the same tools "not found". Project-local `.mcp.json` in an untrusted
   dir is ignored the same way. Run from a trusted project or trust the directory first. Measured only.
-- Grok 1.0.13: only short (25 s or less) `ultracode_msg_wait` parks were measured, which is why
-  `ultracode:hub-wait` uses 20 s waits here. Grok is pull-only, so re-run `/ultracode:hub-listen` if the
-  harness cuts the wait spawn itself.
+- Grok 1.0.13: only short (25 s or less) `ultracode_msg_wait` parks were measured. Grok is pull-only, and its
+  45 s foreground spawn budget (see "Spawns and results") rules out a wait subagent, so the wait lives in a
+  `monitor` instead of in `ultracode:hub-wait`, which refuses to run here.
+
+### The monitor tool
+
+`monitor` is the one tool on this harness that outlives the turn that started it, which makes it the hub
+listening state (docs/hub.md, "Grok Build: the wake monitor"). Read from
+`crates/codegen/xai-grok-tools/src/implementations/grok_build/monitor/` at `72a6125` (2026-09-01), against
+1.0.13 installed:
+
+- **Arguments** are `command`, `description`, `timeout_ms`, and `persistent`. `timeout_ms` defaults to and
+  caps at 36000000 (10 hours); `persistent: true` drops the deadline and runs to session end or
+  `kill_command_or_subagent`. The result carries `taskId`, `timeoutMs`, and `persistent`.
+- **Every stdout and stderr line is an event.** Mid-turn, events are injected as a hidden `<monitor-event>`
+  system reminder. When the session is idle they drain into a new turn (`notification_drain.rs`,
+  `maybe_drain_notifications` calling `maybe_start_running_task`). That idle wake is the property the hub
+  listening state depends on: nothing else here starts a turn without the user.
+- **Volume is capped hard.** A token bucket of 10 events refilling one per 2000 ms, and 30 s of continuous
+  overflow auto-kills the monitor. Lines truncate at 500 characters, batched events at 3000, and the raw
+  buffer at 1 MiB. So a monitor emits a signal, never a payload.
+- **Pipe buffering is the usual failure.** Use `grep --line-buffered` in any pipe, or events arrive minutes
+  late. Redirect stderr you do not want as an event.
+- **ESC holds events back.** Cancelling a turn sets `notifications_suppressed` (`cancel.rs`), cleared on the
+  next user prompt, so wakes queue up behind it rather than arriving. Nothing is lost: the monitor keeps
+  running and the hub keeps the messages until the cursor moves.
+- **No hook matches `monitor` by default.** It runs an arbitrary shell command under its own tool name, so the
+  Bash-family matchers never see it. `hooks/hooks.grok.json` registers `plugin-guard.js`,
+  `monitor-guard.js`, and `bash-scope-guard.js` on a `monitor` matcher to close that.
 
 ## The ask channel (live, 2026-08-23)
 
@@ -347,7 +378,8 @@ rather than refused. `askPreToolUse` in `hooks/lib/common.js` picks the shape pe
 
 The cross-harness hub (docs/hub.md) can wake an idle interactive session only where the harness has a
 steering channel. Everywhere else delivery is pull-only: the session's `ultracode:hub-wait` subagent sits in
-`ultracode_msg_wait`. A channel turns on by default
+`ultracode_msg_wait`, except on Grok Build, where a `monitor` long polls the hub instead (below). A channel
+turns on by default
 only once a live run on a qualifying CLI version is recorded here. Claude and Codex are. Grok and Antigravity
 have no channel to gate.
 
@@ -368,7 +400,9 @@ have no channel to gate.
   per-session naming is needed. A CLI without `queue` (0.147.0 was measured failing `codex queue --help`)
   feature-detects as unavailable and stays pull-only.
 - **Grok Build 1.0.13 and Antigravity 1.1.22:** no external steering channel found in either. Antigravity's
-  `send_message` is intra-conversation only. Both are pull-only.
+  `send_message` is intra-conversation only. Both are pull-only. Grok pulls through its own `monitor` tool
+  rather than through `ultracode:hub-wait`, which is the closest thing to a self-wake either harness has: see
+  "The monitor tool" below.
 
 ## Tool-call duration caps (live, 2026-08-30)
 
@@ -376,10 +410,11 @@ Every harness bounds how long one tool call may run. That is what ends an "infin
 park (`timeout_ms: 0`) when the user does not. Whatever cuts the call, the registration stays alive (7-day
 idle expiry, parked waiters exempt from sweeps) and the cursor re-reads everything on the next wait, so a cut
 never costs a message. Because of these caps no interactive session parks itself any more: the wait runs
-inside the `ultracode:hub-wait` subagent (docs/hub.md, "Waiting without parking"), which loops finite waits
-sized from the measurements below (55 s per call; 20 s on Grok) for a budget the parent sets, while the
-parent blocks on the spawn. Subagent spawns are the one kind of call every harness lets run long. The
-measurements below are what set those per-call timeouts.
+inside the `ultracode:hub-wait` subagent (docs/hub.md, "Waiting without parking"), which loops finite 55 s
+waits for a budget the parent sets, while the parent blocks on the spawn. Subagent spawns are the one kind of
+call three of the four harnesses let run long. Grok is the exception at both ends, capping the tool call and
+cutting the spawn, so it waits in a `monitor` outside the turn. The measurements below are what set the
+per-call timeouts.
 
 - **Codex 0.151.0** (session 01a05219): long tool calls are moved to background cells that the model polls
   with its `wait` tool (about 60 s yields). After several yields the harness cut the listening park, and the
@@ -392,4 +427,6 @@ measurements below are what set those per-call timeouts.
 - **Antigravity 1.1.22:** a 110 s wait completed headless under `--print-timeout 5m` (that flag bounds the
   whole print run). The interactive-session cap is unmeasured. Antigravity is pull-only, so a generous park is
   its main delivery path. Expect to re-run hub-listen when the harness cuts it.
-- **Grok 1.0.13:** only short (25 s or less) waits measured so far. Also pull-only, same re-run story.
+- **Grok 1.0.13:** only short (25 s or less) waits measured so far. Also pull-only, and the one harness where
+  the cap does not decide the design: its `monitor` runs the long poll outside the turn entirely, so no tool
+  call is held open at all. See "The monitor tool" above.

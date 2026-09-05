@@ -1864,3 +1864,167 @@ test("hub: lock is exclusive, stale locks are reclaimed", (t) => {
   assert.equal(reclaimed.acquired, true);
   releaseLock({ pid: process.pid });
 });
+
+// ---------------------------------------------------------------------------
+// The Grok Build hub wake monitor
+// ---------------------------------------------------------------------------
+
+// Extract the monitor command commands/hub-listen/prompt.md tells a Grok session
+// to run, from the GENERATED prompt rather than from a copy kept here: the point
+// of this test is that the command the model is handed actually works.
+function generatedWakeMonitor(t) {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-wake-monitor-"));
+  t.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  require("node:child_process").execFileSync(
+    "node",
+    [path.join(ROOT, "scripts", "generate_definitions.js"), "--target", "grok", "--output-dir", output],
+    { cwd: ROOT, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const prompt = fs.readFileSync(path.join(output, "commands", "hub-listen.md"), "utf-8");
+  const start = prompt.indexOf('HUB="$HOME/.ultracode/hub.json"');
+  const end = prompt.indexOf("echo HUB-IDLE");
+  assert.ok(start >= 0 && end > start, "generated hub-listen prompt has no wake monitor command");
+  return prompt.slice(start, end + "echo HUB-IDLE".length);
+}
+
+async function wakeMonitorHarness(t) {
+  const fixture = makeFixture(t);
+  const { createHubHttpServer } = require(path.join(ROOT, "mcp", "lib", "hub", "http.js"));
+  const config = require(path.join(ROOT, "mcp", "lib", "hub", "config.js"));
+  config.provision();
+  const state = freshHubState(fixture);
+  t.after(() => state.close());
+  const { server, facade } = createHubHttpServer({
+    state,
+    getToken: () => config.readHubInfo().token,
+    version: "test",
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+
+  // The monitor reads url + token out of $HOME/.ultracode/hub.json exactly as
+  // the daemon writes them, so point HOME at a stand-in tree.
+  const home = path.join(fixture.dir, "home");
+  fs.mkdirSync(path.join(home, ".ultracode"), { recursive: true });
+  const hubInfo = {
+    token: config.readHubInfo().token,
+    port: server.address().port,
+    version: "test",
+    url: `http://127.0.0.1:${server.address().port}`,
+  };
+  const hubInfoPath = path.join(home, ".ultracode", "hub.json");
+  fs.writeFileSync(hubInfoPath, JSON.stringify(hubInfo, null, 2));
+
+  // Must not be execFileSync: the hub under test runs on THIS process's event
+  // loop, and a synchronous child would block the loop that has to answer the
+  // monitor's long poll, so every run would hang until its own timeout.
+  const template = generatedWakeMonitor(t);
+  const run = (session, cursor) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(
+        "sh",
+        [
+          "-c",
+          template
+            .replace("<CURSOR>", String(cursor))
+            .replace("<KEY>", session.session_key)
+            .replace("<SECRET>", session.session_secret),
+        ],
+        { env: { ...process.env, HOME: home }, stdio: ["ignore", "pipe", "pipe"] },
+      );
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk;
+      });
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error(`wake monitor did not print within 30s (saw ${JSON.stringify(out)})`));
+      }, 30000);
+      child.on("error", reject);
+      child.on("close", () => {
+        clearTimeout(timer);
+        resolve(out.trim());
+      });
+    });
+
+  return { fixture, state, facade, hubInfoPath, run };
+}
+
+test("grok wake monitor: a queued message prints HUB-MESSAGES and leaves it unread", async (t) => {
+  const { fixture, state, run } = await wakeMonitorHarness(t);
+  const worker = registerDefault(state, fixture, { harness: "grok" });
+  const boss = registerDefault(state, fixture, {
+    harness: "claude",
+    session_id: "test-boss",
+    session_dir: fixture.sessionDir,
+  });
+  const sent = state.sendMessage({
+    from_session_key: boss.session_key,
+    from_secret: boss.session_secret,
+    to_session_key: worker.session_key,
+    body: JSON.stringify({ task_id: 7, status: "open" }),
+  });
+
+  assert.equal(await run(worker, 0), "HUB-MESSAGES");
+
+  // The monitor is a wake signal, not a delivery: the hub's read is cursor-based
+  // and non-destructive, so the body still comes to the session through
+  // ultracode_msg_wait. If this ever regressed the session would be woken for a
+  // message it could no longer fetch.
+  const fetched = state.fetchMessages({
+    session_key: worker.session_key,
+    session_secret: worker.session_secret,
+    cursor: 0,
+  });
+  assert.equal(fetched.messages.length, 1);
+  assert.equal(fetched.messages[0].id, sent.message_id);
+});
+
+test("grok wake monitor: a closing hub prints HUB-SHUTDOWN, not HUB-MESSAGES", async (t) => {
+  const { fixture, state, facade, run } = await wakeMonitorHarness(t);
+  const worker = registerDefault(state, fixture, { harness: "grok" });
+
+  // A shutdown reply carries an EMPTY messages array, so the case arm order in
+  // the generated command decides the outcome: `"messages":[]` matches this body
+  // too, and testing it first would report an idle tick and keep looping for 55
+  // minutes against a hub that is going away.
+  facade.close();
+  assert.equal(await run(worker, 0), "HUB-SHUTDOWN");
+});
+
+test("grok wake monitor: a missing hub.json prints HUB-ERROR instead of calling a bare host", async (t) => {
+  const { fixture, state, hubInfoPath, run } = await wakeMonitorHarness(t);
+  const worker = registerDefault(state, fixture, { harness: "grok" });
+  fs.rmSync(hubInfoPath);
+  assert.equal(await run(worker, 0), "HUB-ERROR");
+});
+
+test("grok wake monitor: a message arriving mid-park wakes the long poll", async (t) => {
+  const { fixture, state, facade, run } = await wakeMonitorHarness(t);
+  const worker = registerDefault(state, fixture, { harness: "grok" });
+  const boss = registerDefault(state, fixture, {
+    harness: "claude",
+    session_id: "test-boss",
+    session_dir: fixture.sessionDir,
+  });
+
+  // The real shape: the monitor is already parked when the work shows up. The
+  // hub resolves the parked waiter, so the wake costs one round trip rather than
+  // waiting out the 60s poll — which is why this is a long poll and not polling.
+  const pending = run(worker, 0);
+  const deadline = Date.now() + 10000;
+  while (facade.waiters.size === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(facade.waiters.size, 1, "monitor did not park on the hub");
+
+  const started = Date.now();
+  await facade.sendMessage({
+    from_session_key: boss.session_key,
+    from_secret: boss.session_secret,
+    to_session_key: worker.session_key,
+    body: JSON.stringify({ task_id: 9, status: "open" }),
+  });
+  assert.equal(await pending, "HUB-MESSAGES");
+  assert.ok(Date.now() - started < 20000, "wake did not ride the parked poll");
+});

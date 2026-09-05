@@ -806,6 +806,7 @@ when both name the agent). Then:
    the profile nor the user named a harness, put the choice to the user with {{tool_ask_user}} first. The
    publish result's `target_harness` and `routed_by` tell you where it actually went. Surface any
    `route_warning` to the user.
+{{#claude,codex,antigravity}}
 3. **Wait for the completion through `ultracode:hub-wait`.** Say which task id you are waiting on, then spawn
    `ultracode:hub-wait` in the foreground. That spawn is your one blocking call (Hard rule 19): you never park
    on `ultracode_msg_wait` yourself, because this harness cuts long tool calls while it lets a subagent run
@@ -819,6 +820,21 @@ when both name the agent). Then:
    wake notice as a new turn: the messages it announces are already queued, so one `ultracode_msg_wait` call
    with the default finite timeout returns them at once. That immediate fetch is the only direct
    `ultracode_msg_wait` call you make, and a notice for messages the subagent already returned is stale.
+{{/claude,codex,antigravity}}
+{{#grok}}
+3. **Wait for the completion through the hub wake monitor.** Say which task id you are waiting on, start the
+   monitor exactly as `/ultracode:hub-listen` Step 4 specifies (same command, same three substitutions, same
+   four words), and **end your turn**. This harness has no push channel and cuts long tool calls, so you never
+   park on `ultracode_msg_wait`; and it hands a foreground spawn back as a task id after 45 seconds, so the
+   wait does not go in a spawn either. A monitor runs detached from the turn and starts a new one when it
+   prints, including from idle, so ending the turn is the wait. Nothing is pending and there is nothing to
+   poll: no spawn to wait on, no `{{tool_shell}}` sleep, no second `ultracode_msg_wait`.
+   On `HUB-MESSAGES`, call `ultracode_msg_wait` once with your cursor and `timeout_ms: 5000`, keep the returned
+   `cursor` for every later wait, and go to item 4. On `HUB-IDLE`, or any other way the monitor ends, start a
+   new one with the cursor you hold and say nothing. On `HUB-SHUTDOWN` or `HUB-ERROR`, tell the user and stop.
+   The secret goes into that one command and nowhere else: never into a report, a message body, or a task
+   summary.
+{{/grok}}
 4. **On return, treat the completion notice like a subagent return.** The message whose `task_id` is yours
    carries `status`, `summary`, and the worker's `report_file` in its JSON `body`. Other messages in the same
    result (a `yolo-mode` notice, a direct message) are handled as their own sections describe, and you wait
@@ -846,8 +862,8 @@ overnight on exactly that: a formatting failure, a review-cap approval prompt, a
 isolation covers both reads). The state is machine-level, keyed by this primary session, not per repo, and
 **every child of the session follows it**: subagent hooks read the same state locally, and hub-listen workers
 that adopted this session are notified through the message queue. A mid-run toggle arrives as a `yolo-mode`
-message (a wake, or inside the next `ultracode:hub-wait` result). Acknowledge it in one line and apply it from
-the next spawn onward. The state file the hooks read is already updated, so no re-read is needed.
+message (a wake, or among the messages your next hub wait returns). Acknowledge it in one line and apply it
+from the next spawn onward. The state file the hooks read is already updated, so no re-read is needed.
 
 **Scope.** YOLO governs the phases **after plan approval**: implement, review loops, format, the closing
 stages. It changes *who answers* operational questions mid-run, never *what must be true*:
@@ -956,8 +972,20 @@ default. Autonomy defers decisions. It never hides them.
     poll: no `{{tool_shell}}` sleep, wait, busy-loop, or keepalive, no `TaskOutput` polling, no reading agent
     output files in a loop, no "are you done?" pings. Phrases like "Wait for every plan agent to return" mean
     **do not spawn dependent work until those agents have returned**: a sequencing constraint, not a license
-    to poll. Waiting on the hub is no exception: `ultracode:hub-wait` is a foreground spawn like any other,
+    to poll.
+{{#claude,codex,antigravity}}
+    Waiting on the hub is no exception: `ultracode:hub-wait` is a foreground spawn like any other,
     and the finite-timeout `ultracode_msg_wait` loop lives inside it, never in this session.
+{{/claude,codex,antigravity}}
+{{#grok}}
+    Waiting on the hub is the one thing that is not a spawn here: it is a `monitor`, whose command runs
+    detached from your turn and wakes you by printing. That is why ending the turn is the correct way to wait
+    on this harness and a `{{tool_shell}}` sleep still is not. The rule is about your turn, and a monitor is
+    not in it. Two limits keep that from becoming a loophole: the monitor's command long polls a blocking
+    endpoint rather than spinning, and a monitor built on a sleep loop is denied by a hook. Never point a
+    monitor at a subagent's output file, a report path, or a ledger to see whether it has changed. A spawn
+    already returns its own result.
+{{/grok}}
 20. **Tests are opt-in, and never mid-pipeline.** Never spawn `ultracode:execution-path-analyzer`,
     `ultracode:write-test`, or the test review loop inside the per-phase loop (**Rule T1**). Run them only
     after **every** coding phase for that repo has passed review **and** the user has asked for tests, at the

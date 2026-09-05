@@ -11,15 +11,7 @@
 "use strict";
 
 const { readHookInput, denyPreToolUse, hookToolInput, hookAgentType } = require("./lib/common");
-
-const BANNED_PATTERNS = [
-  { pattern: /^\s*(true|:)\s*;?\s*$/, label: "a no-op keepalive (`true`/`:`)" },
-  { pattern: /(^|[;&|]|\bthen\b|\bdo\b)\s*sleep\s+[\d.]/i, label: "`sleep`" },
-  { pattern: /^\s*wait\b/im, label: "`wait`" },
-  { pattern: /\b(while|until)\b[^\n]*\bsleep\b/is, label: "a sleep-polling loop" },
-  { pattern: /keep[- ]?alive/i, label: "a keepalive command" },
-  { pattern: /hold\s+the\s+turn\s+open/i, label: "a \"hold the turn open\" command" },
-];
+const { bannedPollPattern } = require("./lib/poll-policy");
 
 async function main() {
   const hookInput = await readHookInput();
@@ -33,7 +25,7 @@ async function main() {
       : "";
   if (!command) return 0;
 
-  const hit = BANNED_PATTERNS.find(({ pattern }) => pattern.test(command));
+  const hit = bannedPollPattern(command);
   if (hit) {
     denyPreToolUse(
       `ultracode: refusing ${hit.label} (Hard rule 19 — never sleep/wait/poll/keepalive while ` +

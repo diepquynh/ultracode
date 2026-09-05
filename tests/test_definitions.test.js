@@ -1946,6 +1946,80 @@ test("bash-guard denies orchestrator wait/sleep but exempts subagents", () => {
   bashGuardTest("grok");
 });
 
+// The hub wake monitor, as commands/hub-listen/prompt.md tells a Grok session to
+// start it: a `sleep` in the failure branch, and the hub's long-poll route.
+const HUB_WAKE_MONITOR = [
+  'HUB="$HOME/.ultracode/hub.json"',
+  'URL=$(sed -n \'s/.*"url"[^"]*"\\([^"]*\\)".*/\\1/p\' "$HUB" 2>/dev/null)',
+  "while [ \"$(date +%s)\" -lt \"$END\" ]; do",
+  '  R=$(curl -s --max-time 90 -X POST "$URL/api/v1/messages/wait" -d "{}" 2>/dev/null)',
+  "  case \"$R\" in",
+  "    *'\"messages\":[]'*) FAILS=0 ;;",
+  "    *) FAILS=$((FAILS+1)); sleep 5 ;;",
+  "  esac",
+  "done",
+].join("\n");
+
+function monitorGuardTest(target) {
+  const hookPath = path.join(pluginRootFor(target), "hooks", "monitor-guard.js");
+  const run = (command, agentType) =>
+    runHook(hookPath, {
+      tool_input: { command },
+      ...(agentType ? { agent_type: agentType } : {}),
+    });
+
+  // A monitor is a background event stream, so Hard rule 19's patterns still
+  // apply: the loophole this closes is polling a spawn's output from a monitor
+  // instead of from the turn.
+  for (const command of [
+    "while true; do sleep 5; cat /repo/.ultracode/session/x/report.md; done",
+    "until [ -f done.flag ]; do sleep 2; done",
+    "sleep 600",
+  ]) {
+    assertDenied(JSON.parse(run(command)), /Hard rule 19/, command);
+  }
+
+  // Watching the thing itself is what a monitor is for, and stays allowed.
+  assert.equal(run("tail -f /var/log/app.log | grep --line-buffered ERROR"), "");
+  assert.equal(run("inotifywait -m --format '%e %f' /watched/dir"), "");
+
+  // The one exemption: a loop that long-polls the hub parks on a socket rather
+  // than spinning, and it is the whole listening state on a pull-only harness.
+  assert.equal(run(HUB_WAKE_MONITOR), "");
+
+  // The exemption is the route, not the word "hub" or a curl call.
+  assertDenied(
+    JSON.parse(run('while true; do curl -s "$URL/api/v1/tasks/claim"; sleep 5; done')),
+    /Hard rule 19/,
+  );
+
+  assert.equal(run("sleep 600", "ultracode:implement"), "");
+}
+
+test("monitor-guard keeps grok's monitor tool inside Hard rule 19, minus the hub wake loop", () => {
+  monitorGuardTest("grok");
+  // The hook ships everywhere the plugin does; only grok wires a monitor matcher.
+  monitorGuardTest("claude");
+});
+
+test("grok wires the shell guards onto the monitor tool", () => {
+  const config = JSON.parse(
+    fs.readFileSync(path.join(GROK_PLUGIN_ROOT, "hooks", "hooks.json"), "utf-8"),
+  );
+  const entry = config.hooks.PreToolUse.find((group) => group.matcher === "monitor");
+  assert.ok(entry, "grok hooks.json has no monitor matcher");
+  const commands = entry.hooks.map((hook) => hook.command);
+  // monitor runs an arbitrary shell command under its own tool name, so the
+  // guards that reason about a command have to be registered on it too, or the
+  // tool is an unwatched shell.
+  for (const hook of ["plugin-guard.js", "monitor-guard.js", "bash-scope-guard.js"]) {
+    assert.ok(
+      commands.some((command) => command.includes(hook)),
+      `monitor matcher is missing ${hook}`,
+    );
+  }
+});
+
 function artifactGuardTest(target) {
   const pluginRoot = pluginRootFor(target);
   const hookPath = path.join(pluginRoot, "hooks", "artifact-guard.js");
@@ -4487,6 +4561,7 @@ test("every plugin distribution includes target hooks", () => {
       "hooks.json",
       "model-router.js",
       "model-routing.json",
+      "monitor-guard.js",
       "pipeline-gate.js",
       "plugin-guard.js",
       "review-cap.js",

@@ -27,7 +27,16 @@ cursor.
 ## Step 1: Pick the per-call timeout
 
 {{#grok}}
-Use `timeout_ms: 20000` on every call. This harness cuts tool calls that run much longer than that.
+**Stop. This harness does not use this agent.** Call no tool. Return exactly this line and nothing else:
+
+`ERROR: hub-wait does not run on this harness. Wait through the hub wake monitor instead (/ultracode:hub-listen Step 4).`
+
+This agent waits by holding a spawn open for many minutes, and this harness hands a foreground spawn back to
+its caller as a task id after 45 seconds. The session that spawned you would read that acknowledgement as your
+answer and go on believing it was waiting. The listening state here is a `monitor` in the session itself: it
+runs detached from the turn,
+long polls the hub, and wakes the session by printing. That is what the session that spawned you should have
+started. Saying so is more useful than waiting in a way that fails silently.
 {{/grok}}
 {{#claude,codex,antigravity}}
 Use `timeout_ms: 55000` on every call. That stays under this harness's tool-call duration cap and under the

@@ -102,7 +102,7 @@
     "hub-wait": {
       "frontmatter": {
         "name": "hub-wait",
-        "description": "Blocks on the cross-harness hub and returns the first message, task notice, or completion notice as JSON with the advanced cursor. Spawn whenever an orchestrate or hub-listen session must wait: this spawn is the only place a session waits, and the parent never calls a hub tool directly. Decides nothing and touches no files.",
+        "description": "Blocks on the cross-harness hub and returns the first message, task notice, or completion notice as JSON with the advanced cursor. Spawn whenever an orchestrate or hub-listen session on Claude Code, Codex, or Antigravity must wait: this spawn is the only place such a session waits, and the parent never calls a hub tool directly. Grok Build never spawns it and it refuses to run there, because that harness waits through a hub wake monitor instead. Decides nothing and touches no files.",
         "model": "haiku",
         "effort": "low",
         "tools": [

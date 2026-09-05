@@ -128,6 +128,7 @@ same task. Then claim again. Drain the queue before waiting.
 
 **No task (`task: null`).** Go to Step 4.
 
+{{#claude,codex,antigravity}}
 ## Step 4: Listen through a wait subagent
 
 Every harness caps how long one of your own tool calls may run, so you never park on `ultracode_msg_wait`
@@ -170,6 +171,82 @@ Read the returned JSON (`outcome`, `cursor`, `messages`). Its `cursor` is now yo
 new turn. The messages it announces are already queued, so one `ultracode_msg_wait` call with the default
 finite timeout returns them at once without parking. That is the only direct `ultracode_msg_wait` call you
 ever make. If it returns nothing new, the wait subagent already delivered them: continue as above.
+{{/claude,codex,antigravity}}
+{{#grok}}
+## Step 4: Listen through the hub wake monitor
+
+This harness has no push channel, and it hands a foreground spawn back to its caller as a task id after 45
+seconds, so a wait subagent returns an acknowledgement long before any message arrives. The listening state
+here is a **`monitor`**, which is neither a spawn nor a tool call you park on. A monitor runs its command
+detached from your turn and turns each line it prints into an event that starts a new turn, including when the
+session is sitting idle. So you start one, tell the user "listening. Press ESC to stop.", and **end your
+turn**. Ending the turn IS listening here. Nothing is pending and there is nothing to poll.
+
+Start it with `monitor`, `timeout_ms: 3600000`, `persistent: false`, and
+`description: "ultracode hub wake"`. Substitute three values into the command and change nothing else:
+`<CURSOR>` is the integer cursor you hold (from registration, or from your last `ultracode_msg_wait`), and
+`<KEY>` and `<SECRET>` are your registration's `session_key` and `session_secret`.
+
+```bash
+HUB="$HOME/.ultracode/hub.json"
+URL=$(sed -n 's/.*"url"[^"]*"\([^"]*\)".*/\1/p' "$HUB" 2>/dev/null)
+TOKEN=$(sed -n 's/.*"token"[^"]*"\([^"]*\)".*/\1/p' "$HUB" 2>/dev/null)
+[ -n "$URL" ] && [ -n "$TOKEN" ] || { echo HUB-ERROR; exit 0; }
+CURSOR=<CURSOR>
+FAILS=0
+END=$(( $(date +%s) + 3300 ))
+while [ "$(date +%s)" -lt "$END" ]; do
+  R=$(curl -s --max-time 90 -X POST "$URL/api/v1/messages/wait" \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"session_key\":\"<KEY>\",\"session_secret\":\"<SECRET>\",\"cursor\":$CURSOR,\"timeout_ms\":60000}" 2>/dev/null)
+  case "$R" in
+    *'"shutdown":true'*) echo HUB-SHUTDOWN; exit 0 ;;
+    *'"messages":[]'*) FAILS=0 ;;
+    *'"messages":['*) echo HUB-MESSAGES; exit 0 ;;
+    *) FAILS=$((FAILS+1)); [ "$FAILS" -ge 5 ] && { echo HUB-ERROR; exit 0; }; sleep 5 ;;
+  esac
+done
+echo HUB-IDLE
+```
+
+Three properties of that command matter, so do not rewrite it from memory:
+
+- **It long polls.** `timeout_ms: 60000` makes the hub hold each request open until a message lands, so the
+  loop spends its life parked on a socket. The `sleep` runs only after a failed request.
+- **It prints one word and exits.** Every line a monitor prints wakes you, and grok kills a monitor that
+  floods (10 events, refilling one per two seconds). One word per wake is the budget.
+- **It never fetches the messages.** The hub's read is cursor-based and non-destructive, so the monitor only
+  learns that something arrived; the message bodies still come to you through `ultracode_msg_wait`, over the
+  authenticated channel, exactly as on every other harness.
+
+The monitor wakes you with one of four words. Act on it, then start a **new** monitor. One monitor per wake is
+the listening loop's ONLY legitimate repetition:
+
+- **`HUB-MESSAGES`:** call `ultracode_msg_wait` ONCE, with your cursor and `timeout_ms: 5000`. The messages are
+  already queued, so it returns at once without parking. Its `cursor` is now your cursor. Each entry's `body`
+  is a hub notice (a JSON string) or a direct message's text. A task notice (`task_id` with `status: "open"`)
+  means claim it: go back to Step 3, and start the new monitor after the task is done. A `yolo-mode` notice
+  (`type: "yolo-mode"`) means the primary session's YOLO state changed: note the new `enabled` value, apply it
+  to every task you execute from now on (Step 3's YOLO rules), and send no reply. A direct message means read
+  it, act on the paths it carries, and reply with `ultracode_msg_send` (`reply_to` set) only when the sender
+  asked a question.
+- **`HUB-IDLE`:** nothing arrived in 55 minutes. Start a new monitor with the same cursor and say nothing.
+  Silence is the normal state of listening.
+- **`HUB-SHUTDOWN`:** the hub is restarting. Tell the user to re-run `/ultracode:hub-listen` in a moment, and
+  start no new monitor.
+- **`HUB-ERROR`:** the hub was unreachable or refused the credentials five times running. Call
+  `ultracode_msg_wait` once to get the real error through the tool, relay that text to the user, and stop.
+  Never retry a failed authentication with guessed values.
+
+A monitor that ends for any other reason (its own hour-long `timeout_ms`, the user killing it, the session
+restarting) also notifies you. Treat that like `HUB-IDLE`: start a new one with the cursor you hold. Nothing is
+lost either way, because the cursor is what decides which messages you have seen, and the hub keeps them until
+you fetch them.
+
+**ESC stops the wakes, not the listening.** Cancelling a turn makes this harness hold back notifications until
+your next message, so the monitor keeps running and its events queue up behind that. The messages themselves
+sit in the hub regardless. Sending any message releases them.
+{{/grok}}
 
 ## Hard rules
 
@@ -188,8 +265,26 @@ ever make. If it returns nothing new, the wait subagent already delivered them: 
    orchestrator procedure's Hard rule 23 applies verbatim). Adopt a session only through
    `ultracode_session_adopt`, never by hand-picking a session dir whose id is not yours. The guards reject
    that precisely because no adoption authorized it.
+{{#grok}}
+   Step 4's wake monitor is the single written exception: it reads `url` and `token` out of `hub.json` to long
+   poll the same `/api/v1/messages/wait` route the tools call, because this harness has no other way to be
+   woken. It reads two fields and calls one route. Do not extend it to any other file, route, or purpose, and
+   never write to `~/.ultracode`.
+{{/grok}}
+{{#claude,codex,antigravity}}
 5. **Wait through `ultracode:hub-wait`, never by hand.** You never park on `ultracode_msg_wait` yourself: a
    `timeout_ms: 0` park is cut by the harness, and repeated short calls from this session are polling, which
    stays forbidden. The finite-timeout loop lives inside the wait subagent, which is one foreground spawn
    (Hard rule 19 of the orchestrator procedure). The one direct call you make is the immediate fetch after a
    pushed wake notice. Ending the wait is the user's move (ESC), not yours.
+{{/claude,codex,antigravity}}
+{{#grok}}
+5. **Wait through the hub wake monitor, never by hand and never through a subagent.** You never park on
+   `ultracode_msg_wait` yourself, and you never call it twice in a turn: a `timeout_ms: 0` park is cut by the
+   harness, and repeated short calls from this session are polling, which stays forbidden. The one call you
+   make is the immediate fetch after the monitor says `HUB-MESSAGES`. Never spawn `ultracode:hub-wait` here:
+   that agent exists for the harnesses whose subagents can hold a long wait, and it refuses to run on this one.
+   Step 4's command is the only place `~/.ultracode` is read by hand, and it reads exactly two fields to reach
+   the same endpoint the tools use. Everything else about the hub still goes through the hub tools (Hard
+   rule 4).
+{{/grok}}
