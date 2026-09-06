@@ -185,13 +185,15 @@
       "labels": [
         "Phase file"
       ],
-      "type": "path"
+      "type": "path",
+      "description": "Plan phase file this spawn works from. The implementer builds from its steps; the code-reviewer checks the resulting code against its requirements. Both read the file itself, never the orchestrator's summary of it."
     },
     "no_plan": {
       "labels": [
         "No plan"
       ],
-      "type": "text"
+      "type": "text",
+      "description": "One line saying why this spawn has no phase file, for a change small enough to run inline. Accepted in place of \"Phase file\" so a spawn always declares which of the two it is."
     },
     "report_file": {
       "labels": [
@@ -391,6 +393,12 @@
         "phase",
         "changed_files",
         "change_rationale"
+      ],
+      "oneOf": [
+        [
+          "phase_file",
+          "no_plan"
+        ]
       ]
     },
     "prompt-generation": {

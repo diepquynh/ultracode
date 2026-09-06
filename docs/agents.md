@@ -17,7 +17,7 @@ The files under `dist/<harness>/ultracode/agents/` are generated. Edit `agents/<
 | `ultracode:fact-check` | Verify every concrete claim a spec or plan makes against the repo or fetched docs. Returns a `{verdict, target, findings}` object. Runs after `generate-spec` and after `plan`, before either reaches its approval gate. `ultracode_gate` requires a `PASS` before it records approval. |
 | `ultracode:plan` | Design a phased, verifiable implementation plan from the spec file alone. One agent per request. |
 | `ultracode:implementer` | Write code for a plan phase, report the changes, and escalate with `HANDOFF:` or `STUCK:` when needed. |
-| `ultracode:code-reviewer` | Review changes against the repo's Review Rule Set and return JSON findings. |
+| `ultracode:code-reviewer` | Check the changed code against the phase file's requirements, then against the repo's Review Rule Set, and return JSON findings. Every spawn names its work source with `Phase file:` or `No plan:`, the same contract the implementer carries. |
 | `ultracode:execution-path-analyzer` | Enumerate execution paths per function to drive test writing. Optional stage, runs after every phase, on request. |
 | `ultracode:write-test` | Write one test per new execution path, using the repo's test framework. Optional stage, runs after every phase, on request. |
 | `ultracode:module-documentation` | Update area references under `skills/module-hub/references/`. Optional stage, runs after every phase, on request. |

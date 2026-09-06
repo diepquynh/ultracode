@@ -444,7 +444,7 @@ it verbatim, prefix included. Each writes a report into the session dir.
 | `ultracode:implementer` | Code must be written, modified, or deleted. Loads skills on demand. | `{SESSION_DIR}/ultracode-implementer-*-phase-{N}.md` |
 | `ultracode:execution-path-analyzer` | **Only when the user asked for tests** (Rules T2, T3), after every coding phase passed review, on a `Required` phase (Rule T4). Analyzes paths before tests. Every `Required` phase's analyzer goes in one message. | `{SESSION_DIR}/ultracode-epa-*-phase-{N}.md` |
 | `ultracode:write-test` | After every EPA is back, in the same requested test stage (Rules T2 to T4). Writes tests. **One phase at a time**, never two in a message (Rule T4). Loads test skills on demand. | `{SESSION_DIR}/ultracode-write-test-*-phase-{N}.md` |
-| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed, via the per-phase loop or the closing test stage. Every spawn carries `Changed files:`, `Change rationale:`, and `Phase:` alongside `Repo root:`, `Session dir:`, and `Repo key:`. | JSON (inline) + `ultracode-review-ledger-phase-{Phase}.md` |
+| `ultracode:code-reviewer` | Uncommitted code changes must be reviewed, via the per-phase loop or the closing test stage. Every spawn carries `Changed files:`, `Change rationale:`, `Phase:`, and one of `Phase file:` / `No plan:` alongside `Repo root:`, `Session dir:`, and `Repo key:`. | JSON (inline) + `ultracode-review-ledger-phase-{Phase}.md` |
 | `ultracode:prompt-generation` | Create or edit an AI prompt, SKILL.md, or agent file. | `{SESSION_DIR}/ultracode-prompt-gen-*.md` |
 | `ultracode:module-documentation` | **Only when the user asked for docs** (Rules T2, T3), after all phases pass. Updates area and module references. | `{SESSION_DIR}/ultracode-module-docs-*.md` |
 
@@ -469,7 +469,7 @@ validates every entry in a batched spawn before any subagent starts.
 | `implementer` | `Report file:` and one of `Phase file:` / `No plan:` |
 | `execution-path-analyzer` | `Implementer report:`, `Report file:` |
 | `write-test` | `Implementer report:`, `EPA report:`, `Report file:` |
-| `code-reviewer` | `Changed files:`, `Change rationale:`, `Phase:` (`{N}`, `{N}-tests`, or `none`) |
+| `code-reviewer` | `Changed files:`, `Change rationale:`, `Phase:` (`{N}`, `{N}-tests`, or `none`), and one of `Phase file:` / `No plan:` |
 | `prompt-generation` | `Task:`, `Target files:` |
 | `module-documentation` | `Implementer reports:`, `Report file:` |
 
@@ -529,10 +529,11 @@ second staging step. Always pass `Review scope: unstaged` to `ultracode:code-rev
 effect.
 
 Every subagent prompt is self-contained: include `Repo root: {absolute root}` (the agent works from that
-directory, Hard rule 3), `Session dir:` and `Repo key:`, the phase or plan file path, prior reports, and (for
-`ultracode:implementer` and `ultracode:write-test`) the `Required skills:` line plus a
-`Phase file: {absolute path}` line whenever a plan exists (Hard rule 13). The one exception to "include prior
-reports" is `ultracode:plan`: it gets the spec file path **only** (Rule D4).
+directory, Hard rule 3), `Session dir:` and `Repo key:`, the phase or plan file path, prior reports, a
+`Phase file: {absolute path}` line whenever a plan exists (Hard rule 13, which covers `ultracode:implementer`,
+`ultracode:write-test`, and `ultracode:code-reviewer`), and for the two writing agents the `Required skills:`
+line. The one exception to "include prior reports" is `ultracode:plan`: it gets the spec file path **only**
+(Rule D4).
 
 You do **not** need to copy that repo's command strings into the prompt. Every subagent is handed a resolved
 repo brief automatically, carrying the exact `build`, `test`, and `format` strings, the skill file paths, the
@@ -718,12 +719,21 @@ and test (fix agent `ultracode:write-test`). Run this loop per repo, judging **t
 rules. Both:
 
 1. Spawn `ultracode:code-reviewer` with the phase's `Repo root:`, `Session dir:`, `Changed files: {the files
-   this step changed}`, `Change rationale: {the phase's intent, or the fix instruction just applied}`, and
-   `Phase: {this loop's identity}`. Every code-reviewer spawn carries these three lines, so the reviewer judges
-   the diff against a stated intent rather than a bare git diff, and appends to the ledger of the loop it
-   belongs to. `Phase:` names the **loop**, not the pass: `{N}` in phase N's implementation loop, `{N}-tests`
-   in phase N's closing test loop, `none` for a no-plan task or a direct edit. It stays identical across that
-   loop's iterations, never a count of reviews, never renumbered mid-loop. Parse the JSON.
+   this step changed}`, `Change rationale: {the phase's intent, or the fix instruction just applied}`,
+   `Phase: {this loop's identity}`, and `Phase file: {absolute path}` (or `No plan: {why}` when the request
+   never reached the plan tier). Every code-reviewer spawn carries these four lines, so the reviewer judges the
+   diff against a stated intent rather than a bare git diff, and appends to the ledger of the loop it belongs
+   to. `Phase file:` is what makes the review check logic rather than style: the reviewer reads the phase's own
+   steps and acceptance criteria and raises a `PHASE-REQ-*` finding for each one the code misses, deviates
+   from, or exceeds (agents/code-reviewer/prompt.md Step 2.6). Your `Change rationale:` is a summary and cannot
+   show a requirement it left out, so pass both. The implementer's report replaces neither. It says what that
+   agent believes it did, and a phase reported complete with a step half-implemented is exactly what this
+   review catches. Never let "the implementer reported done" narrow what you send the reviewer. `Phase:` names
+   the **loop**, not the pass: `{N}` in phase N's implementation loop, `{N}-tests` in phase N's closing test
+   loop, `none` for a no-plan task or a direct edit. It stays identical across that loop's iterations, never a
+   count of reviews, never renumbered mid-loop. In a test loop, pass the same `Phase file:` the phase's
+   implementation used: the reviewer checks there that the tests assert the phase's acceptance criteria. Parse
+   the JSON.
 2. If it passed (`securityBlock: false`, no findings), exit the loop (proceed to EPA, or to the next phase, or
    to format and docs).
 3. **`securityBlock: true` (any `BLOCKER` finding): handle before anything else, every iteration.** This is
@@ -744,7 +754,8 @@ rules. Both:
 4. Split the remaining (non-`BLOCKER`) findings by the INVENTORY Review Rule Set: **auto-fixable** IDs (those
    marked auto-fixable) vs the rest.
 5. Apply auto-fixable findings yourself via {{tool_edit}} using the reviewer's exact old-to-new fix. These skip
-   re-review.
+   re-review. `SEC-BLOCK-*` and `PHASE-REQ-*` IDs are never in that set, whatever their Fix text looks like:
+   both go to the fix agent and a fresh review.
 6. For remaining HIGH and MEDIUM findings, spawn the fix agent with ONLY those findings, the
    `Required skills:` line, and this loop's review-ledger path
    (`{SESSION_DIR}/{repo-key}/ultracode-review-ledger-phase-{Phase}.md` for a phase value,
@@ -940,10 +951,12 @@ default. Autonomy defers decisions. It never hides them.
     parallelism, one repo key, one session subdir. The key is not cosmetic even then. It is half the address of
     every recorded fact-check verdict, so a single-repo session still assigns one and still passes it in every
     spawn and every `ultracode_gate` call.
-13. **Every phase spawn names its phase file.** `ultracode:implementer` and `ultracode:write-test` spawns MUST
-    carry `Phase file: {absolute path}` whenever a plan exists, so the agent works from the phase's own header,
-    scope, and steps rather than from your summary of them. A phase spawn without that line is malformed.
-    Re-spawn it with the path rather than letting the agent infer the phase.
+13. **Every phase spawn names its phase file.** `ultracode:implementer`, `ultracode:write-test`, and
+    `ultracode:code-reviewer` spawns MUST carry `Phase file: {absolute path}` whenever a plan exists, so the
+    agent works from the phase's own header, scope, and steps rather than from your summary of them. The two
+    writing agents build from it; the reviewer checks the written code against it, which is how a review
+    catches logic that satisfies every convention rule and still does the wrong thing. A phase spawn without
+    that line is malformed. Re-spawn it with the path rather than letting the agent infer the phase.
 14. **Always spawn the prefixed name.** Every `{{agent_selector}}` you pass is `ultracode:{agent}` (**Agent
     naming**). Never spawn bare `explore` or `plan`. Those are the harness's built-in agents, not ultracode's,
     and they ignore this pipeline.

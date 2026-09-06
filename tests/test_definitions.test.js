@@ -1894,13 +1894,16 @@ test("session-guard enforces primary repo, session dir, repo key, and agent para
 
 // Phase: addresses the review ledger review-cap.js counts, so an absent or
 // malformed value is refused rather than silently pooling two loops into one
-// ledger and capping the second before it runs.
+// ledger and capping the second before it runs. Phase file:/No plan: names the
+// requirements the review checks the code against — without it the reviewer
+// falls back to the orchestrator's rationale summary and passes code that
+// satisfies every convention rule while implementing the wrong logic.
 test("session-guard requires a well-formed Phase: on every code-reviewer spawn", () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "ultracode-reviewphase-"));
   const pluginRoot = pluginRootFor("claude");
   const runtimeDir = HARNESS_LAYOUT.layouts.claude.runtime_dir;
   const sessionDir = path.join(repo, runtimeDir, "session", "ultracode-session-testsess", "backend");
-  const run = (phaseLine) =>
+  const run = (phaseLine, workSource = `\nPhase file: ${path.join(sessionDir, "phase-1.md")}.`) =>
     runHook(
       path.join(pluginRoot, "hooks", "session-guard.js"),
       {
@@ -1910,7 +1913,8 @@ test("session-guard requires a well-formed Phase: on every code-reviewer spawn",
           subagent_type: "ultracode:code-reviewer",
           prompt:
             `Primary repo root: ${repo}.\nRepo root: ${repo}.\nSession dir: ${sessionDir}.\n` +
-            `Repo key: backend.\nChanged files: src/app.ts.\nChange rationale: phase intent.${phaseLine}`,
+            `Repo key: backend.\nChanged files: src/app.ts.\nChange rationale: phase intent.` +
+            `${workSource}${phaseLine}`,
         },
       },
       { PLUGIN_ROOT: pluginRoot },
@@ -1919,8 +1923,10 @@ test("session-guard requires a well-formed Phase: on every code-reviewer spawn",
   for (const phase of ["1", "12", "2-tests", "none"]) {
     assert.equal(run(`\nPhase: ${phase}.`), "", `Phase: ${phase} should be accepted`);
   }
+  assert.equal(run("\nPhase: none.", "\nNo plan: one-line fix, no plan tier."), "");
   assertDenied(JSON.parse(run("")), /no Phase:/);
   assertDenied(JSON.parse(run("\nPhase: second.")), /must be a phase number/);
+  assertDenied(JSON.parse(run("\nPhase: 1.", "")), /one of phase_file or no_plan/);
 });
 
 function bashGuardTest(target) {
