@@ -26,7 +26,33 @@ any absent named line. Never discover reports by filename pattern or infer a mis
 | **reference file** | `{{skills_dir}}/module-hub/references/{area}.md`. Documents one area per Archetype C. |
 | **affected area** | An area whose path glob matches at least one changed source file. |
 | **grounding** | Extracting content by reading the actual source file, not by generating from memory. |
-| **output report** | `{session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmmss}.md`. |
+| **output report** | The file at the prompt's `Report file:` path, inside the session dir. The orchestrator names it. You never do. |
+
+## Where you may write
+
+Two locations accept a write from this agent. A hook denies every other path before the tool runs, so a write
+outside them burns the call and returns a denial instead of a file.
+
+| Writable location | What belongs there |
+| --- | --- |
+| `{repo-root}/{{skills_dir}}/module-hub/references/` | Reference files, the only project files you create or edit. Creating that directory when it does not exist is inside scope. |
+| `{session-dir}` | The output report, at the exact `Report file:` path. |
+
+Everything else in the repo is denied: source, tests, config, build files, `{{runtime_dir}}/` (including
+`INVENTORY.md` and `repo-profile.json`), other skill directories, and `module-hub`'s own `SKILL.md`. You read
+those; you never write them. Paths outside the repo root are denied too, and unlike the read-only pipeline
+agents you have no OS-temp exception, so `/tmp` and `$TMPDIR` are closed to you as well. Build content in your
+context, not in a scratch file.
+
+**The report keeps its declared name.** Inside the session dir, an `ultracode-*` filename that is not the
+declared `Report file:` path is denied even though the directory is writable, because the next reader opens the
+declared path and a name you invent is a name it cannot find. Both routes in Step 7, {{tool_write}} and a
+{{tool_shell}} heredoc, are accepted at that path and only at that path.
+
+These rules apply to every tool: a shell redirect, `mv`, `cp`, `sed -i`, and `rm` are checked against the same
+scope as {{tool_write}} and {{tool_edit}}. On a denial, read the reason instead of retrying the same content at
+a nearby path. If the content belongs to neither writable location, drop it and record the fact in the report's
+Notes.
 
 ## Step 1: {{tool_read}} inputs and load routing
 
@@ -40,9 +66,10 @@ From ALL implementer reports (aggregated), extract: the complete list of changed
 file (created, modified, or deleted), and a one-line summary of what each change accomplished.
 
 **Pass:** repo profile, inventory, and all input reports read. You hold one aggregated changed-file list.
-**Fail:** ANY input report path cannot be read. STOP, write the output report, and return exactly:
+**Fail:** ANY input report path cannot be read. STOP, write the output report to the `Report file:` path, and
+return exactly:
 ```
-Module documentation skipped. Report: {session-dir}/ultracode-module-docs-{YYYYMMDD}-{HHmmss}.md
+Module documentation skipped. Report: {report-file}
 
 Summary: Could not read input reports. Missing: {list of missing paths}.
 
@@ -190,7 +217,7 @@ changed files. Two output cases:
 
 Updated:
 ```
-Module documentation complete. Report: {session-dir}/ultracode-module-docs-20260707-143000.md
+Module documentation complete. Report: {report-file}
 
 Summary: Updated {area-a}.md with 2 entry points and 1 data shape; created {area-b}.md.
 
@@ -201,7 +228,7 @@ Files changed:
 
 No updates:
 ```
-Module documentation complete. Report: {session-dir}/ultracode-module-docs-20260707-143000.md
+Module documentation complete. Report: {report-file}
 
 Summary: No documentation updates needed. All changes were tests and configuration.
 
@@ -213,8 +240,9 @@ Files changed: (none)
 Priority on conflict: a rule here overrides any earlier instruction in this file.
 
 1. No yapping. No emojis. Every sentence carries information.
-2. Docs only. {{tool_edit}} ONLY files under `{{skills_dir}}/module-hub/references/`. Write ONLY the output
-   report in the session dir. Never edit source, tests, config, or build files.
+2. Docs only. Create or edit ONLY files under `{repo-root}/{{skills_dir}}/module-hub/references/`, plus the
+   output report at the prompt's `Report file:` path. Those two locations are the whole write scope, per
+   "Where you may write", and the guard denies the rest whichever tool you reach for.
 3. Grounding is mandatory. {{tool_read}} the real source. Never guess a type, function, field, route path, or
    config key.
 4. Existing structure. Follow the section order of existing references and the Archetype C shape. Invent a new
