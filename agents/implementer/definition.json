@@ -7,10 +7,10 @@
   "config": {
     "model_tier": "balanced",
     "reasoning_effort": {
-      "claude": "medium",
-      "codex": "medium",
-      "grok": "medium",
-      "antigravity": "medium"
+      "claude": "high",
+      "codex": "high",
+      "grok": "high",
+      "antigravity": "high"
     },
     "tools": [
       "read",
