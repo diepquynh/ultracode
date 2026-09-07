@@ -268,8 +268,9 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
 - **That wait budget is 45 seconds** (`CoordinatorConfig::foreground_budget`, `task/coordinator_state.rs`,
   source-read 2026-09-05 at `72a6125`). Past it the coordinator replaces the caller with `Backgrounded` and
   returns a task id, so a "foreground" spawn is only foreground for 45 s. This is why no ultracode stage on
-  grok may depend on a spawn call blocking for its child's result, and why `ultracode:hub-wait`, whose whole
-  job is to block for up to 55 minutes, cannot work here at all.
+  grok may depend on a spawn call blocking for its child's result, and why a subagent could never have been
+  the hub listening state here: it would return an acknowledgement in under a minute and the parent would go
+  on believing it was waiting.
 - SubagentStop carries `phase`, `subagentId`, `subagentType`, `stopHookActive`, and `lastAssistantMessage`,
   but no spawn prompt. The envelope's `transcriptPath` is the emitting session's own transcript, so a child's
   SubagentStop may carry the child transcript path when the file exists. Whether `Session dir:` and
@@ -329,7 +330,7 @@ obsolete. `hooks/lib/grok-hooks.js` is the one place ultracode adapts to grok's 
   dir is ignored the same way. Run from a trusted project or trust the directory first. Measured only.
 - Grok 1.0.13: only short (25 s or less) `ultracode_msg_wait` parks were measured. Grok is pull-only, and its
   45 s foreground spawn budget (see "Spawns and results") rules out a wait subagent, so the wait lives in a
-  `monitor` instead of in `ultracode:hub-wait`, which refuses to run here.
+  `monitor` instead.
 
 ### The monitor tool
 
@@ -374,14 +375,32 @@ rather than refused. `askPreToolUse` in `hooks/lib/common.js` picks the shape pe
 - **Grok** takes the Claude shape in current source. See "Decisions, rewrites, and failures" above. The
   256-character reason cap applies, and stale builds drop the gate entirely.
 
+## The PreToolUse context channel (source-verified 2026-09-07)
+
+Text a hook hands back on a call it is **allowing**. `hooks/model-router.js` uses it to tell the orchestrator
+that a stage's harness route resolved to this session, which is how a local spawn becomes authorized instead
+of assumed. `preToolContext` in `hooks/lib/harness.js` records which harnesses have the channel, and
+`HarnessAdapter.emitUpdatedInput` composes the note with the routed `updatedInput` in one payload.
+
+Verified against the installed binaries:
+
+| Harness | `additionalContext` on an allowing PreToolUse hook |
+| --- | --- |
+| Claude Code 2.1.258 | Yes. `hookSpecificOutput` is `{hookEventName, permissionDecision?, permissionDecisionReason?, updatedInput?, additionalContext?}`, so the note and the rewrite ride together. |
+| Codex 0.153.4 | Yes, same four fields (`PreToolUseHookSpecificOutputWire`). The schema is `additionalProperties: false`, so only those names are safe, and `additionalContextLimit` caps the note per hook. |
+| Grok Build 1.0.13 | Yes, for a command hook configured in a settings file. An SDK-registered hook can only allow or deny and its note is dropped. Notes and block reasons clip at 10,000 characters, and a hook that exits non-zero loses both its `updatedInput` and its note. |
+| Antigravity | No. PreToolUse output is `decision`, `reason`, `permissionOverrides`, `overwrite`; the string `additionalContext` does not appear in the binary. An unknown proto field discards the whole response, so the note is dropped rather than renamed, and a guard with something to say has to deny to say it. |
+
+The decision field rides only with a rewrite. A note-only payload leaves `permissionDecision` unset, because
+declaring `allow` there would auto-approve calls the user would otherwise be asked about.
+
 ## Hub wake channels (checked 2026-08-30)
 
 The cross-harness hub (docs/hub.md) can wake an idle interactive session only where the harness has a
-steering channel. Everywhere else delivery is pull-only: the session's `ultracode:hub-wait` subagent sits in
-`ultracode_msg_wait`, except on Grok Build, where a `monitor` long polls the hub instead (below). A channel
-turns on by default
-only once a live run on a qualifying CLI version is recorded here. Claude and Codex are. Grok and Antigravity
-have no channel to gate.
+steering channel. Everywhere else delivery is pull-only, and the session arranges its own wake instead: a
+long-poll command running outside the turn, under `monitor` on Grok Build and as a backgrounded `run_command`
+on Antigravity (both below). A channel turns on by default only once a live run on a qualifying CLI version is
+recorded here. Claude and Codex are. Grok and Antigravity have no channel to gate.
 
 - **Claude Code:** cross-session messaging (named sessions, per-session Unix sockets under `/tmp/cc-socks`,
   session records under `~/.claude/sessions/`) ships in 2.1.224 or newer. Verified end to end on 2.1.251
@@ -400,21 +419,23 @@ have no channel to gate.
   per-session naming is needed. A CLI without `queue` (0.147.0 was measured failing `codex queue --help`)
   feature-detects as unavailable and stays pull-only.
 - **Grok Build 1.0.13 and Antigravity 1.1.22:** no external steering channel found in either. Antigravity's
-  `send_message` is intra-conversation only. Both are pull-only. Grok pulls through its own `monitor` tool
-  rather than through `ultracode:hub-wait`, which is the closest thing to a self-wake either harness has: see
-  "The monitor tool" below.
+  `send_message` is intra-conversation only. Both are pull-only, and both pull through a command of their own
+  that outlives the turn: Grok's `monitor` (see "The monitor tool" below) and Antigravity's backgrounded
+  `run_command` (see the Antigravity section above). Antigravity 1.1.27 also ships a `remote-control` daemon
+  and a `schedule` tool, neither of which was needed for this: the daemon is a Google-hosted mesh rather than
+  a local channel the hub could write to, and `schedule` fires timers into the same message queue the
+  background task already uses.
 
 ## Tool-call duration caps (live, 2026-08-30)
 
 Every harness bounds how long one tool call may run. That is what ends an "infinite" `ultracode_msg_wait`
 park (`timeout_ms: 0`) when the user does not. Whatever cuts the call, the registration stays alive (7-day
 idle expiry, parked waiters exempt from sweeps) and the cursor re-reads everything on the next wait, so a cut
-never costs a message. Because of these caps no interactive session parks itself any more: the wait runs
-inside the `ultracode:hub-wait` subagent (docs/hub.md, "Waiting without parking"), which loops finite 55 s
-waits for a budget the parent sets, while the parent blocks on the spawn. Subagent spawns are the one kind of
-call three of the four harnesses let run long. Grok is the exception at both ends, capping the tool call and
-cutting the spawn, so it waits in a `monitor` outside the turn. The measurements below are what set the
-per-call timeouts.
+never costs a message. Because of these caps no interactive session parks itself: it ends its turn instead and
+is woken from outside it (docs/hub.md, "Waiting without parking"). So these caps no longer decide the
+listening design on any harness. What they still bound is the single fetch a woken session makes, which is
+short by construction because the messages are already queued. The measurements below are what set that
+timeout.
 
 - **Codex 0.151.0** (session 01a05219): long tool calls are moved to background cells that the model polls
   with its `wait` tool (about 60 s yields). After several yields the harness cut the listening park, and the

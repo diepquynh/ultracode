@@ -196,9 +196,8 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
     start failing every spec and plan approval. `ultracode:fact-check` gates approval regardless of routing
     (`ultracode_gate` refuses `decision: "approved"` without a recorded `PASS`), so a missing route only
     affects which model runs it, never whether it runs. Add a `fact-check` route to pick a specific tier.
-  - `hub-wait` is absent on purpose and cannot be routed. The hook pins it to its definition tier (`fast`)
-    without reading the profile: it only relays hub messages, so no repo has a reason to spend more on it. A
-    `hub-wait` key in `byAgent` is ignored.
+  - `initializer` is absent on purpose and cannot be routed to another harness. It belongs to `/init-kit`,
+    which runs outside the hub's task flow, so an `initializer` key in `harnesses.byAgent` is ignored.
 - `harnesses` routes which **harness** executes each stage, through the cross-harness hub (docs/hub.md). It is
   the harness-level sibling of `models`, with three differences. **The initializer never seeds this
   section.** The example above is illustrative only. Which harnesses a user runs is not detectable from the
@@ -211,19 +210,27 @@ Path: `{{runtime_dir}}/repo-profile.json`. Machine-readable twin of the inventor
   - **The whole object is optional, and absence can never fail a stage.** A missing `harnesses` object, a
     missing `byAgent` or `byPhaseComplexity` map, or a missing key all mean the same thing: the stage runs in
     the current session's harness, exactly as if the feature were not configured. The same holds for an
-    unrecognized value: the orchestrator says so and runs the stage itself. Unlike `models`, there is no
+    unrecognized value: the hook reports it and runs the stage locally. Unlike `models`, there is no
     deny-on-missing-route. Routing work away from the session is advisory, not a gate.
-  - **The hub resolves it, fresh, at publish time.** The orchestrator reads this section only to decide
-    WHETHER to delegate: route absent or naming its own harness means a normal spawn; another harness with a
-    registered listener means publish; no listener means a normal spawn, saying so. The
-    `ultracode_task_publish` tool then re-reads this file itself and resolves the route again, so a profile
-    edited mid-session wins over whatever the orchestrator read at session start, exactly as the model-router
-    hook re-reads model routes on every spawn. A caller-passed `target_harness` that contradicts the current
-    profile is refused with the routed harness named. An untargeted publish with no route defaults to the
-    publisher's own harness, never "any harness". `byAgent` and `byPhaseComplexity` keys and the complexity
-    tiers work exactly as in `models` (bare agent names; the phase file's `**Complexity:**` line, with
-    inline no-plan work counting as `low`).
+  - **The orchestrator never reads this section.** `hooks/model-router.js` resolves it on every spawn and
+    hands back the outcome: a stage routed to another harness that has a session listening for this repo is
+    DENIED locally, with the harness and the publish call named; every other case is allowed with a note
+    saying which case applied and that it covers that spawn alone. `hooks/profile-read-guard.js` refuses any
+    call from that session naming this file, by read tool or by shell, matching the PATH rather than a list of
+    reader commands (one carve-out: the name used as a search pattern). A write is refused with the reads,
+    which the tool channel already implied, since Write and Edit need a prior read of an existing file. The
+    guard exists because a snapshot of this file in context produced the two failures this design removes:
+    work kept local on the model's judgment, and one stage's route generalized into a standing rule. A read by
+    a subagent, whose brief may omit a table, is untouched. So is a hub-listen worker's own spawn: it runs
+    only tasks it claimed, and the hub targeted those by harness.
+  - **The hub resolves it again, fresh, at publish time.** `ultracode_task_publish` re-reads this file itself,
+    so a profile edited mid-session wins over whatever the orchestrator was told a minute ago. A
+    caller-passed `target_harness` that contradicts the current profile is refused with the routed harness
+    named. An untargeted publish with no route defaults to the publisher's own harness, never "any harness".
+    `byAgent` and `byPhaseComplexity` keys and the complexity tiers work exactly as in `models` (bare agent
+    names; the phase file's `**Complexity:**` line, with inline no-plan work counting as `low`).
   - The worker's own `models` routing then applies on its side. A phase routed to another harness runs on
     that harness's configured model tiers, which is usually the point of routing it there.
-- Consumers (orchestrator, subagents) prefer `repo-profile.json` for exact command strings and `INVENTORY.md`
-  for routing decisions.
+- Subagents prefer `repo-profile.json` for exact command strings and `INVENTORY.md` for routing decisions. The
+  orchestrator works from `INVENTORY.md` alone, which is why the Commands table and the Review Rule Set are
+  stated there in full rather than left to the profile.

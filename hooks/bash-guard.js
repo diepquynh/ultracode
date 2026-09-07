@@ -11,7 +11,7 @@
 "use strict";
 
 const { readHookInput, denyPreToolUse, hookToolInput, hookAgentType } = require("./lib/common");
-const { bannedPollPattern } = require("./lib/poll-policy");
+const { bannedPollPattern, isHubWakeMonitor } = require("./lib/poll-policy");
 
 async function main() {
   const hookInput = await readHookInput();
@@ -24,6 +24,11 @@ async function main() {
       ? toolInput.CommandLine || toolInput.command
       : "";
   if (!command) return 0;
+
+  // The hub wake command is the one loop that may exist here. On Antigravity it
+  // is a backgrounded run_command, which this matcher sees, so the exemption
+  // poll-policy grants Grok's monitor has to apply on this path too.
+  if (isHubWakeMonitor(command)) return 0;
 
   const hit = bannedPollPattern(command);
   if (hit) {

@@ -37,10 +37,7 @@ Routing works in two ways:
 - **By agent.** For subagents that always run on one model.
 - **By phase complexity.** For `implementer` and `write-test`, whose model is chosen per plan phase by that
   phase's complexity tier.
-- **Pinned.** `hub-wait` always runs on the `fast` tier. It relays hub messages and decides nothing, so the
-  router ignores the profile for it: it is never denied for a missing route, and a `byAgent` entry for it has
-  no effect. A caller-supplied `model` that differs from the tier's model is still denied, like any other
-  spawn.
+A caller-supplied `model` that differs from the routed tier's model is denied, like any other spawn.
 
 The hook re-reads the file on every spawn, so an edit takes effect on the next one. No restart, no reload.
 
@@ -126,14 +123,22 @@ flowchart TD
     DECODE --> UC{"for each entry:<br/>an Ultracode agent?"}
     UC -- no --> UNTOUCHED["left untouched"]
     UC -- yes --> PROFILE["resolve the work repo from the entry's Repo root: line,<br/>read its .ultracode/repo-profile.json"]
-    PROFILE --> LOOKUP{"agent/phase route<br/>found and resolvable?"}
+    PROFILE --> HARNESS{"harnesses route names<br/>another harness, and a<br/>session of it is listening?"}
+    HARNESS -- yes --> DENY0["DENY:<br/>publish it to that harness instead"]
+    HARNESS -- no --> LOOKUP{"agent/phase route<br/>found and resolvable?"}
     LOOKUP -- "no, and the agent is not exempt" --> DENY1["DENY:<br/>refusing an unenforced spawn"]
     LOOKUP -- yes --> CONC["resolve the route to a concrete model<br/>for the active harness"]
     CONC --> OVERRIDE{"caller passed a model<br/>for this entry?"}
     OVERRIDE -- "yes, canonicalized,<br/>and it mismatches" --> DENY2["DENY the whole spawn call"]
     OVERRIDE -- "no, or it matches" --> ACC["accumulate the entry's model/prompt patch"]
-    ACC --> EMIT["emit ONE harness-native rewrite:<br/>every entry receives its own repo brief;<br/>Antigravity entries also receive the identity and<br/>primary-repo stamps their nested hooks recover"]
+    ACC --> EMIT["emit ONE harness-native rewrite:<br/>every entry receives its own repo brief;<br/>Antigravity entries also receive the identity and<br/>primary-repo stamps their nested hooks recover.<br/>The same payload carries the harness-routing note"]
 ```
+
+The `harnesses` step is the same hook for the same reason the brief is: one spawn, one rewrite, one place that
+reads the profile. Which harness runs a stage is settled before which model does, so a stage that belongs on
+another harness is never refused for the local profile's model route instead. `docs/hub.md` has the routing
+contract, and `hooks/profile-read-guard.js` keeps the orchestrator from re-deciding either route from a
+snapshot of the file.
 
 The final rewrite step also writes part of the prompt. The model router does this because `PreToolUse` hooks
 do not compose. With two hooks on the same matcher, both see the original tool input and exactly one hook's

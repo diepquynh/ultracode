@@ -4,6 +4,18 @@
 
 "use strict";
 
+// `preToolContext` records whether a PreToolUse hook can hand text back to the
+// model on a call it is NOT denying. Verified against the installed binaries on
+// 2026-09-07 (details and citations in docs/harness-limitations.md):
+//   * claude 2.1.258 — hookSpecificOutput accepts additionalContext beside
+//     updatedInput; the two compose in one payload.
+//   * codex 0.153.4 — same four fields, and the schema is
+//     additionalProperties: false, so only those names are safe.
+//   * grok 1.0.13 — additionalContext reaches the model from a settings-file
+//     command hook; SDK-registered hooks lose it.
+//   * antigravity — no such field anywhere in the binary. PreToolUse output is
+//     decision/reason/permissionOverrides/overwrite, so an allowing hook has no
+//     text channel at all and callers must degrade rather than invent one.
 const HARNESS_DEFINITIONS = Object.freeze({
   claude: {
     toolInputPaths: [["tool_input"], ["toolInput"]],
@@ -13,6 +25,7 @@ const HARNESS_DEFINITIONS = Object.freeze({
     transcriptPaths: [["transcript_path"], ["transcriptPath"]],
     flatPromptKeys: ["prompt", "message", "Prompt", "Message"],
     flatModelKeys: ["model", "Model"],
+    preToolContext: true,
   },
   codex: {
     toolInputPaths: [["tool_input"], ["toolInput"]],
@@ -22,6 +35,7 @@ const HARNESS_DEFINITIONS = Object.freeze({
     transcriptPaths: [["transcript_path"], ["transcriptPath"]],
     flatPromptKeys: ["prompt", "message", "Prompt", "Message"],
     flatModelKeys: ["model", "Model"],
+    preToolContext: true,
   },
   grok: {
     toolInputPaths: [["toolInput"], ["tool_input"]],
@@ -31,6 +45,7 @@ const HARNESS_DEFINITIONS = Object.freeze({
     transcriptPaths: [["transcriptPath"], ["transcript_path"]],
     flatPromptKeys: ["prompt", "message", "Prompt", "Message"],
     flatModelKeys: ["model", "Model"],
+    preToolContext: true,
   },
   antigravity: {
     toolInputPaths: [["toolCall", "args"], ["toolCall", "input"], ["toolInput"], ["tool_input"]],
@@ -40,6 +55,7 @@ const HARNESS_DEFINITIONS = Object.freeze({
     transcriptPaths: [["transcriptPath"], ["transcript_path"]],
     flatPromptKeys: ["Prompt", "prompt", "Message", "message"],
     flatModelKeys: ["Model", "model"],
+    preToolContext: false,
   },
 });
 
@@ -240,21 +256,42 @@ class HarnessAdapter {
     return updated;
   }
 
-  emitUpdatedInput(updatedInput) {
+  get supportsPreToolContext() {
+    return this.definition.preToolContext === true;
+  }
+
+  // One allowing PreToolUse payload carrying a rewrite, a note to the model, or
+  // both. Either argument may be omitted; returns null when this harness can
+  // express neither, so the caller stays silent instead of emitting a payload
+  // that says nothing.
+  emitUpdatedInput(updatedInput, additionalContext) {
     if (this.target === "antigravity") {
+      // No text channel on an allow (see preToolContext above), and an
+      // `additionalContext` key would be an unknown proto field, which makes
+      // AGY discard the whole response. A note is dropped here, never sent.
+      if (!updatedInput) return null;
       return { decision: "allow", overwrite: updatedInput };
     }
     // Claude validates PreToolUse output strictly: a top-level `overwrite` /
     // `decision:"allow"` pair fails schema validation and the rewrite is
     // discarded even though the spawn itself may still proceed. Keep the
     // rewrite inside hookSpecificOutput.updatedInput only.
-    const hookSpecificOutput = { hookEventName: "PreToolUse", updatedInput };
+    const hookSpecificOutput = { hookEventName: "PreToolUse" };
+    if (updatedInput) hookSpecificOutput.updatedInput = updatedInput;
+    if (additionalContext && this.supportsPreToolContext) {
+      hookSpecificOutput.additionalContext = additionalContext;
+    }
+    if (Object.keys(hookSpecificOutput).length === 1) return null;
     // Grok parses the same shape (xai-grok-hooks/src/runner/mod.rs
     // GateHookJson); its rewrite is schema-validated against the tool's input
     // schema and an unusable one BLOCKS the call, so nothing extra may ride
     // along. A top-level `overwrite` is not a grok field — it was only ever
     // warned-and-ignored.
-    if (this.target === "codex" || this.target === "grok") {
+    //
+    // The decision rides only with a rewrite. A note-only payload leaves the
+    // permission flow alone; declaring `allow` there would auto-approve calls
+    // the user would otherwise be asked about.
+    if (updatedInput && (this.target === "codex" || this.target === "grok")) {
       hookSpecificOutput.permissionDecision = "allow";
     }
     return { hookSpecificOutput };

@@ -63,8 +63,6 @@ const SECTIONS_BY_AGENT = {
   "module-documentation": ["skills", "modules"],
   "fact-check": ["stack", "modules"],
   "prompt-generation": ["skills"],
-  // hub-wait only relays hub messages; nothing about the repo helps it.
-  "hub-wait": [],
 };
 
 function readJson(filePath) {

@@ -17,6 +17,11 @@
 // runtime dir. A later-named repo in a multi-repo session is still checked in prose by
 // skills/orchestrate/prompt.md Step 0, because this hook only sees the invocation's cwd,
 // not a repo named in free text after the skill has already loaded.
+//
+// Second job, on the same two events: record which sessions drive the pipeline
+// (lib/pipeline-session.js). This hook is already the one place that sees every
+// load path of orchestrate and hub-listen, so the marker is written here rather
+// than from a second hook that would have to re-derive the same detection.
 
 "use strict";
 
@@ -25,24 +30,32 @@ const {
   readHookInput,
   denyPreToolUse,
   denyUserPromptExpansion,
+  hookSessionId,
   hookToolInput,
   bareAgentName,
   isFile,
 } = require("./lib/common");
 const { pluginTargetInfo, resolveRepoRoot } = require("./lib/session");
+const { PIPELINE_COMMANDS, recordPipelineSession } = require("./lib/pipeline-session");
 
-const ORCHESTRATE_SKILL_PATH = /orchestrate[\\/]SKILL\.md/i;
+const PIPELINE_SKILL_PATH = /(orchestrate|hub-listen)[\\/]SKILL\.md/i;
 // Grok/Codex/Antigravity may open the generated command markdown rather than
-// a SKILL.md when loading orchestrate as a skill-like entry.
-const ORCHESTRATE_COMMAND_PATH = /(?:^|[\\/])(?:skills|commands)[\\/]orchestrate(?:\.md|[\\/])/i;
+// a SKILL.md when loading one of these as a skill-like entry.
+const PIPELINE_COMMAND_PATH =
+  /(?:^|[\\/])(?:skills|commands)[\\/](orchestrate|hub-listen)(?:\.md|[\\/])/i;
 
-function isOrchestratePath(value) {
-  return ORCHESTRATE_SKILL_PATH.test(value) || ORCHESTRATE_COMMAND_PATH.test(value);
+// The pipeline command a path or command line loads, or "".
+function pipelineCommandInText(value) {
+  const match = PIPELINE_SKILL_PATH.exec(value) || PIPELINE_COMMAND_PATH.exec(value);
+  return match ? bareAgentName(match[1]) : "";
 }
 
-function targetsOrchestrateSkill(toolInput) {
+function pipelineCommandFromToolInput(toolInput) {
   const skillField = typeof toolInput.skill === "string" ? toolInput.skill : "";
-  if (skillField) return bareAgentName(skillField) === "orchestrate";
+  if (skillField) {
+    const name = bareAgentName(skillField);
+    return PIPELINE_COMMANDS.has(name) ? name : "";
+  }
 
   const pathField =
     (typeof toolInput.TargetFile === "string" && toolInput.TargetFile) ||
@@ -51,21 +64,28 @@ function targetsOrchestrateSkill(toolInput) {
     (typeof toolInput.filePath === "string" && toolInput.filePath) ||
     (typeof toolInput.path === "string" && toolInput.path) ||
     "";
-  if (pathField && isOrchestratePath(pathField)) return true;
+  if (pathField) {
+    const fromPath = pipelineCommandInText(pathField);
+    if (fromPath) return fromPath;
+  }
 
   const command =
     (typeof toolInput.CommandLine === "string" && toolInput.CommandLine) ||
     (typeof toolInput.command === "string" && toolInput.command) ||
     "";
-  return Boolean(command) && isOrchestratePath(command);
+  return command ? pipelineCommandInText(command) : "";
 }
 
 // UserPromptExpansion's payload has no tool_input — it carries expansion_type
 // ("slash_command" | "mcp_prompt") and command_name (the typed name, prefix included).
-function targetsOrchestrateExpansion(hookInput) {
-  if (hookInput.expansion_type !== "slash_command") return false;
+function pipelineCommandFromExpansion(hookInput) {
+  if (hookInput.expansion_type !== "slash_command") return "";
   const commandName = typeof hookInput.command_name === "string" ? hookInput.command_name : "";
-  return Boolean(commandName) && bareAgentName(commandName) === "orchestrate";
+  if (!commandName) return "";
+  // Claude passes the command's own name ("ultracode:orchestrate"); a leading
+  // slash comes off first so the typed form resolves the same.
+  const name = bareAgentName(commandName.replace(/^\/+/, ""));
+  return PIPELINE_COMMANDS.has(name) ? name : "";
 }
 
 function missingInventoryReason(repoRoot, info) {
@@ -80,27 +100,29 @@ function missingInventoryReason(repoRoot, info) {
 async function main() {
   const hookInput = await readHookInput();
   if (!hookInput || typeof hookInput !== "object") return 0;
+  const expansion = hookInput.hook_event_name === "UserPromptExpansion";
 
-  if (hookInput.hook_event_name === "UserPromptExpansion") {
-    if (!targetsOrchestrateExpansion(hookInput)) return 0;
-    const info = pluginTargetInfo();
-    if (!info) return 0;
-    const repoRoot = resolveRepoRoot(hookInput, "");
-    const reason = missingInventoryReason(repoRoot, info);
-    if (reason) denyUserPromptExpansion(reason);
-    return 0;
-  }
-
-  const toolInput = hookToolInput(hookInput);
-  if (!toolInput || typeof toolInput !== "object") return 0;
-  if (!targetsOrchestrateSkill(toolInput)) return 0;
+  const toolInput = expansion ? null : hookToolInput(hookInput);
+  if (!expansion && (!toolInput || typeof toolInput !== "object")) return 0;
+  const command = expansion
+    ? pipelineCommandFromExpansion(hookInput)
+    : pipelineCommandFromToolInput(toolInput);
+  if (!command) return 0;
 
   const info = pluginTargetInfo();
   if (!info) return 0;
 
   const repoRoot = resolveRepoRoot(hookInput, "");
-  const reason = missingInventoryReason(repoRoot, info);
-  if (reason) denyPreToolUse(reason);
+  // The inventory check is orchestrate's: hub-listen runs the work another
+  // session already planned, and its own Step 1 refuses an uninitialized repo.
+  const reason = command === "orchestrate" ? missingInventoryReason(repoRoot, info) : null;
+  if (reason) {
+    if (expansion) denyUserPromptExpansion(reason);
+    else denyPreToolUse(reason);
+    return 0;
+  }
+
+  recordPipelineSession(info.target, hookSessionId(hookInput), command);
   return 0;
 }
 

@@ -80,15 +80,6 @@
       "grok_strategy": "There is no plan-mode tool. Present the plan in the conversation and wait for approval before implementing.",
       "antigravity_strategy": "There is no modal plan tool. Present the plan in the conversation and use ask_question or prompt for approval before implementing."
     },
-    "hub_wait": {
-      "claude": "mcp__plugin_ultracode_ultracode-gate__ultracode_msg_wait",
-      "codex": "ultracode_msg_wait",
-      "grok": "the ultracode_msg_wait MCP tool",
-      "antigravity": "the ultracode_msg_wait MCP tool",
-      "codex_strategy": "The `ultracode_*` names in this list are MCP tools from the plugin's `ultracode-gate` server, not Codex capabilities. Subagent threads receive the session's MCP tool registry, so call each one by exactly that name.",
-      "grok_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. They are inherited from the session's MCP registry rather than listed in the agent's tools. If one is not in your tool list, find it with search_tool (it appears as `ultracode-gate__<tool>`) and invoke it with use_tool.",
-      "antigravity_strategy": "The `ultracode_*` MCP tools this role calls come from the plugin's `ultracode-gate` server. Every ultracode subagent is generated with `inheritMcp: true`, so call each one by exactly that name."
-    },
     "report": {
       "claude": "mcp__plugin_ultracode_ultracode-gate__ultracode_report",
       "codex": "ultracode_report",

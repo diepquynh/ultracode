@@ -73,7 +73,7 @@ stdio and HTTP can never drift:
 | `ultracode_session_query` | Lists the shared ultracode sessions known for a repo (id, dir, inferred stage, participants, last activity). Used by the hub-listen picker and for resume. |
 | `ultracode_session_adopt` | Authorizes this session to work inside a shared ultracode session it did not create (by dir, or by id plus repo for resume). Returns the shared `session_dir` to use as `Session dir:` from then on. |
 | `ultracode_msg_send` | Sends a direct message (`to_session_key`) or a harness broadcast (`to_harness`). Returns immediately. The body is capped at 64 KiB and carries paths, not content. `dedupe_key` makes retries idempotent. |
-| `ultracode_msg_wait` | One cursor-based long-poll. Finite waits default to 25 s and cap at 120 s; `timeout_ms: 0` parks indefinitely (headless runs only). An interactive session never waits on it directly: it spawns `ultracode:hub-wait`, a `fast`-tier subagent that loops finite waits under the harness's tool-call cap and returns the first non-empty result, so the session's one blocking call is a spawn the harness lets run for the whole wait. On Grok Build a `monitor` long polls the same route from outside the turn instead, and the session calls this tool once, on being woken, to fetch what the monitor only signalled. Cancellation (ESC) aborts the request and the hub reaps the waiter; a dropped connection reaps it too. Reads destroy nothing. Passing the advanced cursor on the next call is the acknowledgement, so every ending is lossless. |
+| `ultracode_msg_wait` | One cursor-based long-poll. Finite waits default to 25 s and cap at 120 s; `timeout_ms: 0` parks indefinitely (headless runs only). An interactive session never parks on it and never loops it. It ends its turn instead, and calls this tool once on being woken, with a short finite timeout, to fetch messages that are already queued. On Grok Build and Antigravity the session's own wake command long polls this same route from outside the turn. Cancellation (ESC) aborts the request and the hub reaps the waiter; a dropped connection reaps it too. Reads destroy nothing. Passing the advanced cursor on the next call is the acknowledgement, so every ending is lossless. |
 | `ultracode_task_publish` | Queues a task addressed by `target_harness` or `capability`. The payload is validated against the same required-inputs contract as subagent spawns, capped at 32 KiB, with all paths confined to the publisher's session dir. Candidate workers are woken automatically. |
 | `ultracode_task_claim` | Takes an exclusive claim under a lease (default 15 min, cap 60). Expired leases reopen the task with `attempts` incremented. The third expiry fails the task and notifies the publisher. |
 | `ultracode_task_complete` | Records `done` or `failed`, a summary, and a `report_file` inside the worker's own session dir. Inserts the completion message and wakes the publisher. |
@@ -82,14 +82,14 @@ stdio and HTTP can never drift:
 
 ## Delivery: push first, one pull as fallback
 
-The goal is that no session ever polls. After `msg_send` or `task_publish` the sender hands the wait to
-`ultracode:hub-wait`, or on Grok Build to a background monitor (the "Waiting without parking" section
-below), instead of burning its own tool calls.
+The goal is that no session ever polls. After `msg_send` or `task_publish` the sender ends its turn and lets
+the wake find it: a native push channel on Claude Code and Codex, its own backgrounded long-poll command on
+Grok Build and Antigravity (the "Waiting without parking" section below).
 Delivery order for each committed message:
 
 ```mermaid
 flowchart TD
-    COMMIT["message row committed to hub.sqlite3<br/>(before any push is attempted, so<br/>adapter failure can never lose a message)"] --> PARKED{"recipient has a<br/>parked long-poll?<br/>(its hub-wait spawn, or its wake monitor)"}
+    COMMIT["message row committed to hub.sqlite3<br/>(before any push is attempted, so<br/>adapter failure can never lose a message)"] --> PARKED{"recipient has a<br/>parked long-poll?<br/>(its own wake command)"}
     PARKED -- yes --> LP["resolves immediately<br/>(channel: long-poll)"]
     PARKED -- no --> NATIVE{"native push channel<br/>for the recipient?"}
     NATIVE -- codex-queue --> CQ["codex queue --thread &lt;session-UUID-or-name&gt;<br/>--message &lt;notice&gt;"]
@@ -120,9 +120,16 @@ daemon out with `ULTRACODE_HUB_CLAUDE_PUSH=0` or `ULTRACODE_HUB_CODEX_PUSH=0`.
   a per-user trust decision Claude Code owns. ultracode documents it but never sets it for you.
 
 On the receiving side, the user opens a session on the harness they want doing the work and runs
-`/ultracode:hub-listen`: register, drain the task queue, then wait for the next message, through an
-`ultracode:hub-wait` spawn or, on Grok Build, a wake monitor. The publisher's flow is the "Cross-harness delegation" section of
-`/ultracode:orchestrate`.
+`/ultracode:hub-listen`: register, drain the task queue, then end the turn to wait for the next message. The
+publisher's flow is the "Cross-harness delegation" section of `/ultracode:orchestrate`.
+
+`/ultracode:hub-listen --session <id>` names the session to join instead of asking, so a worker launched by a
+script (a pane opened for a handoff, a headless run) attaches without a question nobody is present to
+answer. The argument replaces the user's answer, not the lookup: `ultracode_session_query` still runs, and an
+id it does not confirm for this repo stops the command with the ids it did return. It never starts a fresh
+session in place of the one that was asked for, because a worker listening on the wrong session dir reports
+into artifacts the publisher never reads. Both adopt forms are accepted, a bare id or a full `session_dir`
+path, and the form given is the form adopted.
 
 ## Waiting without parking
 
@@ -131,74 +138,89 @@ duration caps"), and a session's own `ultracode_msg_wait` park dies with that ca
 the harness lets run long. On Claude Code, Codex, and Antigravity that place is a subagent spawn. On Grok Build
 it is a background monitor, because that harness cuts its spawns too.
 
-### Claude Code, Codex, Antigravity: the wait subagent
+### Claude Code, Codex: the push channel
 
-`ultracode:hub-wait` is a `fast`-tier agent whose only tool is
-`ultracode_msg_wait`. The waiting session spawns it in the foreground with its hub `session_key`,
-`session_secret`, and `cursor`, a `Task:` line naming what it waits for, and a `Wait budget:` in minutes. The
-agent loops finite 55 s waits under the cap, and returns the first non-empty result as one
-JSON object: `outcome` (`messages`, `timed_out`, `shutdown`, `cancelled`, `error`), the advanced `cursor`, and
-every message verbatim. The parent claims, completes, replies, or applies YOLO from that result itself. The
-agent decides nothing, which is why it runs on the cheapest tier: the model router pins it there regardless of
-the repo profile.
+Nothing waits. The session says it is listening and ends its turn, and the hub's native push channel
+(`claude-uds`, `codex-queue`) delivers a wake notice as a new turn with no user present. Both channels are on
+by default and addressed by the harness session id every registration already carries, so there is nothing to
+set up per session and nothing to hold open.
 
 The rules that follow from this:
 
-- A session's one blocking call is the spawn. It never calls `ultracode_msg_wait` itself, except once, with a
-  finite timeout, right after a pushed wake notice, when the messages are already queued and the call returns
-  at once.
-- The loop of finite waits is legitimate only inside `hub-wait`, or inside the Grok wake monitor's command.
-  From any other context it is polling.
-- A `timed_out` return means nothing arrived within the budget: the parent spawns again with the returned
-  cursor. One spawn per return is the listening loop's only repetition.
-- The secret travels in the spawn prompt to this one agent and nowhere else. Spawn hooks persist only the
-  repo, session, phase, and report parameters from a prompt, never the whole prompt, and the agent is
-  forbidden to echo it. On Codex the same fields ride in the single-use spawn ticket under `~/.ultracode`
-  (mode 0600, the same trust domain as the hub's own database).
+- A woken session calls `ultracode_msg_wait` exactly once, with a short finite timeout. The messages are
+  already queued, so the call returns at once. Never twice in a turn, never in a loop, never with
+  `timeout_ms: 0`.
+- No subagent waits either. A spawn that sat in a wait loop would cost a model per iteration to reproduce a
+  wake the harness already gives away.
+- A push that cannot land loses nothing. The message stays committed in the hub behind the session's cursor,
+  so re-running `/ultracode:hub-listen` or `/ultracode:orchestrate` collects everything that arrived while the
+  session was unreachable. That is the documented recovery, not a fallback wait.
+
+### Antigravity: the backgrounded wake command
+
+There is no push channel here, so the listening state is something the session starts. `run_command` with a
+small `WaitMsBeforeAsync` hands the command to a background task, and when that task **exits** the harness
+delivers its whole output to the session as a new turn. So the session starts one command that long polls
+`POST /api/v1/messages/wait` until something arrives, prints the hub's JSON response, and exits. The exit is
+the wake and the printed JSON is the payload, so no follow-up fetch is needed.
+
+Three measurements shape it (CLI 1.1.27, 2026-09-07):
+
+- **A backgrounded command has no deadline.** One ran 15.5 minutes with the session idle: no kill, no
+  liveness nudge, and print mode stayed alive the whole time. `NotificationTimeoutSeconds` (the "still
+  running" nudge) is opt-in per call and off in this build, so the loop can be the listening state for as
+  long as the session lives.
+- **Output is delivered on exit, not as it runs.** The tool's own description claims otherwise. Three lines
+  printed at 5, 10 and 15 minutes reached the task log immediately and reached the model only in the
+  completion message, all at once. So the command must exit to wake anything, and a command that never exits
+  never wakes the session.
+- **The wake is a turn, not a log line.** The completion message arrives as a `SYSTEM_MESSAGE` step carrying
+  `sender=<conversationId>/task-N` and the output, and the model resumed from it with no user input. Exactly
+  one such message appeared across the 15.5 minute run.
 
 ### Grok Build: the wake monitor
 
 Grok hands a foreground spawn back to its caller as a task id after 45 seconds
-(`CoordinatorConfig::foreground_budget` in `task/coordinator_state.rs`), so a wait subagent with a 55 minute
-budget returns an acknowledgement in well under a minute and the parent has nothing to read. It also has no
-push channel. What it does have is `monitor`: a tool that runs a shell
-command detached from the turn and turns each line the command prints into an event. An event starts a new
-turn even when the session is idle, so a monitor can be the listening state that a spawn cannot be.
+(`CoordinatorConfig::foreground_budget` in `task/coordinator_state.rs`), so nothing can wait in a spawn here
+either, and it has no push channel. What it does have is `monitor`: a tool that runs a shell command detached
+from the turn and turns each line the command prints into an event. An event starts a new turn even when the
+session is idle, which is the same property Antigravity's background task has, reached by a different route.
 
 The session starts one monitor, says "listening", and ends its turn. Ending the turn is the wait. The command
 is fixed text in `commands/hub-listen/prompt.md` with three substitutions (the cursor, the session key, the
 session secret), and it long polls `POST /api/v1/messages/wait` with `timeout_ms: 60000` until one of four
 words comes out: `HUB-MESSAGES`, `HUB-IDLE` after a 55 minute budget, `HUB-SHUTDOWN`, or `HUB-ERROR`. The
-session acts on the word and starts a new monitor. One monitor per wake, the same shape as one spawn per
-return.
+session acts on the word and starts a new monitor. One monitor per wake.
 
-Four properties make it safe to hand a model a shell loop:
+One difference from Antigravity decides the payload. A monitor wakes the session on every line and truncates
+any line past 500 characters, and grok kills a monitor that floods (a bucket of 10 events refilling one per
+two seconds, `monitor/types.rs`). So the Grok command prints one word and the session fetches the bodies
+through `ultracode_msg_wait`, where Antigravity's command exits once and prints the hub's JSON directly.
 
-- **The monitor never fetches a message.** It learns only that something arrived. `fetchMessages` selects on
-  `id > cursor` and stamps `fetched_at`, so the read is non-destructive and the bodies still reach the session
-  through `ultracode_msg_wait`, over the authenticated channel, exactly as on every other harness.
-- **It long polls, so it is not polling.** The hub holds each request open until a message lands, which is why
-  a message sent while the monitor is parked wakes it in one round trip. The `sleep` in the command runs only
+The rest both wake commands share:
+
+- **They long poll, so they are not polling.** The hub holds each request open until a message lands, which is
+  why a message sent while one is parked wakes it in one round trip. The `sleep` in the command runs only
   after a failed request. `POST /api/v1/messages/wait` is exempt from the hub's per-minute rate limit for this
   reason.
-- **It prints one word per wake.** Grok kills a monitor that floods (a bucket of 10 events refilling one per
-  two seconds, `monitor/types.rs`), and truncates any line past 500 characters. One word stays far inside both.
-- **A hook keeps `monitor` from becoming a second shell.** `hooks/monitor-guard.js` applies Hard rule 19's
-  patterns to the monitor command, exempting only a command that calls the long-poll route, so the tool cannot
-  be repurposed into polling a subagent's output file. `plugin-guard.js` and `bash-scope-guard.js` are
-  registered on the same matcher, because grok dispatches `monitor` under its own tool name and the shell
+- **They destroy nothing.** `fetchMessages` selects on `id > cursor` and stamps `fetched_at`, so the read is
+  non-destructive and the cursor still decides what the session has seen.
+- **A hook keeps the shell from becoming a second shell.** `hooks/monitor-guard.js` on Grok's `monitor` and
+  `hooks/bash-guard.js` on Antigravity's `run_command` both apply Hard rule 19's patterns and exempt only a
+  command that calls the long-poll route (`hooks/lib/poll-policy.js` owns both), so neither tool can be
+  repurposed into polling a subagent's output file. On Grok, `plugin-guard.js` and `bash-scope-guard.js` are
+  registered on the same `monitor` matcher, because grok dispatches it under its own tool name and the shell
   guards would otherwise never see it.
-
-The cost of this design, accepted deliberately: the session secret sits in the monitor's command string, which
-is visible in `ps` to other local users. The bearer token is not, because the command reads it out of
-`hub.json` itself. This is the one place a session touches `~/.ultracode` by hand, and it reads two fields to
-reach the same route the tools call.
+- **The cost, accepted deliberately:** the session secret sits in the command string, which is visible in `ps`
+  to other local users and recorded in the harness's own transcript. The bearer token is not, because the
+  command reads it out of `hub.json` itself. This is the one place a session touches `~/.ultracode` by hand,
+  and it reads two fields to reach the same route the tools call.
 
 ## Harness routing (`repo-profile.json`, `harnesses` section)
 
 This is the harness-level sibling of the `models` section: per-agent (and per-phase-complexity) routes naming
-which **harness** should execute a stage. The orchestrator reads it to decide between spawning locally and
-publishing a hub task.
+which **harness** should execute a stage. The orchestrator does not read it. Two guards do, so a local spawn
+is a decision the session was handed.
 
 ```json
 "harnesses": {
@@ -207,7 +229,7 @@ publishing a hub task.
 }
 ```
 
-Three rules keep it safe (the full contract is in `refs/inventory-and-profile.md`):
+Four rules keep it safe (the full contract is in `refs/inventory-and-profile.md`):
 
 - **Values are concrete harness names only** (`claude|codex|grok|antigravity`). Never a relative term like
   `"local"`. A worker harness reading the same profile would resolve `"local"` to itself and keep
@@ -215,13 +237,26 @@ Three rules keep it safe (the full contract is in `refs/inventory-and-profile.md
 - **Absence never fails anything.** No section, no map, no key, or an unrecognized value all fall back to the
   current harness, exactly as if the feature were unconfigured. An untargeted publish likewise defaults to
   the publisher's own harness, never "any harness". Unlike model routing, there is no deny-on-missing-route.
-- **The hub resolves the route itself, at publish time.** `ultracode_task_publish` re-reads
+- **`hooks/model-router.js` decides per spawn.** It resolves the route from the file as it stands at that
+  moment, then either refuses the spawn (the route names another harness AND a session of that harness is
+  heartbeating for this repo, read from the registry through `mcp/lib/hub/listeners.js`) or allows it with a
+  PreToolUse `additionalContext` note naming the case: no route, routed here, or routed at a harness with
+  nothing listening. The note says it covers that spawn alone, because the failure it replaced was an
+  orchestrator generalizing one local spawn into a session-long rule. Antigravity has no text channel on an
+  allow, so the note is dropped there and the refusal carries the whole contract.
+  `hooks/profile-read-guard.js` completes it by refusing every call from that session that names the profile,
+  by read tool or by shell. It matches the path rather than a list of reader commands, because `bat`, `xxd`,
+  `git show HEAD:path`, a pipe, and an input redirect all reach the same bytes; the one carve-out is the file
+  name used as a search pattern. Writes go with the reads, since Write and Edit already need a read the
+  session cannot make.
+  A hub-listen worker is exempt from the refusal side: it runs only tasks it claimed, and the hub targeted
+  those by harness, so the claim is what authorized local execution. Both hooks tell the two apart by the
+  marker `hooks/lib/pipeline-session.js` writes when either command loads.
+- **The hub resolves the route again, at publish time.** `ultracode_task_publish` re-reads
   `repo-profile.json` on every call (the same freshness rule the model-router hook applies to model routes),
   so a mid-session profile edit affects the very next publish. A caller-passed `target_harness` that
-  contradicts the current profile is refused with the routed harness named. The orchestrator reads the
-  section only to decide whether to delegate, and a routed harness with no listening session falls back to a
-  local spawn rather than failing. The initializer never seeds this section. Users add it when they actually
-  run a second harness.
+  contradicts the current profile is refused with the routed harness named. The initializer never seeds this
+  section. Users add it when they actually run a second harness.
 
 ## Session adoption: sharing a session without inheriting a native id
 
@@ -332,8 +367,8 @@ Mirrors docs/harness-limitations.md: a dated, measured entry gates each feature 
 | V3 | `codex queue` flags and behavior (0.149.0 or newer) | pinning `push/codex.js` argv | **Verified 2026-08-30 on 0.151.0**: `codex queue --thread <UUID\|name> --message <text>`. Pinned, default-on, `ULTRACODE_HUB_CODEX_PUSH=0` to opt out. Feature detection keeps pre-0.149 CLIs pull-only |
 | V4 | Direct HTTP MCP registration per harness (Codex `url` plus `bearer_token_env_var`, Grok config.toml `url`, Claude plugin `type:"http"`, AGY `agy mcp add --url`) | a `--mcp-transport http` generator mode | Open. Shim registration is v1 for all four |
 | V5 | Per-harness tool-call duration caps that cut a `msg_wait` park | documented behavior per harness | **Measured 2026-08-30**. See "Tool-call duration caps" in docs/harness-limitations.md (codex backgrounds then caps, but push wakes it anyway; claude honors `MCP_TOOL_TIMEOUT`; agy and grok cut, and you re-run). Always harmless: registration and cursor survive |
-| V6 | `ultracode:hub-wait` finite-wait loop (55 s per call) runs for a full 55-minute budget inside one subagent spawn on Claude, Codex, and AGY, and the Claude agent's explicit MCP tool allowlist resolves | the per-call `timeout_ms` and the `Wait budget` default in the command prompts | Open. Per-call timeouts were chosen from V5's measurements (110 s completed on Claude and AGY; Codex yields at about 60 s); the long spawn itself is unmeasured. If a harness cuts the spawn early, the cursor survives and the parent re-spawns |
-| V7 | The Grok wake monitor wakes an idle session: a `monitor` event drains into a new turn with no user present, and grok's rate limiter tolerates one word per wake | replacing `ultracode:hub-wait` with a monitor on Grok | Partly verified. **Source-verified 2026-09-05** against xai-org/grok-build@72a6125: the idle drain path (`notification_drain.rs`, `maybe_drain_notifications` into `maybe_start_running_task`) and the monitor's limits (`monitor/types.rs`). The generated command is **test-verified** against a real hub daemon (`tests/test_hub.test.js`, four cases including a mid-park wake). Unverified live: that a real idle Grok session turns the event into a turn. If it does not, the session still wakes on the monitor's completion notice, and the cursor loses nothing either way |
+| V6 | An Antigravity backgrounded `run_command` outlives the turn with no deadline, and its exit wakes the idle session with its full output | the AGY wake command replacing the wait subagent | **Measured 2026-09-07 on CLI 1.1.27** (conversation `57c5952b`): a 930 s task ran to completion with the session idle from the 6th second, no kill and no liveness nudge, and the exit arrived as a `SYSTEM_MESSAGE` step carrying `sender=<conversationId>/task-N` plus the whole stdout, which the model resumed from. Two limits found the same run: output is delivered **only** on exit (three lines printed at 5, 10 and 15 min reached the task log at once but the model never), so a command that never exits never wakes anything; and `NotificationTimeoutSeconds` is opt-in per call and off in this build. Measured in print mode, so the interactive wake is inferred from the same channel AGY already uses for subagent returns |
+| V7 | The Grok wake monitor wakes an idle session: a `monitor` event drains into a new turn with no user present, and grok's rate limiter tolerates one word per wake | the Grok wake monitor as the listening state | Partly verified. **Source-verified 2026-09-05** against xai-org/grok-build@72a6125: the idle drain path (`notification_drain.rs`, `maybe_drain_notifications` into `maybe_start_running_task`) and the monitor's limits (`monitor/types.rs`). The generated command is **test-verified** against a real hub daemon (`tests/test_hub.test.js`, four cases including a mid-park wake). Unverified live: that a real idle Grok session turns the event into a turn. If it does not, the session still wakes on the monitor's completion notice, and the cursor loses nothing either way |
 
 ## Operations
 
@@ -374,5 +409,5 @@ agy mcp add uchub node <abs>/mcp/hub-shim.js && agy -p "<prompt>" --dangerously-
 
 Blocking `ultracode_msg_wait` calls in a headless run need the harness's MCP tool timeout raised
 (`MCP_TOOL_TIMEOUT=180000` for Claude) and the prompt told that the block is expected. Interactive sessions
-need neither: they wait through `ultracode:hub-wait`, or through the wake monitor on Grok Build. Clean up with
+need neither: they end the turn and are woken by a push channel or by their own wake command. Clean up with
 `grok mcp remove uchub`, `agy mcp remove uchub`, and `node mcp/hub-ctl.js stop` under the same env.

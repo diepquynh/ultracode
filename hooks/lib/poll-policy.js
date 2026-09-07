@@ -14,13 +14,14 @@
 //     is still a way to poll (a `sleep` loop over a subagent's output file wakes
 //     the session on every tick), so the same patterns apply.
 //
-// The exception is the hub wake monitor. On a harness with no push channel the
-// listening state has to live somewhere, and on Grok it is a monitor whose loop
-// long-polls the hub's own /api/v1/messages/wait endpoint: the hub blocks that
-// request server side until a message lands, so the loop spends its life parked
-// on a socket rather than spinning. That endpoint in the command is the whole
-// signature — no other URL grants the exemption, and the ordinary patterns still
-// apply to every other monitor. See docs/hub.md, "Waiting without parking".
+// The exception is the hub wake command, on the two harnesses with no push
+// channel: Grok Build runs it under `monitor`, Antigravity backgrounds it under
+// `run_command`. Its loop long-polls the hub's own /api/v1/messages/wait
+// endpoint, and the hub blocks that request server side until a message lands,
+// so the loop spends its life parked on a socket rather than spinning. That
+// endpoint in the command is the whole signature: no other URL grants the
+// exemption, and the ordinary patterns still apply to every other command on
+// both paths. See docs/hub.md, "Waiting without parking".
 
 "use strict";
 
@@ -37,9 +38,9 @@ const BANNED_PATTERNS = [
 // port hub.json recorded, and the scheme is always loopback http.
 const HUB_WAIT_ROUTE = /\/api\/v1\/messages\/wait\b/;
 
-// True when a monitor command is the sanctioned hub wake loop. Deliberately
-// narrow: it must actually call the long-poll route, so a command that merely
-// mentions the hub in a comment or polls some other hub route is not exempt.
+// True when a command is the sanctioned hub wake loop. Deliberately narrow: it
+// must actually call the long-poll route, so a command that merely mentions the
+// hub in a comment or polls some other hub route is not exempt.
 function isHubWakeMonitor(command) {
   return typeof command === "string" && HUB_WAIT_ROUTE.test(command);
 }

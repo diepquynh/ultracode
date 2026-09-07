@@ -133,7 +133,7 @@ where it already is, on disk in the shared session dir:
 flowchart TB
     subgraph publisher["Publisher session (e.g. Claude Code, /ultracode:orchestrate)"]
         P1["session_register"] --> P2["task_publish (paths only)"]
-        P2 --> P3["waits: blocks on ultracode:hub-wait (fast tier),<br/>or on Grok Build ends the turn under a wake monitor.<br/>No polling in the session either way"]
+        P2 --> P3["waits: ends the turn.<br/>A push channel wakes it (Claude, Codex), or its own<br/>backgrounded long poll does (Grok, Antigravity).<br/>No polling in the session either way"]
         P4["the completion arrives,<br/>orchestrator reads worker's report"]
     end
     subgraph worker["Worker session (e.g. Codex, /ultracode:hub-listen)"]

@@ -347,7 +347,7 @@ function sourceDefinitions() {
 
 test("every definition was migrated", () => {
   const definitions = sourceDefinitions();
-  assert.equal(definitions.length, 17);
+  assert.equal(definitions.length, 16);
   assert.deepEqual(
     new Set(
       definitions
@@ -451,7 +451,7 @@ test("claude generation matches pre-refactor behavior", () => {
     );
     assert.equal(body, adaptForTarget(sourceBody, "claude"));
   }
-  assert.match(stdout, /generated 17 definitions for claude/);
+  assert.match(stdout, /generated 16 definitions for claude/);
 });
 
 test("generation is deterministic for every target", () => {
@@ -706,7 +706,7 @@ test("MCP capabilities are declared exactly where the agent prompt calls the too
   const byTool = mcpCapabilityIds();
   assert.deepEqual(
     new Set(byTool.values()),
-    new Set(["hub_wait", "report", "memory", "memory_recall", "factcheck"]),
+    new Set(["report", "memory", "memory_recall", "factcheck"]),
   );
   const ids = new Set(byTool.values());
   for (const [defPath, definition] of sourceDefinitions()) {
@@ -1282,18 +1282,22 @@ function routeProfileTest(target) {
 
   profile.models.byAgent["code-reviewer"] = "inherit";
   fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-  const inherited = run({
-    ...hookInput,
-    tool_input: { ...hookInput.tool_input, model: "wrong-model" },
-  });
+  const inherited = JSON.parse(
+    run({
+      ...hookInput,
+      tool_input: { ...hookInput.tool_input, model: "wrong-model" },
+    }),
+  ).hookSpecificOutput;
   if (target === "codex") {
     // "inherit" leaves the model alone, but the fork_turns pin (absent
     // defaults to "all" on codex) applies regardless of the route.
-    const untouched = JSON.parse(inherited).hookSpecificOutput.updatedInput;
-    assert.equal(untouched.model, "wrong-model");
-    assert.equal(untouched.fork_turns, "none");
+    assert.equal(inherited.updatedInput.model, "wrong-model");
+    assert.equal(inherited.updatedInput.fork_turns, "none");
   } else {
-    assert.equal(inherited, "");
+    // Nothing to rewrite, so the payload carries only the harness-routing note
+    // — the channel that tells the orchestrator a local spawn was authorized.
+    assert.equal(inherited.updatedInput, undefined);
+    assert.match(inherited.additionalContext, /harness-routing check/);
   }
 
   profile.models.byAgent["code-reviewer"] = "default";
@@ -1549,47 +1553,6 @@ test("model router exempts fact-check from requiring an explicit route", () => {
   routeFactCheckExemptionTest("claude");
   routeFactCheckExemptionTest("codex");
   routeFactCheckExemptionTest("grok");
-});
-
-// hub-wait relays hub messages and decides nothing, so it is pinned to the
-// cheapest tier: no route is required, and a route the profile does carry is
-// ignored rather than honored.
-function routeHubWaitPinTest(target) {
-  const runtimeDir = HARNESS_LAYOUT.layouts[target].runtime_dir;
-  const pluginRoot = pluginRootFor(target);
-  const route = (profile) => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), `ultracode-hub-wait-${target}-`));
-    if (profile) {
-      const profilePath = path.join(repo, runtimeDir, "repo-profile.json");
-      fs.mkdirSync(path.dirname(profilePath), { recursive: true });
-      fs.writeFileSync(profilePath, JSON.stringify(profile), "utf-8");
-    }
-    const stdout = runHook(
-      path.join(pluginRoot, "hooks", "model-router.js"),
-      { cwd: repo, tool_input: { subagent_type: "ultracode:hub-wait", prompt: `Repo root: ${repo}` } },
-      { PLUGIN_ROOT: pluginRoot, CLAUDE_PLUGIN_ROOT: pluginRoot, GROK_PLUGIN_ROOT: pluginRoot },
-    );
-    return JSON.parse(stdout).hookSpecificOutput;
-  };
-  for (const profile of [
-    null,
-    { models: { byAgent: { explore: "advanced" }, byPhaseComplexity: {} } },
-    { models: { byAgent: { "hub-wait": "frontier" }, byPhaseComplexity: {} } },
-  ]) {
-    const output = route(profile);
-    assert.notEqual(output.permissionDecision, "deny", `${target}: hub-wait is never denied for its route`);
-    assert.equal(output.updatedInput.model, expectedModel(target, "fast"), `${target}: hub-wait pinned to fast`);
-    assert.ok(
-      !("prompt" in output.updatedInput) || !/## Repo brief/.test(output.updatedInput.prompt),
-      `${target}: hub-wait gets no repo brief`,
-    );
-  }
-}
-
-test("model router pins hub-wait to the fast tier regardless of the profile", () => {
-  routeHubWaitPinTest("claude");
-  routeHubWaitPinTest("codex");
-  routeHubWaitPinTest("grok");
 });
 
 test("model router denies a malformed profile", () => {
@@ -1944,13 +1907,49 @@ function bashGuardTest(target) {
 
   assert.equal(run("npm test"), "");
   assert.equal(run("sleep 5", "ultracode:implementer"), "");
+
+  // The hub wake command is the one loop allowed here. On Antigravity it is a
+  // backgrounded run_command, which this matcher sees, so the exemption
+  // monitor-guard grants Grok's monitor has to hold on this path too.
+  assert.equal(run(HUB_WAKE_COMMAND_AGY), "", "the AGY hub wake command is exempt");
+
+  // The exemption is the route, not the word "hub", a curl call, or a loop that
+  // merely resembles the wake command.
+  assertDenied(
+    JSON.parse(run('while :; do curl -s "$URL/api/v1/tasks/claim"; sleep 5; done')),
+    /Hard rule 19/,
+  );
+  assertDenied(
+    JSON.parse(run('while :; do cat "$HOME/.ultracode/hub.json"; sleep 5; done')),
+    /Hard rule 19/,
+  );
 }
 
-test("bash-guard denies orchestrator wait/sleep but exempts subagents", () => {
+test("bash-guard denies orchestrator wait/sleep but exempts subagents and the hub wake command", () => {
   bashGuardTest("claude");
   bashGuardTest("codex");
   bashGuardTest("grok");
+  bashGuardTest("antigravity");
 });
+
+// The Antigravity hub wake command, as commands/hub-listen/prompt.md tells that
+// session to background it: no deadline (`while :`), a `sleep` in the failure
+// branch, and the hub's long-poll route, which is what earns the exemption.
+const HUB_WAKE_COMMAND_AGY = [
+  'CURSOR=<CURSOR>',
+  "FAILS=0",
+  "while :; do",
+  '  R=$(curl -s --max-time 90 -X POST "$URL/api/v1/messages/wait" \\',
+  "    -H \"Authorization: Bearer $TOKEN\" -H 'Content-Type: application/json' \\",
+  '    -d "{\\"cursor\\":$CURSOR,\\"timeout_ms\\":60000}" 2>/dev/null)',
+  '  case "$R" in',
+  "    *'\"shutdown\":true'*) echo \"$R\"; exit 0 ;;",
+  "    *'\"messages\":[]'*) FAILS=0 ;;",
+  "    *'\"messages\":['*) echo \"$R\"; exit 0 ;;",
+  "    *) FAILS=$((FAILS+1)); sleep 5 ;;",
+  "  esac",
+  "done",
+].join("\n");
 
 // The hub wake monitor, as commands/hub-listen/prompt.md tells a Grok session to
 // start it: a `sleep` in the failure branch, and the hub's long-poll route.
@@ -4570,6 +4569,7 @@ test("every plugin distribution includes target hooks", () => {
       "monitor-guard.js",
       "pipeline-gate.js",
       "plugin-guard.js",
+      "profile-read-guard.js",
       "review-cap.js",
       "scope-guard.js",
       "security-block.js",

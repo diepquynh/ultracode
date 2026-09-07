@@ -36,6 +36,7 @@ const COMMON_HOOK_FILES = [
   "security-block.js",
   "factcheck-record.js",
   "skill-init-guard.js",
+  "profile-read-guard.js",
   "build-streak.js",
   "build-streak-gate.js",
   "spawn-scope.js",
@@ -61,6 +62,7 @@ const COMMON_HOOK_FILES = [
   "lib/spawn-ticket.js",
   "lib/context-brief.js",
   "lib/shell-paths.js",
+  "lib/pipeline-session.js",
 ];
 
 const HARNESS_TEMPLATE_KEYS = new Set([

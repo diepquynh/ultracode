@@ -9,10 +9,10 @@
 //
 // Design rule carried through every description below: sessions never poll.
 // msg_send and task_publish return immediately and the hub wakes the recipient
-// (native push, or the finite msg_wait its ultracode:hub-wait subagent is
-// parked in). The only loop over msg_wait lives inside that fast-tier
-// subagent, whose spawn is the session's one blocking call — a harness lets a
-// subagent run far longer than it lets a single tool call run.
+// itself. How depends on the harness: a native push channel on Claude and Codex,
+// and on Grok and Antigravity the recipient's own wake command, long polling
+// this hub outside its turn. Either way a waiting session holds no tool call
+// open, so no description here may suggest looping over msg_wait.
 
 const { z } = require("zod");
 
@@ -226,10 +226,10 @@ function registerHubTools(server, hub) {
       description:
         "Send a message to another registered session (to_session_key) or broadcast to every session of a " +
         "harness (to_harness) — exactly one of the two. Returns immediately; the hub wakes the recipient " +
-        "(native push, or the ultracode_msg_wait its hub-wait subagent is parked in). The body must carry " +
+        "(a native push channel, or the long poll its own wake command is parked in). The body must carry " +
         "ADDRESSES — paths into the shared .ultracode session dir — not file contents; it is capped at 64 KiB " +
-        "for that reason. After sending, do not poll for the reply: it arrives as a wake, or inside the next " +
-        "ultracode:hub-wait result. Pass a dedupe_key when retrying so a resend cannot double-deliver.",
+        "for that reason. After sending, do not poll for the reply: end your turn and it arrives as a wake. " +
+        "Pass a dedupe_key when retrying so a resend cannot double-deliver.",
       inputSchema: {
         from_session_key: z.string(),
         from_secret: z.string(),
@@ -249,13 +249,12 @@ function registerHubTools(server, hub) {
     {
       description:
         "Fetch messages addressed to this session, blocking until one arrives or the timeout passes. An " +
-        "interactive session does not wait on this call itself — every harness cuts a long tool call — it " +
-        "spawns the ultracode:hub-wait subagent (fast tier) with its session_key, session_secret, and cursor, " +
-        "and that agent calls this tool in a loop of finite timeouts (55000 ms; 20000 on Grok) that stay " +
-        "under the cap, returning the first non-empty result. The spawn is the session's one blocking call. " +
-        "Inside hub-wait, repeating this call after timed_out is the job. Outside it, the only direct call " +
-        "is the immediate fetch after a pushed wake notice (the messages are already queued, so the default " +
-        "timeout returns at once). timeout_ms 0 parks indefinitely and is reserved for headless runs whose " +
+        "interactive session never waits on this call itself and never loops it — every harness cuts a long " +
+        "tool call, and repeated short calls are polling. It ends its turn instead, and the wake comes from " +
+        "the harness: a native push channel on Claude and Codex, or its own wake command long polling this " +
+        "hub's /api/v1/messages/wait route outside the turn on Grok and Antigravity. So the one direct call " +
+        "is a single fetch right after being woken, when the messages are already queued and the default " +
+        "timeout returns at once. timeout_ms 0 parks indefinitely and is reserved for headless runs whose " +
         "MCP tool timeout was raised. Finite timeouts default to 25000 and cap at 120000. Pass the cursor " +
         "from your registration or the previous result; passing it back is the ack, so no ending of this " +
         "call ever loses a message.",
@@ -269,9 +268,9 @@ function registerHubTools(server, hub) {
           .min(0)
           .optional()
           .describe(
-            "How long to block (default 25000, max 120000). ultracode:hub-wait uses 55000 (20000 on Grok). " +
-              "0 = park indefinitely; only for headless runs with a raised MCP tool timeout, never from an " +
-              "interactive session.",
+            "How long to block (default 25000, max 120000). A woken session's single fetch wants a short one " +
+              "(5000 is enough, the messages are already queued). 0 = park indefinitely; only for headless " +
+              "runs with a raised MCP tool timeout, never from an interactive session.",
           ),
       },
     },
@@ -291,7 +290,7 @@ function registerHubTools(server, hub) {
         "this stage. Pass target_harness only for a user-directed delegation with no profile route; a value " +
         "contradicting the current profile is refused with the routed harness named. Active sessions that " +
         "could claim the task are woken automatically. After publishing, say which task id you are waiting " +
-        "on and spawn ultracode:hub-wait to wait for the completion notice — never poll this hub yourself.",
+        "on and end your turn: the completion notice arrives as a wake — never poll this hub yourself.",
       inputSchema: {
         from_session_key: z.string(),
         from_secret: z.string(),

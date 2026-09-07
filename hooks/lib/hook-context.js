@@ -148,8 +148,14 @@ class HookContext {
     return this.adapter.rewriteSpawns(this.toolInput, patches);
   }
 
-  updatedInputPayload(updatedInput) {
-    return this.adapter.emitUpdatedInput(updatedInput);
+  // Null when there is nothing this harness can carry (see
+  // HarnessAdapter.emitUpdatedInput); callers must not emit in that case.
+  updatedInputPayload(updatedInput, additionalContext) {
+    return this.adapter.emitUpdatedInput(updatedInput, additionalContext);
+  }
+
+  get supportsPreToolContext() {
+    return this.adapter.supportsPreToolContext;
   }
 }
 

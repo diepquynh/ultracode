@@ -1,7 +1,26 @@
 #!/usr/bin/env node
-// Enforce per-repository model routing and apply one composed rewrite to every
-// Ultracode subagent in the tool call. Harness envelope/casing lives in
-// hooks/lib/harness.js; policy here only sees canonical spawn entries.
+// Enforce per-repository model AND harness routing, and apply one composed
+// rewrite to every Ultracode subagent in the tool call. Harness
+// envelope/casing lives in hooks/lib/harness.js; policy here only sees
+// canonical spawn entries.
+//
+// WHY HARNESS ROUTING IS ENFORCED HERE TOO
+//
+// `harnesses` in repo-profile.json says which harness runs each stage. Left to
+// prose, an orchestrator resolved that itself, which failed in both directions:
+// it kept work local because the route "looked local", and it generalized one
+// spawn's outcome into a standing rule for the rest of the session. Both defeat
+// the point of a file the user edits. So the profile is read here, per spawn,
+// and the orchestrator is told the outcome rather than deciding it:
+//
+//   * routed to another harness with a live listener → the local spawn is
+//     denied, naming the harness and the publish call that reaches it;
+//   * routed to this harness, unrouted, or routed somewhere with nothing
+//     listening → allowed, with a note saying which case applied and that it
+//     covers this spawn alone.
+//
+// The check re-reads the file on every spawn, like the model route, so a
+// profile the user edits mid-session wins over anything the model remembers.
 
 "use strict";
 
@@ -18,6 +37,13 @@ const {
 const { augmentPrompt } = require("./lib/context-brief");
 const { forkTurnsPin, promptRewritable, skipSealedRouting } = require("./lib/codex-spawn");
 const { HookContext } = require("./lib/hook-context");
+const { resolveHarnessRoute } = require("../mcp/lib/hub/harness-route");
+const { hasLiveListener } = require("../mcp/lib/hub/listeners");
+const { pipelineSessionCommand } = require("./lib/pipeline-session");
+
+// Agents no `harnesses` route applies to. initializer belongs to /init-kit,
+// which runs outside the hub's task flow.
+const UNROUTABLE_AGENTS = new Set(["initializer"]);
 
 function phaseTier(phaseFile) {
   if (!phaseFile || !isFile(phaseFile)) return "low";
@@ -76,6 +102,81 @@ function canonicalizeCallerModel(name, routing) {
   return trimmed;
 }
 
+// → { deny } to refuse this spawn, or { note } to allow it with a line for the
+// model. Never throws: a broken profile or an unreadable hub answers "runs
+// here", because routing work away is advisory and a stage must not be lost to
+// a routing lookup that failed.
+function harnessDecision(spawn, target) {
+  let resolved = { route: null, source: null };
+  try {
+    resolved = resolveHarnessRoute({
+      repoRoot: spawn.workRepoRoot,
+      agentHint: spawn.agent,
+      phaseFile: spawn.parameters.phase_file,
+    });
+  } catch {
+    resolved = { route: null, source: null };
+  }
+
+  if (resolved.invalid) {
+    return {
+      note:
+        `${spawn.agent}: the profile's harnesses route is "${resolved.invalid}", which is not a harness ` +
+        `name, so it is ignored and this spawn runs here (${target}). Tell the user to fix the profile — ` +
+        "routes are always claude, codex, grok, or antigravity.",
+    };
+  }
+  if (!resolved.route) {
+    return {
+      note: `${spawn.agent}: no harnesses route in the profile, so this spawn runs here (${target}).`,
+    };
+  }
+  if (resolved.route === target) {
+    return {
+      note:
+        `${spawn.agent}: the profile routes it to ${target} (${resolved.source}), this harness, ` +
+        "so this spawn runs here.",
+    };
+  }
+
+  let listening = false;
+  try {
+    listening = hasLiveListener({ harness: resolved.route, repoRoot: spawn.workRepoRoot });
+  } catch {
+    listening = false;
+  }
+  if (!listening) {
+    return {
+      note:
+        `${spawn.agent}: the profile routes it to ${resolved.route} (${resolved.source}), but no ` +
+        `${resolved.route} session is listening for ${spawn.workRepoRoot}, so this spawn runs here ` +
+        `(${target}). Say that to the user.`,
+    };
+  }
+  return {
+    deny:
+      `ultracode: the profile routes ${spawn.agent} to ${resolved.route} (harnesses.${resolved.source}), ` +
+      `not ${target}, and a ${resolved.route} session is listening for ${spawn.workRepoRoot}. ` +
+      "Publish it with ultracode_task_publish (omit target_harness — the hub resolves the route itself) " +
+      "and wait for the completion notice instead of spawning it here.",
+    compact:
+      `ultracode: ${spawn.agent} is routed to ${resolved.route}, not ${target}. ` +
+      "Publish it with ultracode_task_publish (no target_harness) and wait; do not spawn it here.",
+  };
+}
+
+// One note for the whole call. A single spawn call may carry several subagents,
+// and the harness delivers one additionalContext string for all of them.
+function routingNote(lines) {
+  if (!lines.length) return "";
+  return [
+    "ultracode harness-routing check — applies to this spawn call only:",
+    ...lines.map((line) => `- ${line}`),
+    "The profile is re-read on every spawn. Do not carry this outcome to the next stage, do not infer a " +
+      "standing route from it, and do not open repo-profile.json to predict it.",
+  ].join("\n");
+}
+
 function stampedPrompt(target, primaryRepoRoot, spawn, prompt) {
   if (target !== "antigravity" || !prompt) return prompt;
   let stamped = prompt;
@@ -102,23 +203,36 @@ async function main() {
     return 0;
   }
 
+  // A hub-listen worker is exempt: it only runs tasks it claimed, and the hub
+  // targeted those by harness, so the claim already authorized local execution.
+  // Enforcing the route again there would refuse a review loop inside a task
+  // this harness was handed, with nothing left to publish it to.
+  const claimedWork = pipelineSessionCommand(routing.target, context.sessionId) === "hub-listen";
+
   const patches = new Map();
+  const routeNotes = [];
   for (const spawn of context.spawns) {
     const agent = spawn.agent;
     if (!agent || !(agent in routing.defaults)) continue;
 
     if (skipSealedRouting(spawn)) continue;
 
+    // Which harness runs this stage is settled before which model does: a
+    // stage that belongs on another harness must not be denied for the local
+    // profile's model route instead.
+    if (!claimedWork && !UNROUTABLE_AGENTS.has(agent)) {
+      const decision = harnessDecision(spawn, routing.target);
+      if (decision.deny) {
+        denyPreToolUse(decision.deny, decision.compact);
+        return 0;
+      }
+      if (decision.note) routeNotes.push(decision.note);
+    }
+
     const profilePath = path.join(spawn.workRepoRoot, routing.runtime_dir, "repo-profile.json");
     const exempt = agent === "initializer" || agent === "fact-check";
-    // hub-wait is pinned to its definition tier (the cheapest one). It makes no
-    // decisions, so no repo has a reason to spend more on it, and reading the
-    // profile would only let a route that predates the agent deny the wait.
-    const pinned = agent === "hub-wait";
     let route;
-    if (pinned) {
-      route = "default";
-    } else if (!isFile(profilePath)) {
+    if (!isFile(profilePath)) {
       route = exempt ? spawn.model || "default" : "default";
     } else {
       const profile = readJsonIfFile(profilePath);
@@ -180,10 +294,9 @@ async function main() {
     if (Object.keys(patch).length) patches.set(spawn.index, patch);
   }
 
-  if (patches.size) {
-    const updatedInput = context.rewrittenToolInput(patches);
-    emit(context.updatedInputPayload(updatedInput));
-  }
+  const updatedInput = patches.size ? context.rewrittenToolInput(patches) : null;
+  const payload = context.updatedInputPayload(updatedInput, routingNote(routeNotes));
+  if (payload) emit(payload);
   return 0;
 }
 

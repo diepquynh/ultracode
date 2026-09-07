@@ -68,6 +68,10 @@
           {
             "type": "command",
             "command": "node ./hooks/skill-init-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/profile-read-guard.js"
           }
         ]
       },
@@ -94,6 +98,10 @@
           {
             "type": "command",
             "command": "node ./hooks/skill-init-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ./hooks/profile-read-guard.js"
           }
         ]
       }

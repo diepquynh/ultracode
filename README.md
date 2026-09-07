@@ -175,7 +175,7 @@ authorizes the worker's own native session to work inside a session directory it
 ```mermaid
 flowchart TD
     ORCH["Orchestrating session: /ultracode:orchestrate<br/>registers with the hub at session start"] -- "task_publish: paths into<br/>its session dir, never content" --> HUB["cross-harness hub<br/>one loopback daemon per machine"]
-    WORK["Worker session on any harness:<br/>/ultracode:hub-listen registers,<br/>drains the queue, waits through ultracode:hub-wait"] --- HUB
+    WORK["Worker session on any harness:<br/>/ultracode:hub-listen registers,<br/>drains the queue, then ends its turn to wait"] --- HUB
     HUB -- "wake notice<br/>(push or long-poll)" --> WORK
     WORK --> ADOPT["ultracode_session_query, pick the shared session,<br/>ultracode_session_adopt authorizes it<br/>for this native session"]
     ADOPT --> RUN["worker runs the delegated stage IN the shared dir.<br/>Recorded spec/plan approvals hold, so a plan-gated<br/>stage spawns without re-approval"]
