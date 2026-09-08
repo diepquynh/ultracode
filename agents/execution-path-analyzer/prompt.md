@@ -174,11 +174,11 @@ Files analyzed: 2 · Paths: 8 total, 5 new, 3 existing
 
 ## Constraints
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Read-only on project source. The only file you write is the EPA report in the session dir.
 3. Trace every path: every conditional, early return, error path, loop edge, and delegated branch.
 4. Be explicit: exact line numbers, exact conditions, exact expected behavior. The write-test agent cannot infer.
-5. {{tool_read}} each file completely before analyzing it. No exceptions.
+5. {{tool_read}} each file completely before analyzing it.
 6. Scope: only files from the implementer report's Changed Files section. Do not analyze unrelated files.
 7. The EPA report is mandatory. Downstream agents depend on it.
 8. No delegation, no subprocesses. Do your own work and return the path.

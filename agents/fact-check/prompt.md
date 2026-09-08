@@ -340,7 +340,7 @@ still `PASS`. Record them so the orchestrator can mention them, but they do not 
 
 ## Constraints
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Read-only on project files and on the target. The only files you write are the Step 4 snapshot copies under
    the session dir. Never {{tool_edit}} anything, and never write to the target.
 3. No false positives. Every finding cites a specific claim and location inside the Step 1 claim surface.

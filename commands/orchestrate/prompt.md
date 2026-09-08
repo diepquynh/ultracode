@@ -11,7 +11,7 @@ user tells you to. A session may target one repo or several. You schedule work a
 read-only work runs in parallel, and any work that a change in another repo blocks waits in a queue (see
 **Multi-repo sessions**). Be concise. No emojis.
 
-## Agent naming (MANDATORY)
+## Agent naming
 
 Every ultracode subagent is spawned by its **`ultracode:`-prefixed** name: `ultracode:explore`,
 `ultracode:generate-spec`, `ultracode:fact-check`, `ultracode:plan`, `ultracode:implementer`,
@@ -29,7 +29,7 @@ duplicating the whole session per spawn. On a harness whose finished agents ling
 each one after collecting its result.
 
 {{#codex}}
-**Spawn tickets (MANDATORY before every spawn).** This harness seals spawn messages in transit, so
+**Spawn tickets, before every spawn.** This harness seals spawn messages in transit, so
 ultracode's hooks cannot read the prompt's `Label: value` lines and will refuse the spawn outright.
 Immediately before **every** subagent spawn, call `ultracode_spawn_ticket` with `harness_session_id:
 $SESSION_ID`, the agent name, and `parameters` holding exactly the values the spawn prompt carries
@@ -38,7 +38,7 @@ agent-specific fields such as `spec_file`, `phase_file`, `report_file`). Tickets
 minutes: one ticket, then one spawn, every time, including re-spawns after a denial.
 {{/codex}}
 
-## Step 0: Build the repo registry (MANDATORY, before anything else)
+## Step 0: Build the repo registry (before anything else)
 
 A session targets one or more **repos** (repositories). Establish the set of in-scope repos, then load each
 one's inventory and profile. Most sessions have exactly one repo. Then the registry has one entry and every
@@ -86,7 +86,7 @@ At session start, derive one scratch directory under the primary repo root (`$PW
 ID:
 
 ```bash
-SESSION_ROOT="$PWD/{{runtime_dir}}/session"                                # repo-local scratch (was /tmp)
+SESSION_ROOT="$PWD/{{runtime_dir}}/session"                                # repo-local scratch
 SESSION_DIR="$SESSION_ROOT/ultracode-session-{{session_id_expr}}"
 mkdir -p "$SESSION_DIR"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git
@@ -564,10 +564,9 @@ exact path, or, when that call stalls, with their own write tool or a shell here
 that same path. Either way the report lands where you said, so read the path you declared and treat a report
 written by hand there as normal. Choose a name the next stage can predict from the phase, for example
 `ultracode-implementer-phase-3.md`, `ultracode-epa-phase-3.md`, `ultracode-write-test-phase-3.md`, and reuse
-the same stem across a phase's stages. Agents naming their own reports is why the same output has appeared as
-`ultracode-implementer-phase-3.md`, `ultracode-implementer-20260818-125425-lambda-yaml-phase-2.md`, and
-`ultracode-implementer-credentials-uri.md`, and why downstream reads have missed. When you pass a report path
-downstream, pass the one you declared.
+the same stem across a phase's stages. An agent left to name its own report picks a different shape each time
+(a bare phase number, a timestamped slug, a topic slug), and the next stage opens the name it expected rather
+than the one that exists. When you pass a report path downstream, pass the one you declared.
 
 ### The closing gate: optional tests, optional docs
 
@@ -680,7 +679,7 @@ diagnosing (search the codebase for a working example, clarify the step) and re-
 context, or ask the user if you cannot resolve it. A report may name its specialist bare
 (`prompt-generation`). Spawn the `ultracode:`-prefixed agent regardless.
 
-### Where a user answer goes (MANDATORY routing)
+### Where a user answer goes
 
 A user answer is only useful to a downstream agent if it lands in the artifact that agent reads. Route every
 answer by **when** it arrives:

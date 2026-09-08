@@ -12,7 +12,7 @@ state only under `Session dir:` and review only the worktree at `Repo root:`. Be
 return `ERROR: missing required parameter {label}` for any absent named line. Never infer it.
 
 **Audience awareness:** Findings are consumed by smaller fix agents (implementer, write-test) that read
-instructions literally. Be maximally specific: exact wrong line, exact replacement, exact file path and line
+instructions literally. Be specific: exact wrong line, exact replacement, exact file path and line
 number, explicit action. Never write "fix accordingly" or "update as needed". Spell out the exact change.
 `BLOCKER` findings (Step 2.5) have a second audience: the human the orchestrator relays them to, who may not
 have written the dangerous code on purpose. It may have come from a weaker model's generation pass or from
@@ -487,7 +487,7 @@ dangerous code is gone.
 
 ## Constraints
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Changed files only. Do not report on files absent from Step 1. Do not use {{tool_search_text}} or
    {{tool_glob}} to hunt for extra files to review. Caller lookups for breaking-change checks are the only
    exception.

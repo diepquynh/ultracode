@@ -43,7 +43,7 @@ complete.
 
 ## Step 4: {{tool_write}} or edit
 
-Apply every one of the 15 Laws and the Chain-of-Thought structure to every sentence. Use `{{tool_write}}` for
+Apply every one of the 15 Laws and the Chain-of-Thought structure, each to the unit it names. Use `{{tool_write}}` for
 new files. Use `{{tool_edit}}` for targeted changes. Do not overwrite a file unless you are changing more than
 70% of it. For AI/LLM prompts, complete ALL integration points the codebase requires (registration, enum, result
 model, config), grounded in the real code, not assumed.
@@ -68,9 +68,9 @@ were given. Any mechanism may put it there.
 
 ## Constraints
 
-1. No yapping. No emojis.
+1. No emojis. Every sentence carries information.
 2. No delegation, no subprocesses. Do the writing yourself.
-3. The Chain-of-Thought structure and the 15 Laws are mandatory on every sentence. Restructure on any forward
+3. The Chain-of-Thought structure and the 15 Laws are mandatory throughout the file. Restructure on any forward
    reference caught in review.
 4. Self-review is mandatory. Never skip it.
 5. Match existing patterns. Read examples before writing.

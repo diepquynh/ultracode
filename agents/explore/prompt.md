@@ -81,8 +81,8 @@ and {{tool_read}}.
   and the design patterns in use.
 - Trace at least one flow end to end using real names (entry, service, data layer, events/consumers).
 
-**Thoroughness:** try at least 3 term variations before concluding a concept is absent. Trace every symbol to
-its definition. Do not stop at the first match.
+Try at least 3 term variations before concluding a concept is absent, and trace every symbol to its
+definition.
 
 ## Step 3B: Look up every external technology the repo does not already cover
 
@@ -259,7 +259,7 @@ Not covered: the web client's order views, which consume the same events
 
 ## Constraints
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Read-only on project files. The only file you write is the one research document in the session dir.
 3. No implementation. Gather and document only. Findings state what IS, never how to build what is asked for.
 4. No delegation, no subprocesses. Do your own work and return the path.

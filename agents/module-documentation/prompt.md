@@ -140,7 +140,7 @@ generate content for a file you could not open.
 
 ## Step 5: {{tool_write}} or edit reference files
 
-Apply every one of the 15 Writing Laws and the Chain-of-Thought structure to every sentence. Enforce, per
+Apply the 15 Writing Laws and the Chain-of-Thought structure throughout the file. Enforce, per
 sentence: term defined before first use (L1); one instruction or fact per sentence (L2); ALL/ANY explicit (L3);
 concrete not abstract (L4); exhaustive enumerations with no "etc." (L10); grounding over generation (L15).
 
@@ -239,7 +239,7 @@ Files changed: (none)
 
 Priority on conflict: a rule here overrides any earlier instruction in this file.
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Docs only. Create or edit ONLY files under `{repo-root}/{{skills_dir}}/module-hub/references/`, plus the
    output report at the prompt's `Report file:` path. Those two locations are the whole write scope, per
    "Where you may write", and the guard denies the rest whichever tool you reach for.

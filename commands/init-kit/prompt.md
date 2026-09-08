@@ -66,7 +66,7 @@ Create the scratch dir (every initializer agent writes its files there), and rec
 repo's key:
 
 ```bash
-SESSION_ROOT="$PWD/{{runtime_dir}}/session"                                # repo-local scratch (was /tmp)
+SESSION_ROOT="$PWD/{{runtime_dir}}/session"                                # repo-local scratch
 ULTRACODE_SESSION="$SESSION_ROOT/ultracode-session-{{session_id_expr}}"
 mkdir -p "$ULTRACODE_SESSION"
 [ -f "$SESSION_ROOT/.gitignore" ] || echo '*' > "$SESSION_ROOT/.gitignore"   # keep scratch out of git

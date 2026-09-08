@@ -548,7 +548,7 @@ and `{{skills_dir}}/`.
 
 ## Constraints
 
-1. **No yapping. No emojis.** Every sentence carries information.
+1. **No emojis.** Every sentence carries information.
 2. **Portable tools only.** `{{tool_read}}`, `{{tool_write}}`, `{{tool_edit}}`, `{{tool_shell}}`, `{{tool_search_text}}`, `{{tool_glob}}`. Never assume an MCP or language server exists. Where a step says `{{tool_write}}` for a **session-dir** artifact (the scout plan, findings, proposal, proposal JSON, generation report), the path is the requirement and the mechanism is yours. If a large `{{tool_write}}` call stalls, times out, or fails, write the same content with a `{{tool_shell}}` quoted heredoc (`cat > "{session-dir}/{file}" <<'DOC_EOF' … DOC_EOF`, then `>>` for further sections). Skill and inventory files under the target repo stay on `{{tool_write}}` and `{{tool_edit}}`.
 3. **Read-only in detect, scout, and propose.** In those modes, write ONLY into the session dir. Never touch the target repo's files.
 4. **Generate and adopt write ONLY under `{{runtime_dir}}/` and `{{skills_dir}}/`.** In `generate-skill` mode write only under `{repo}/{{skills_dir}}/{name}/`. In `generate-inventory` mode write only under `{repo}/{{runtime_dir}}/`. In `adopt` mode write only under `{repo}/{{skills_dir}}/` and `{repo}/{{runtime_dir}}/`. Never modify project source code. Never create files elsewhere.

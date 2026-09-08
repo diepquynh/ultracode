@@ -9,7 +9,8 @@ writing prompts or agents. Templates for the skill shapes live in `{{plugin_root
 
 ## The 15 Writing Laws
 
-Apply every law to every sentence of instruction text.
+Every law governs the unit it names: a term, a sentence, a rule, a step, or the file as a whole. Apply all 15
+to every section, including the sections that already read clearly.
 
 1. **Define before reference.** Never use a term before its definition. Put a Definitions table first.
 2. **One instruction per sentence.** Split compound instructions.

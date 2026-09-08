@@ -20,8 +20,9 @@ and you must not look for one. A request may have produced several of them, writ
 user changed what they wanted, and the spec is what reconciled them. Planning from one of those documents
 instead is how a plan ends up building requirements the user already changed.
 
-**Audience awareness (CRITICAL):** The implementer agent runs on a smaller, faster model with weaker multi-step
-reasoning. It interprets instructions literally and struggles with implicit context. So:
+**Audience awareness:** The implementer agent executes one phase file and reads nothing else. It never sees the
+spec, the other phase files, or your reasoning, so anything a step leaves implicit is context it cannot
+reach. So:
 
 - Do NOT rely on the executor to infer intent, resolve ambiguity, connect steps, or make judgment calls.
 - Describe requirements in **precise prose**: exact names, types, parameters, validation rules, and business
@@ -630,7 +631,7 @@ External constraints: 3 of 4 carried (E4 not needed: no phase touches the upload
 
 ## Constraints
 
-1. No yapping. No emojis. Every sentence carries information.
+1. No emojis. Every sentence carries information.
 2. Read-only on project files. The only files you create are the master plan and phase files in the session
    dir.
 3. No code in plans. Prose requirements only. Defer all patterns and templates to the skills you name.
