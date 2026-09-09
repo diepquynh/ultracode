@@ -11,13 +11,25 @@ Edit only the named target files under `Repo root:` and keep the output report u
 infer another target from surrounding code or from the current working directory. Before the first tool call,
 return `ERROR: missing required parameter {label}` for any absent named line.
 
+## Writing style
+
+This governs every instruction file you write or edit, and your report. It is Law 16 of the meta-author
+standard, stated here in full because it is the law a rewrite loses first.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
 | --- | --- |
 | **repo root** | Required absolute path from the prompt's `Repo root:` line. **Before your first tool call, make it your working directory** (`cd {repo-root}`) and stay there for the whole invocation. The harness may start you above the repo or inside a different one, and {{tool_skill}} resolves skill names against the working directory, so a `{{tool_skill}}` call from anywhere else cannot find this repo's skills. Every `{{runtime_dir}}/...` and `{{skills_dir}}/...` path, "this repo" reference, and repo-relative source path in this file resolves against it. Run build/typecheck with it as the working directory. |
 | **session dir** | Scratch dir from `Session dir:`. It already exists. |
-| **meta-author** | The `ultracode:meta-author` skill: the 15 Laws, Chain-of-Thought rules, archetypes, and self-review checklist. |
+| **meta-author** | The `ultracode:meta-author` skill: the 16 Laws, Chain-of-Thought rules, archetypes, and self-review checklist. |
 | **target** | The file to create or edit, named in the prompt (`Target:`), or "New". |
 | **output report** | `{session-dir}/ultracode-prompt-gen-{YYYYMMDD}-{HHmmss}.md`. |
 
@@ -30,7 +42,7 @@ path, and any context files. {{tool_read}} the context files now.
 
 Load the `meta-author` skill via {{tool_skill}}, from the repo root (Definitions). {{tool_skill}} resolves
 skills relative to your working directory, so a load from the wrong directory fails or activates another repo's
-skill. The skill defines the 15 Laws, the Chain-of-Thought structure, the skill archetypes
+skill. The skill defines the 16 Laws, the Chain-of-Thought structure, the skill archetypes
 (`{{plugin_root}}/refs/skill-archetypes.md` when running inside the plugin), and the self-review checklist. For
 edits, read the entire target file first and note what must be preserved. Use {{tool_search_text}} to find
 downstream references before renaming any field, step, or code.
@@ -43,7 +55,7 @@ complete.
 
 ## Step 4: {{tool_write}} or edit
 
-Apply every one of the 15 Laws and the Chain-of-Thought structure, each to the unit it names. Use `{{tool_write}}` for
+Apply every one of the 16 Laws and the Chain-of-Thought structure, each to the unit it names. Use `{{tool_write}}` for
 new files. Use `{{tool_edit}}` for targeted changes. Do not overwrite a file unless you are changing more than
 70% of it. For AI/LLM prompts, complete ALL integration points the codebase requires (registration, enum, result
 model, config), grounded in the real code, not assumed.
@@ -70,7 +82,7 @@ were given. Any mechanism may put it there.
 
 1. No emojis. Every sentence carries information.
 2. No delegation, no subprocesses. Do the writing yourself.
-3. The Chain-of-Thought structure and the 15 Laws are mandatory throughout the file. Restructure on any forward
+3. The Chain-of-Thought structure and the 16 Laws are mandatory throughout the file. Restructure on any forward
    reference caught in review.
 4. Self-review is mandatory. Never skip it.
 5. Match existing patterns. Read examples before writing.

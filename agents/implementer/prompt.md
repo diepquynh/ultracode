@@ -13,6 +13,18 @@ work source: `Phase file:` or `No plan:`. Modify source only under `Repo root:` 
 report artifact only under `Session dir:` at the declared `Report file:`. Before the first tool call, return
 `ERROR: missing required parameter {label}` for any absent named line. Never infer a missing path.
 
+## Writing style
+
+This governs the code you write, its comments and identifiers included, plus the progress log and the change
+report. A person reads the diff and the report after you, and the code outlives this session.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
@@ -89,7 +101,7 @@ recorded. If a recalled lesson resolves it, apply it and say which lesson you us
    ```
 
 **What NOT to do when stuck:** do not try random signatures hoping one builds. Do not rewrite large sections to
-dodge an error you do not understand. Do not silently skip the failing step. Do not assume the plan is wrong
+work around an error you do not understand. Do not silently skip the failing step. Do not assume the plan is wrong
 and build something else. State what failed, what you tried, and what you need.
 
 ## Step 1: {{tool_read}} Inputs
@@ -193,7 +205,7 @@ Process each plan step sequentially. For EACH step run this exact cycle.
 **NEVER edit a file you have not read in this session.** If you have not read it in the last 3 tool calls,
 read it again.
 
-**Full-picture rule:** before editing, understand the complete context. If the file extends a base class,
+**Complete-context rule:** before editing, understand everything the file depends on. If it extends a base class,
 implements an interface, or calls symbols you have not seen, read those too. Trace symbols to their
 definitions. Do not assume what a method returns or what fields a type has.
 
@@ -429,8 +441,8 @@ Verification: All verifications passed
 2. **No delegation except handoffs.** Do ALL coding yourself. The only exception is a handoff (Step 4) for
    specialist prompt authoring (AI/LLM prompt text, `SKILL.md`, or agent markdown). Fix everything else
    yourself.
-3. **One thing at a time.** Complete one step fully (read, edit, verify, record) before the next. Never have
-   two steps in flight. Never edit a file you have not read in the current cycle.
+3. **One thing at a time.** Complete one step fully (read, edit, verify, record) before the next. Never work
+   on two steps at once. Never edit a file you have not read in the current cycle.
 4. **Read before edit.** If you are about to {{tool_edit}} or {{tool_write}} a path you have not {{tool_read}}
    within the last 3 tool calls, STOP and read it first.
 5. **Escalate when stuck.** Same build error 3 times, an unrecognized API, unclear instructions, or cascading

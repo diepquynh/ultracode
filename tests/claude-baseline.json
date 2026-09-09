@@ -15,7 +15,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "ca1edd60d23978ab61be92db24fc40c3a3e0ca2f5f863f4a38ea29d3e3afdadd"
+      "body_sha256": "587c6c348a41a5f0d207821b300857916abc77b57a2b2a6a59b5efe6ea6e4751"
     },
     "execution-path-analyzer": {
       "frontmatter": {
@@ -34,7 +34,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "b41d5b32f080705bd3da42d84f11851b6e8860ed3ca00a30017026dd024018dc"
+      "body_sha256": "89ce92b42a05edd3a6adfa26e86cfe381e7961d8c03fd3f4d78ec2f323c302d0"
     },
     "explore": {
       "frontmatter": {
@@ -56,7 +56,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "c43081685e6849d3627bcc17f66d68d2c9b8c3ba01d8c46812b9d5f167605e04"
+      "body_sha256": "679c1841e53a80a8858d8c4f551b63f214f7c8fd5a9a4404d897ad5ce9cb1f38"
     },
     "fact-check": {
       "frontmatter": {
@@ -76,7 +76,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "1d4d79abd9f4263adf908668b38bc789b225dad8c64c6643310c359f3db9ebfd"
+      "body_sha256": "e27ff7d331f7fcc88cb4cbbe0407672f465177059d82767051d604b04ede1518"
     },
     "generate-spec": {
       "frontmatter": {
@@ -97,7 +97,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "6a114a1326a4bf08ff84cbc8931b28f6e7461ce3a30dca09d76860321c05b5b0"
+      "body_sha256": "ef7ebf6f1fd427738681f390918a5ba5fa9a1d71d7bc2c4881a3795bfc513b57"
     },
     "implementer": {
       "frontmatter": {
@@ -120,7 +120,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "ad811512036996fe5ef404a7fe1eb15834be7d0cc6e7ef2ac491e6d1875c4345"
+      "body_sha256": "978b0bad1b6c28d3530d5a1e95e42e9eee133cb9c671e78eb8f4480012deb45c"
     },
     "initializer": {
       "frontmatter": {
@@ -139,7 +139,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "fdf8a1413a6a99f0f817fd84ae065a052e84c0f6320fa551f1039b8f249b6545"
+      "body_sha256": "2a35fb9c1693e934343fbc8dfe93f55c0b4dfe55b4407f28667cd037169f8d73"
     },
     "module-documentation": {
       "frontmatter": {
@@ -159,7 +159,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "e1521b50a2979a6e881ed1b45a8ae267b83f0248b86c08a63aedf06430349301"
+      "body_sha256": "60821a4e3153f09ba647ebbe85671e3d790ce2b319dffacf9141f67da55e26bc"
     },
     "plan": {
       "frontmatter": {
@@ -176,7 +176,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "902939471f9104ee876a92a149244b795b342170abc3b988d1d7acd411fba168"
+      "body_sha256": "5be92ddd6946e4522d8387b755b7dbcb8b0d0e5233a04eb6129818738efc33c7"
     },
     "prompt-generation": {
       "frontmatter": {
@@ -196,7 +196,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "e7119bca94885207cc70301f83cee2672ac8e44037b2d9447b5ba59e0cb2662b"
+      "body_sha256": "64d28eb914be75879103da785d536a1ccb3dfd7448d2f3c33a8221fc7a15060d"
     },
     "write-test": {
       "frontmatter": {
@@ -219,7 +219,7 @@
         "timeout": "600",
         "context": "fork"
       },
-      "body_sha256": "806ff77154b041c459d5097dfaf6c36a083109c9bd3ff493577eb9135057806b"
+      "body_sha256": "516a79dd8ef940be85a5246957b5a5fc71601040ba8a8bc0b90b84380f8ddc83"
     }
   },
   "skills": {
@@ -228,7 +228,7 @@
         "name": "meta-author",
         "description": "Authoring standard for instruction files: SKILL.md skills, agent definitions, and LLM system prompts. ACTIVATE when creating or editing any of those."
       },
-      "body_sha256": "51e5c39ace085063081d24a6b507cc6780fabf23d229e8cdb9da36a0a700bddb"
+      "body_sha256": "5df16f239409ca42bee8e01dac0ccab29cb4427be6b32478d968a1360f5508bd"
     }
   }
 }

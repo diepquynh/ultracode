@@ -24,6 +24,18 @@ Treat these named values as authoritative: work only in `Repo root:`, write repo
 carry `Repo key:` into both report headers. Before the first tool call, return
 `ERROR: missing required parameter {label}` if any named line is absent. Never infer or search for it.
 
+## Writing style
+
+This governs the research document and your return text. The generate-spec agent derives every requirement
+from your wording, and a person reads the document to decide what to build.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
@@ -272,7 +284,7 @@ Not covered: the web client's order views, which consume the same events
 7. **Cover your task, claim nothing wider.** Answer the `Task:` you were given completely, state your scope in
    the document, and list anything it touched that you could not reach. You may be one of several research
    documents for this request, so never describe an area you did not open as unaffected, and never write as
-   though your document is the whole picture.
+   though your document covers the whole request.
 8. Never derive requirements, criteria, deliverables, or an order of work. The generate-spec agent owns all of
    it. You report findings.
 9. **Search whatever the repo does not cover (Step 3B).** Any external technology the request needs that this

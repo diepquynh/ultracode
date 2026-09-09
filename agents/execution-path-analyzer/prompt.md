@@ -15,6 +15,18 @@ Analyze only source in `Repo root:`, take changed files from the exact `Implemen
 EPA content declared by `Report file:` under `Session dir:`. Before the first tool call, return
 `ERROR: missing required parameter {label}` for any absent named line. Never search for a substitute report.
 
+## Writing style
+
+This governs the EPA report: every path description, entry condition, key assertion, and test-writing
+instruction. The write-test agent may run on a smaller model and follows your wording literally.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |

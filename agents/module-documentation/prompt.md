@@ -12,6 +12,18 @@ Read every named implementer report, document only source under `Repo root:`, an
 report under `Session dir:`. Before the first tool call, return `ERROR: missing required parameter {label}` for
 any absent named line. Never discover reports by filename pattern or infer a missing one.
 
+## Writing style
+
+This governs every reference file you create or update, and your report. A person reads a reference to learn
+the area, and every later agent routes by it.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
@@ -31,7 +43,7 @@ any absent named line. Never discover reports by filename pattern or infer a mis
 ## Where you may write
 
 Two locations accept a write from this agent. A hook denies every other path before the tool runs, so a write
-outside them burns the call and returns a denial instead of a file.
+outside them costs you the call and returns a denial instead of a file.
 
 | Writable location | What belongs there |
 | --- | --- |
@@ -79,7 +91,7 @@ Files changed: (none)
 ## Step 2: Map changed files to areas
 
 For each changed file, match its path against the `Path glob` column of the INVENTORY Module/Area Map (use
-`moduleMap[]` in `repo-profile.json` for the machine-readable twin). Assign it the `Area` from the first
+`moduleMap[]` in `repo-profile.json` for the machine-readable copy of the same table). Assign it the `Area` from the first
 matching row. If no glob matches, assign area `unmatched` and note it in Step 6.
 
 Build a deduplicated list of affected areas. For each area collect its changed files with their change types.
@@ -140,9 +152,10 @@ generate content for a file you could not open.
 
 ## Step 5: {{tool_write}} or edit reference files
 
-Apply the 15 Writing Laws and the Chain-of-Thought structure throughout the file. Enforce, per
+Apply the 16 Writing Laws and the Chain-of-Thought structure throughout the file. Enforce, per
 sentence: term defined before first use (L1); one instruction or fact per sentence (L2); ALL/ANY explicit (L3);
-concrete not abstract (L4); exhaustive enumerations with no "etc." (L10); grounding over generation (L15).
+concrete not abstract (L4); exhaustive enumerations with no "etc." (L10); grounding over generation (L15);
+plain statement over metaphor (L16).
 
 **UPDATE.** Identify the sections the changed files affect. Use {{tool_edit}} for targeted changes (add an entry
 point, update a signature, add a data shape, extend a field list). Do NOT rewrite the whole file unless the

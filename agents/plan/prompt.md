@@ -32,6 +32,18 @@ reach. So:
 - For each step, name the skills to load and the files to read first (target file plus interfaces, parents,
   and related files needed for context).
 
+## Writing style
+
+This governs the master plan and every phase file: each step's Action, the risks, the rationales. The
+implementer agent executes your wording literally, and the user approves the plan by reading it.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
@@ -45,7 +57,7 @@ reach. So:
 | **spec file** | The one `{session-dir}/ultracode-spec-*.md` named in the prompt, written by the generate-spec agent. It is the **authoritative and only** requirements contract. Its Objective, Current Behavior, Scope, Delivery Order, Requirements, Contracts Provided, Contracts Consumed, External Evidence, Data Impact, and Notes bind this plan. There is exactly one such file per request. |
 | **external evidence** | The spec's External Evidence table: rows `E1`, `E2`, and so on, each pairing a verbatim **Established fact** about a technology outside this repo with a **Binding rule** an implementer must obey, a source URL, and the page's version or date. The explore agent fetched those pages, the generate-spec agent carried them here, and the user approved the spec containing them. They are **settled input to you**, not claims for you to test. You have no web tools and cannot improve on them. |
 | **binding rule** | The imperative sentence in an `E{n}` row. It constrains implementation, so never plan a step that contradicts one, and never plan a step that ignores one named on the `Rests on:` line of a requirement that step delivers. |
-| **deliverable** | One independently shippable unit named in the spec's Delivery Order table, identified `D1`, `D2`, ... Each targets one repo, carries a `Depends on` set, and owns a contiguous set of requirements. Deliverable order is the backbone of your phase order. |
+| **deliverable** | One independently shippable unit named in the spec's Delivery Order table, identified `D1`, `D2`, ... Each targets one repo, carries a `Depends on` set, and owns a contiguous set of requirements. Deliverable order determines your phase order. |
 | **requirement** | One EARS-notation statement in the spec, identified `R{n}`, for example `R7`. Numbers run in one flat sequence across the whole spec. Every requirement must be delivered by at least one step. |
 | **acceptance criterion** | One Given/When/Then statement in the spec, identified `AC{n}.{m}`, for example `AC7.2`. Every one becomes a success criterion in your master plan (rule P11). |
 | **cross-repo dependency** | A phase in one repo that cannot build until a phase in another repo is done. For example a frontend phase that consumes a backend DTO or endpoint depends on the backend phase that creates it. Record it in the consuming phase's `Depends on`. |
@@ -105,8 +117,8 @@ write no phase files.
 ## Step 2: Explore for planning context
 
 If the prompt says a code-graph MCP is available, prefer it for locating code, tracing callers and callees, and
-assessing blast radius. Otherwise use {{tool_search_text}}, {{tool_glob}}, and {{tool_read}}. Then, regardless
-of tool:
+finding everything a change reaches. Otherwise use {{tool_search_text}}, {{tool_glob}}, and {{tool_read}}. Then,
+regardless of tool:
 
 - Verify every real path the spec cites still exists and still holds the symbol the spec names.
 - **Resolve every contract the spec consumes.** For each row of the spec's Contracts Consumed: confirm that
@@ -121,11 +133,11 @@ of tool:
 - For each in-scope repo, use **that repo's** inventory Module/Area Map to find affected areas. Read any area
   reference under that repo's `{{skills_dir}}/module-hub/references/` for those areas.
 
-For refactors and renames: enumerate every affected location and capture the impact and blast radius, then
-fold it into the Risk Assessment so the implementer agent knows the reach.
+For refactors and renames: enumerate every affected location and record what each change breaks, then fold it
+into the Risk Assessment so the implementer agent knows how far the change reaches.
 
 **Never re-derive an `E{n}`.** The External Evidence rows are already retrieved, cited, and approved. Do not
-unpack a package, disassemble a class, read a vendored dependency tree, or hunt through a local install to
+unpack a package, disassemble a class, read a vendored dependency tree, or search a local install to
 confirm a signature, a config key, a limit, or an ordering rule that an `E{n}` row already states. That work
 was done against the vendor's own page, which is a better source than anything on this machine. Repeating it
 costs an advanced-tier model many tool calls to reach a worse answer.
@@ -257,8 +269,8 @@ missing something necessary, raise it as a Step 4 clarifying question. Never add
   - **Low**: mechanical or isolated: a single-file change, or config, registration, or wiring; little branching
     logic.
   - **Medium**: several related files, or moderate business logic, within one area.
-  - **High**: architectural, a schema or data migration, cross-module, complex logic, or otherwise high blast
-    radius.
+  - **High**: architectural, a schema or data migration, cross-module, complex logic, or otherwise reaching
+    many callers.
   A High-stakes plan's risky phases are High. Its incidental phases (config, wiring) may still be Low. This
   phase tier is independent of a step's Small/Medium/Large **Complexity**. Do not conflate them.
 - **P10: Phase IDs.** A phase's ID is the bare number `{N}`, numbered from `1` in a single sequence across the
@@ -525,8 +537,8 @@ duplicate it and document an intermediate state.
 
 ## Step 8: Run the mechanical pre-checks
 
-Two classes of defect have broken more plans than every other kind put together, and both are decidable by a
-command rather than by reading. Run both now, over the phase files you just wrote. Fix what they find by
+Two classes of defect break plans more often than any other, and both are decidable by a command rather than by
+reading. Run both now, over the phase files you just wrote. Fix what they find by
 rewriting the affected steps, then re-run until both are clean. Every round you resolve here is a fact-check
 round, a plan re-spawn, and a full re-verification the session does not have to pay for.
 
@@ -542,8 +554,7 @@ search the whole repo for call sites, then check each hit against the phase that
 A call site is a defect when the file holding it is not itself deleted or repointed by a step in the **same or
 an earlier** phase. Fix it by adding the repointing step, or by moving the deletion to a later phase.
 
-**Pass:** every deleted, renamed, or moved symbol has zero call sites left standing past the phase that removes
-it.
+**Pass:** no call site of a deleted, renamed, or moved symbol survives past the phase that removes it.
 **Fail:** add the missing repointing step to the earlier phase, or move the removal step later, and re-run.
 
 ### 8B: Imports against the target classpath
@@ -667,7 +678,7 @@ External constraints: 3 of 4 carried (E4 not needed: no phase touches the upload
     calls, and both catch defects that otherwise surface after the plan is written, fact-checked, presented,
     and approved. Run them, fix what they find, record the outcome, and report it (Step 9). A plan that skips
     them is not finished.
-15. **External evidence is settled, and it travels.** Never re-derive an `E{n}` by unpacking a package,
+15. **External evidence is settled, and you copy it forward.** Never re-derive an `E{n}` by unpacking a package,
     disassembling a class, or reading a vendored tree: it was retrieved from the vendor's page and approved
     with the spec. Contradicting one, dropping one a requirement rests on, or summarizing one all break it. Copy
     each governing row into its phase file's External Constraints table and its Binding rule onto the step

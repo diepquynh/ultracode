@@ -45,15 +45,15 @@ unless you ask to overwrite.
 but its modes differ in stakes, so set the `model` argument explicitly on every spawn below. The
 per-invocation argument outranks the agent default. Spawn `detect`, `scout`, `propose`, and
 `generate-inventory` on the balanced harness model. Spawn every `generate-skill` agent on the advanced harness
-model (`{{advanced_model}}`). Skill authoring is the highest-value, quality-sensitive step, so it gets the
-strongest model. The model router hook leaves these spawns on the model you set. The initializer is absent from
+model (`{{advanced_model}}`). Skill authoring sets the quality of every skill the pipeline later loads, so it
+runs on the advanced model. The model router hook leaves these spawns on the model you set. The initializer is absent from
 `models.byAgent` on purpose, and the hook keeps an initializer's own model rather than denying it the way it
 denies a missing pipeline route, so re-initializing an already-initialized repo works exactly like a first
 run.
 
 **Passing data between stages.** Unlike a headless workflow, you (the main loop) can read files, so every
 hand-off flows through the session dir. Each agent writes its output there and returns the path. You read that
-file to drive the next stage. The `propose` stage's machine twin `ultracode-proposal.json` is the structured
+file to drive the next stage. The `propose` stage's machine-readable `ultracode-proposal.json` is the structured
 source you read to build the approved skill set.
 
 Extra user focus for this run (may be empty): `{{arguments}}`
@@ -186,14 +186,14 @@ Repo key: {REPO_KEY}.
 Merge and dedupe component types across slices, rank by cross-module ubiquity, then reconcile against the
 scout plan's Existing Skills table: give each skill a status (new|existing) with its existingPath, default
 every existing skill to reuse, and fold every bespoke existing skill into skills[] as a kind:other entry.
-{{tool_write}} BOTH the human proposal (ultracode-proposal.md) and its machine twin (ultracode-proposal.json). The JSON
+{{tool_write}} BOTH the human proposal (ultracode-proposal.md) and its machine-readable form (ultracode-proposal.json). The JSON
 must carry: stack, referencePath, scoutPlanPath, findingsPaths, commands, moduleMap, and skills[] (name, kind,
 componentType, count, sliceSpread, status, existingPath, recommend, rationale). Return the
 ultracode-proposal.json path, the recommended-new count, and the reuse count."
 ```
 
-{{tool_read}} `{ULTRACODE_SESSION}/ultracode-proposal.json` (its twin `ultracode-proposal.md` is the human
-version). If the file is missing or `skills[]` is empty, tell the user scouting found no recurring components
+{{tool_read}} `{ULTRACODE_SESSION}/ultracode-proposal.json` (`ultracode-proposal.md` holds the same content for
+a human reader). If the file is missing or `skills[]` is empty, tell the user scouting found no recurring components
 and stop.
 
 **Present the proposal to the user** as a compact table: proposed skill name, kind, component type,

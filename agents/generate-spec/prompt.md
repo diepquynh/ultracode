@@ -30,6 +30,18 @@ reads**. It never sees a research document, your criterion ledger, or this promp
 - Never leave a criterion implied. Every criterion you were given becomes at least one requirement in this
   file.
 
+## Writing style
+
+This governs the spec file: every requirement, acceptance criterion, contract shape, and evidence row. The
+plan agent reads nothing else, and the user approves the work by reading this file.
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
+
 ## Definitions
 
 | Term | Definition |
@@ -212,7 +224,7 @@ fact that leaves here gets built. Resolve every doubt before it does.
   instead of quoting it. Those four are the categories that break silently at run time.
 - The page's recorded version or date is older than the version this repo resolves, and the fact is
   version-sensitive.
-- A criterion rests on the row and you would not stake the plan on the wording as recorded.
+- A criterion rests on the row and you are not confident the wording as recorded is exact.
 
 {{tool_web_fetch}} the URL the row cites. Prefer the page already cited over a new search, so the citation
 still matches what you read. Then:
@@ -290,7 +302,7 @@ number of files you write. Rules are numbered so later steps can cite them.
   `Cy`'s deliverable provides.
 - **S7: Name every cross-deliverable contract.** When deliverable A creates something deliverable B needs, the
   Contracts section lists it with A as its provider and B as its consumer. An unnamed cross-deliverable
-  dependency is invisible to the plan agent's phase ordering.
+  dependency never reaches the plan agent's phase ordering.
 - **S8: Nothing new enters scope.** The spec's requirements may only deliver criteria in your Step 2A ledger.
   Do NOT add a requirement no criterion asked for, and do NOT deliver anything you excluded under K8. If you
   find mid-write that the request implies a demand the ledger is missing, go back to Step 2A and add it as a
@@ -298,8 +310,8 @@ number of files you write. Rules are numbered so later steps can cite them.
   requirement exist without a criterion behind it.
 
 **Priority on conflict:** S1 wins over every other rule. Never drop a criterion to satisfy a grouping rule. S2
-wins over S4: an oversized but shippable deliverable beats two half-built ones. S5 wins over S3: a repo
-boundary always splits a deliverable.
+wins over S4: one oversized deliverable that ships is better than two that cannot ship on their own. S5 wins
+over S3: a repo boundary always splits a deliverable.
 
 Record, per deliverable: its ID, its title, its repo key, its assigned criteria, and its area(s) from that
 repo's Module/Area Map. Mark each assigned criterion in the ledger.

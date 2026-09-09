@@ -7,9 +7,9 @@ writing prompts or agents. Templates for the skill shapes live in `{{plugin_root
 
 ---
 
-## The 15 Writing Laws
+## The 16 Writing Laws
 
-Every law governs the unit it names: a term, a sentence, a rule, a step, or the file as a whole. Apply all 15
+Every law governs the unit it names: a term, a sentence, a rule, a step, or the file as a whole. Apply all 16
 to every section, including the sections that already read clearly.
 
 1. **Define before reference.** Never use a term before its definition. Put a Definitions table first.
@@ -27,6 +27,18 @@ to every section, including the sections that already read clearly.
 13. **Constrain output formats.** Every output field has a type, allowed values, and conditions.
 14. **Self-check instruction.** End with a checklist the model re-runs against its own output.
 15. **Grounding over generation.** Prefer instructions grounded in real files and exemplars over invented ones.
+16. **Plain statement over metaphor.** Name the thing. Write "a parameter worth varying", not "a dial worth
+    turning". Write "this point still matters", not "this point earns its keep". A metaphor drags in
+    connotations you did not choose, and the reader has to translate it back before acting.
+
+## Law 16 in full: no mannered prose
+
+Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying,"
+the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this
+point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell.
+That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also
+imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what
+you mean. When a literal phrase is available, use it.
 
 ## Chain-of-Thought structure
 
@@ -84,6 +96,7 @@ to every section, including the sections that already read clearly.
 - [ ] Output field formats constrained? (L13)
 - [ ] Self-check present? (L14)
 - [ ] Grounded in real exemplars, not invented? (L15)
+- [ ] Literal wording, no metaphor standing in for the plain term? (L16)
 - [ ] Reads top to bottom with no forward reference?
 
 If any item fails, edit the file and re-check before returning.
@@ -96,3 +109,5 @@ If any item fails, edit the file and re-check before returning.
 - Synonyms for one concept. Pick one word.
 - "etc." in an enumeration. List every case.
 - "Follow the standard pattern." Write the exact pattern. The reader has no memory.
+- Metaphor in place of the term: "turn the dial", "earns its keep", "the blast radius". Write the parameter,
+  the reason, or the set of affected files.

@@ -50,8 +50,8 @@ will not read.
   not list `{{runtime_dir}}/session/` to find `ultracode-session-*` directories, and never adopt an id that did
   not come from this query, from a `--session` argument this query confirmed, or from a claimed task's
   `source.session_dir`. A directory on disk proves only that
-  some session once ran. Picking one adopts a stranger's (possibly stale) state, which is the exact "discover
-  the dir by picking a match" failure the session-dir formula exists to prevent.
+  some session once ran. Picking one adopts another session's state, which may be stale, and is the exact
+  "discover the dir by picking a match" failure the session-dir formula exists to prevent.
 - **Sessions listed, no `--session` given:** present them with **{{tool_ask_user}}** and let the user pick
   which one this managed session takes, or explicitly choose to start fresh.
 - **Empty list:** no orchestrator has registered a session for this repo. Say exactly that, and ask the user
@@ -149,7 +149,7 @@ Two rules are absolute:
    task then needs its own spec, plan, and approval here.
 2. The lease is the deadline: default 15 minutes, extendable only by finishing. If the work cannot fit a
    lease, complete with `status: "failed"` and say so in the summary rather than letting the lease lapse
-   silently. A lapsed lease re-queues the task blind.
+   silently. A lapsed lease re-queues the task with no record of what you already did.
 
 When the work is done (or has failed), call `ultracode_task_complete` with the task id, `done` or `failed`, a
 summary written for the publisher, and `report_file` pointing at the report you wrote inside the adopted
@@ -233,11 +233,11 @@ done
 Four properties of that command matter, so do not rewrite it from memory:
 
 - **It long polls, so it is not polling.** `timeout_ms: 60000` makes the hub hold each request open until a
-  message lands, so the loop spends its life parked on a socket. The `sleep` runs only after a failed request,
+  message lands, so the loop stays blocked on one open socket. The `sleep` runs only after a failed request,
   and `POST /api/v1/messages/wait` is exempt from the hub's per-minute rate limit for this reason.
 - **It has no deadline.** Nothing in the command bounds it and nothing around it does either: a
   backgrounded command on this harness runs until it exits (measured at 15.5 minutes with the session idle, no
-  kill and no liveness nudge, CLI 1.1.27). The loop is the listening state for as long as the session lives.
+  kill and no liveness nudge, CLI 1.1.27). The loop is the listening state for as long as the session lasts.
 - **Its exit is the wake and its output is the payload.** This harness delivers a background task's output
   when the task exits, all of it at once, and delivers nothing while the task runs. So the command exits on
   the first thing worth waking for and prints the hub's own JSON response. A command that never exits never
@@ -313,7 +313,7 @@ echo HUB-IDLE
 Three properties of that command matter, so do not rewrite it from memory:
 
 - **It long polls.** `timeout_ms: 60000` makes the hub hold each request open until a message lands, so the
-  loop spends its life parked on a socket. The `sleep` runs only after a failed request.
+  loop stays blocked on one open socket. The `sleep` runs only after a failed request.
 - **It prints one word and exits.** Every line a monitor prints wakes you, and grok kills a monitor that
   floods (10 events, refilling one per two seconds). One word per wake is the budget.
 - **It never fetches the messages.** The hub's read is cursor-based and non-destructive, so the monitor only
@@ -356,7 +356,7 @@ sit in the hub regardless. Sending any message releases them.
    tasks, re-delegate to other sessions, or steer the publisher's pipeline beyond your completion report. The
    repo profile's `harnesses` section is the **publisher's** routing input, not yours. Never read it to hand a
    claimed task onward. A task the hub let you claim is yours to execute here, whatever that section says.
-2. **Look before you touch.** The query comes first, then a settled target: the user's choice, or the
+2. **Query first, create nothing until the target is settled.** The query comes first, then a settled target: the user's choice, or the
    `--session` argument standing in for it. Registration, directory creation, and
    adoption happen only after. A fresh session dir exists only because the user chose fresh, never as a side
    effect of starting to listen and never as a recovery from a `--session` id the query did not confirm.
